@@ -1,0 +1,15 @@
+[package]
+name = "cost-bench"
+version = "0.1.0"
+authors = ["Reed Rosenbluth <331327+reedrosenbluth@users.noreply.github.com>"]
+edition = "2018"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[dependencies]
+blockstack-core = { git = "https://github.com/blockstack/stacks-blockchain" }
+
+[[bench]]
+name = "bench"
+harness = false
