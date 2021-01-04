@@ -5,27 +5,50 @@ use blockstack_lib::vm::clarity::ClarityInstance;
 use blockstack_lib::vm::costs::ExecutionCost;
 use blockstack_lib::vm::database::{MarfedKV, NULL_BURN_STATE_DB, NULL_HEADER_DB};
 use blockstack_lib::vm::types::{PrincipalData, QualifiedContractIdentifier};
-
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
 
-pub fn gen_add(scale: usize, input_size: usize) -> String {
+const INPUT_SIZES: [usize; 4] = [1, 8, 64, 128];
+const SCALES: [usize; 2] = [50, 100];
+
+// generate arithmetic function call
+fn gen_arithmetic(function_name: &'static str, scale: usize, input_size:usize) -> String {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str("(+ 1 2) ")
+        let args = (0..input_size).map(|x| x.to_string()).collect::<Vec<String>>().join(" ");
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+
+    body
+}
+
+// generate clarity code for benchmarking
+fn gen(function: ClarityCostFunction, scale: usize, input_size: usize) -> String {
+    let mut body = String::new();
+
+    match function {
+        ClarityCostFunction::Add => {
+            body = gen_arithmetic("+", scale, input_size);
+        },
+        ClarityCostFunction::Sub => {
+            body = gen_arithmetic("-", scale, input_size);
+        },
+        ClarityCostFunction::Mul => {
+            body = gen_arithmetic("*", scale, input_size);
+        },
+        ClarityCostFunction::Div => {
+            body = gen_arithmetic("/", scale, input_size);
+        },
+        _ => {}
     }
 
     format!("(define-public (test) (begin {}(ok true)))", body)
 }
 
-pub fn bench_add(c: &mut Criterion) {
+fn bench(c: &mut Criterion, function: ClarityCostFunction, scales: Vec<usize>, input_sizes: Vec<usize>) {
     let marf = MarfedKV::temporary();
     let mut clarity_instance = ClarityInstance::new(marf, ExecutionCost::max_value());
-
-    let p = PrincipalData::from(
-        PrincipalData::parse_standard_principal("SM2J6ZY48GV1EZ5V2V5RB9MP66SW86PYKKQVX8X0G")
-            .unwrap(),
-    );
 
     let bhh = StacksBlockHeader::make_index_block_hash(
         &FIRST_BURNCHAIN_CONSENSUS_HASH,
@@ -39,30 +62,42 @@ pub fn bench_add(c: &mut Criterion) {
         &NULL_BURN_STATE_DB,
     );
 
-    let mut group = c.benchmark_group("add");
+    let p = PrincipalData::from(
+        PrincipalData::parse_standard_principal("SM2J6ZY48GV1EZ5V2V5RB9MP66SW86PYKKQVX8X0G")
+            .unwrap(),
+    );
 
-    for scale in [50, 100, 150].iter() {
-        let contract_identifier =
-            QualifiedContractIdentifier::local(&*format!("c{}", scale)).unwrap();
-        let contract = gen_add(*scale, 2);
+    for scale in scales.iter() {
+        let mut group = c.benchmark_group(format!("{} {}", function, scale));
 
-        conn.as_transaction(|tx| {
-            let (ct_ast, _ct_analysis) = tx
-                .analyze_smart_contract(&contract_identifier, &contract)
-                .unwrap();
-            tx.initialize_smart_contract(&contract_identifier, &ct_ast, &*contract, |_, _| false);
-        });
+        for input_size in input_sizes.iter() {
+            let contract_identifier =
+                QualifiedContractIdentifier::local(&*format!("c{}{}", input_size, scale)).unwrap();
+            let contract = gen(function, *scale, *input_size);
 
-        group.throughput(Throughput::Bytes(*scale as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(scale), scale, |b, &scale| {
-            b.iter(|| {
-                conn.as_transaction(|tx| {
-                    tx.run_contract_call(&p, &contract_identifier, "test", &[], |_, _| false)
+            conn.as_transaction(|tx| {
+                let (ct_ast, _ct_analysis) = tx
+                    .analyze_smart_contract(&contract_identifier, &contract)
+                    .unwrap();
+                tx.initialize_smart_contract(&contract_identifier, &ct_ast, &*contract, |_, _| false)
+                    .unwrap();
+            });
+
+            group.throughput(Throughput::Bytes(input_size.clone() as u64));
+            group.bench_with_input(BenchmarkId::from_parameter(input_size), input_size, |b, &_| {
+                b.iter(|| {
+                    conn.as_transaction(|tx| {
+                        tx.run_contract_call(&p, &contract_identifier, "test", &[], |_, _| false)
+                    })
+                        .unwrap()
                 })
-                .unwrap()
-            })
-        });
+            });
+        }
     }
+}
+
+fn bench_add(c: &mut Criterion) {
+    bench(c, ClarityCostFunction::Add, SCALES.into(), INPUT_SIZES.into())
 }
 
 criterion_group!(benches, bench_add);
