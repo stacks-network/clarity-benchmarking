@@ -8,8 +8,8 @@ use blockstack_lib::vm::types::{PrincipalData, QualifiedContractIdentifier};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
 
-const INPUT_SIZES: [usize; 4] = [1, 8, 64, 128];
-const SCALES: [usize; 2] = [50, 100];
+const INPUT_SIZES: [usize; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
+const SCALE: usize = 1000;
 
 // generate arithmetic function call
 fn gen_arithmetic(function_name: &'static str, scale: usize, input_size:usize) -> String {
@@ -46,7 +46,7 @@ fn gen(function: ClarityCostFunction, scale: usize, input_size: usize) -> String
     format!("(define-public (test) (begin {}(ok true)))", body)
 }
 
-fn bench(c: &mut Criterion, function: ClarityCostFunction, scales: Vec<usize>, input_sizes: Vec<usize>) {
+fn bench(c: &mut Criterion, function: ClarityCostFunction, scale: usize, input_sizes: Vec<usize>) {
     let marf = MarfedKV::temporary();
     let mut clarity_instance = ClarityInstance::new(marf, ExecutionCost::max_value());
 
@@ -67,37 +67,35 @@ fn bench(c: &mut Criterion, function: ClarityCostFunction, scales: Vec<usize>, i
             .unwrap(),
     );
 
-    for scale in scales.iter() {
-        let mut group = c.benchmark_group(format!("{} {}", function, scale));
+    let mut group = c.benchmark_group(function.to_string());
 
-        for input_size in input_sizes.iter() {
-            let contract_identifier =
-                QualifiedContractIdentifier::local(&*format!("c{}{}", input_size, scale)).unwrap();
-            let contract = gen(function, *scale, *input_size);
+    for input_size in input_sizes.iter() {
+        let contract_identifier =
+            QualifiedContractIdentifier::local(&*format!("c{}", input_size)).unwrap();
+        let contract = gen(function, scale, *input_size);
 
-            conn.as_transaction(|tx| {
-                let (ct_ast, _ct_analysis) = tx
-                    .analyze_smart_contract(&contract_identifier, &contract)
-                    .unwrap();
-                tx.initialize_smart_contract(&contract_identifier, &ct_ast, &*contract, |_, _| false)
-                    .unwrap();
-            });
+        conn.as_transaction(|tx| {
+            let (ct_ast, _ct_analysis) = tx
+                .analyze_smart_contract(&contract_identifier, &contract)
+                .unwrap();
+            tx.initialize_smart_contract(&contract_identifier, &ct_ast, &*contract, |_, _| false)
+                .unwrap();
+        });
 
-            group.throughput(Throughput::Bytes(input_size.clone() as u64));
-            group.bench_with_input(BenchmarkId::from_parameter(input_size), input_size, |b, &_| {
-                b.iter(|| {
-                    conn.as_transaction(|tx| {
-                        tx.run_contract_call(&p, &contract_identifier, "test", &[], |_, _| false)
-                    })
-                        .unwrap()
+        group.throughput(Throughput::Bytes(input_size.clone() as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(input_size), input_size, |b, &_| {
+            b.iter(|| {
+                conn.as_transaction(|tx| {
+                    tx.run_contract_call(&p, &contract_identifier, "test", &[], |_, _| false)
                 })
-            });
-        }
+                    .unwrap()
+            })
+        });
     }
 }
 
 fn bench_add(c: &mut Criterion) {
-    bench(c, ClarityCostFunction::Add, SCALES.into(), INPUT_SIZES.into())
+    bench(c, ClarityCostFunction::Add, SCALE.into(), INPUT_SIZES.into())
 }
 
 criterion_group!(benches, bench_add);
