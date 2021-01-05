@@ -98,5 +98,9 @@ fn bench_add(c: &mut Criterion) {
     bench(c, ClarityCostFunction::Add, SCALE.into(), INPUT_SIZES.into())
 }
 
-criterion_group!(benches, bench_add);
+fn bench_sub(c: &mut Criterion) {
+    bench(c, ClarityCostFunction::Sub, SCALE.into(), INPUT_SIZES.into())
+}
+
+criterion_group!(benches, bench_add, bench_sub);
 criterion_main!(benches);
