@@ -6,6 +6,7 @@ edition = "2018"
 
 [dev-dependencies]
 criterion = "0.3"
+rand = "0.8.1"
 
 [dependencies]
 blockstack-core = { git = "https://github.com/blockstack/stacks-blockchain" }
