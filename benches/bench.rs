@@ -1,7 +1,6 @@
 use blockstack_lib::chainstate::stacks::index::MarfTrieId;
 use blockstack_lib::chainstate::stacks::{StacksBlockHeader, StacksBlockId};
 use blockstack_lib::core::{FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
-use blockstack_lib::vm::analysis::contract_interface_builder::ContractInterfaceAtomType::uint128;
 use blockstack_lib::vm::clarity::ClarityInstance;
 use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
 use blockstack_lib::vm::costs::ExecutionCost;
@@ -50,6 +49,27 @@ fn gen_logic(function_name: &'static str, scale: usize) -> String {
     body
 }
 
+fn gen_tuple_get(scale: usize, input_size: usize) -> String {
+    let mut body = String::new();
+    let mut rng = rand::thread_rng();
+
+    let tuple_vals = (0..input_size)
+        .map(|i| format!("(id{} 1337)", i))
+        .collect::<Vec<String>>()
+        .join(" ");
+
+    let tuple = format!("(test-tuple (tuple {}))", tuple_vals);
+
+    for _ in 0..scale {
+        body.push_str(&*format!(
+            "(get id{} test-tuple) ",
+            rng.gen_range(0..input_size)
+        ));
+    }
+
+    format!("(let ({}) {})", tuple, body)
+}
+
 // generate clarity code for benchmarking
 fn gen(function: ClarityCostFunction, scale: usize, input_size: usize) -> String {
     let mut body = String::new();
@@ -77,10 +97,11 @@ fn gen(function: ClarityCostFunction, scale: usize, input_size: usize) -> String
         ClarityCostFunction::Pow => body = gen_arithmetic("pow", scale, input_size),
         ClarityCostFunction::Sqrti => body = gen_arithmetic("sqrti", scale, 1),
         ClarityCostFunction::Log2 => body = gen_arithmetic("log2", scale, 1),
+        ClarityCostFunction::TupleGet => body = gen_tuple_get(scale, input_size),
         _ => {}
     }
 
-    format!("(define-public (test) (begin {}(ok true)))", body)
+    format!("(define-public (test) (begin {} (ok true)))", body)
 }
 
 fn bench_with_input_sizes(
@@ -198,6 +219,15 @@ fn bench_log2(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::Log2, SCALE.into(), vec![1])
 }
 
+fn bench_tuple_get(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::TupleGet,
+        SCALE.into(),
+        vec![1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096],
+    )
+}
+
 criterion_group!(
     benches,
     // bench_add,
@@ -211,7 +241,8 @@ criterion_group!(
     // bench_mod,
     // bench_pow,
     // bench_sqrti,
-    bench_log2,
+    // bench_log2,
+    bench_tuple_get,
 );
 
 // AnalysisTypeAnnotate("cost_analysis_type_annotate"),

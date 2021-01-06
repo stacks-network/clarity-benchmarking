@@ -39,7 +39,7 @@ def estimate_params(df, name, transform = lambda x: x):
     linear_regressor = LinearRegression()
     linear_regressor.fit(X, Y)
     Y_pred = linear_regressor.predict(X)
-    
+
     b = linear_regressor.intercept_
     if b < 0:
         b = max(Y[0] - linear_regressor.coef_, 0)
