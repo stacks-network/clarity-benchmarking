@@ -1,23 +1,28 @@
 use blockstack_lib::chainstate::stacks::index::MarfTrieId;
 use blockstack_lib::chainstate::stacks::{StacksBlockHeader, StacksBlockId};
 use blockstack_lib::core::{FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
+use blockstack_lib::vm::analysis::contract_interface_builder::ContractInterfaceAtomType::uint128;
 use blockstack_lib::vm::clarity::ClarityInstance;
+use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
 use blockstack_lib::vm::costs::ExecutionCost;
 use blockstack_lib::vm::database::{MarfedKV, NULL_BURN_STATE_DB, NULL_HEADER_DB};
 use blockstack_lib::vm::types::{PrincipalData, QualifiedContractIdentifier};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
 use rand::Rng;
 
 const INPUT_SIZES: [usize; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const SCALE: usize = 1000;
 
 // generate arithmetic function call
-fn gen_arithmetic(function_name: &'static str, scale: usize, input_size:usize) -> String {
+fn gen_arithmetic(function_name: &'static str, scale: usize, input_size: usize) -> String {
     let mut body = String::new();
+    let mut rng = rand::thread_rng();
 
     for _ in 0..scale {
-        let args = (0..input_size).map(|x| x.to_string()).collect::<Vec<String>>().join(" ");
+        let args = (0..input_size)
+            .map(|_| format!("u{}", rng.gen_range(1..u128::MAX).to_string()))
+            .collect::<Vec<String>>()
+            .join(" ");
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
 
@@ -52,44 +57,38 @@ fn gen(function: ClarityCostFunction, scale: usize, input_size: usize) -> String
     match function {
         ClarityCostFunction::Add => {
             body = gen_arithmetic("+", scale, input_size);
-        },
+        }
         ClarityCostFunction::Sub => {
             body = gen_arithmetic("-", scale, input_size);
-        },
+        }
         ClarityCostFunction::Mul => {
             body = gen_arithmetic("*", scale, input_size);
-        },
+        }
         ClarityCostFunction::Div => {
             body = gen_arithmetic("/", scale, input_size);
-        },
-        ClarityCostFunction::Le => {
-            body = gen_cmp("<", scale)
-        },
-        ClarityCostFunction::Leq => {
-            body = gen_cmp("<=", scale)
-        },
-        ClarityCostFunction::Ge => {
-            body = gen_cmp(">", scale)
-        },
-        ClarityCostFunction::Geq => {
-            body = gen_cmp(">=", scale)
-        },
-        ClarityCostFunction::And => {
-            body = gen_logic("and", scale)
-        },
-        ClarityCostFunction::Or => {
-            body = gen_logic("or", scale)
-        },
-        ClarityCostFunction::Mod => {
-            body = gen_arithmetic("mod", scale,input_size)
-        },
+        }
+        ClarityCostFunction::Le => body = gen_cmp("<", scale),
+        ClarityCostFunction::Leq => body = gen_cmp("<=", scale),
+        ClarityCostFunction::Ge => body = gen_cmp(">", scale),
+        ClarityCostFunction::Geq => body = gen_cmp(">=", scale),
+        ClarityCostFunction::And => body = gen_logic("and", scale),
+        ClarityCostFunction::Or => body = gen_logic("or", scale),
+        ClarityCostFunction::Mod => body = gen_arithmetic("mod", scale, input_size),
+        ClarityCostFunction::Pow => body = gen_arithmetic("pow", scale, input_size),
+        ClarityCostFunction::Sqrti => body = gen_arithmetic("sqrti", scale, 1),
+        ClarityCostFunction::Log2 => body = gen_arithmetic("log2", scale, 1),
         _ => {}
     }
 
     format!("(define-public (test) (begin {}(ok true)))", body)
 }
 
-fn bench_with_input_sizes(c: &mut Criterion, function: ClarityCostFunction, scale: usize, input_sizes: Vec<usize>) {
+fn bench_with_input_sizes(
+    c: &mut Criterion,
+    function: ClarityCostFunction,
+    scale: usize,
+    input_sizes: Vec<usize>,
+) {
     let marf = MarfedKV::temporary();
     let mut clarity_instance = ClarityInstance::new(marf, ExecutionCost::max_value());
 
@@ -126,23 +125,37 @@ fn bench_with_input_sizes(c: &mut Criterion, function: ClarityCostFunction, scal
         });
 
         group.throughput(Throughput::Bytes(input_size.clone() as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(input_size), input_size, |b, &_| {
-            b.iter(|| {
-                conn.as_transaction(|tx| {
-                    tx.run_contract_call(&p, &contract_identifier, "test", &[], |_, _| false)
-                })
+        group.bench_with_input(
+            BenchmarkId::from_parameter(input_size),
+            input_size,
+            |b, &_| {
+                b.iter(|| {
+                    conn.as_transaction(|tx| {
+                        tx.run_contract_call(&p, &contract_identifier, "test", &[], |_, _| false)
+                    })
                     .unwrap()
-            })
-        });
+                })
+            },
+        );
     }
 }
 
 fn bench_add(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Add, SCALE.into(), INPUT_SIZES.into())
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Add,
+        SCALE.into(),
+        INPUT_SIZES.into(),
+    )
 }
 
 fn bench_sub(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sub, SCALE.into(), INPUT_SIZES.into())
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Sub,
+        SCALE.into(),
+        INPUT_SIZES.into(),
+    )
 }
 
 fn bench_le(c: &mut Criterion) {
@@ -173,7 +186,20 @@ fn bench_mod(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::Mod, SCALE.into(), vec![2])
 }
 
-criterion_group!(benches,
+fn bench_pow(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Pow, SCALE.into(), vec![2])
+}
+
+fn bench_sqrti(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Sqrti, SCALE.into(), vec![1])
+}
+
+fn bench_log2(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Log2, SCALE.into(), vec![1])
+}
+
+criterion_group!(
+    benches,
     // bench_add,
     // bench_sub,
     // bench_le,
@@ -182,7 +208,10 @@ criterion_group!(benches,
     // bench_geq,
     // bench_and,
     // bench_or,
-    bench_mod,
+    // bench_mod,
+    // bench_pow,
+    // bench_sqrti,
+    bench_log2,
 );
 
 // AnalysisTypeAnnotate("cost_analysis_type_annotate"),
@@ -230,10 +259,6 @@ criterion_group!(benches,
 // TupleMerge("cost_tuple_merge"),
 // TupleCons("cost_tuple_cons"),
 // IntCast("cost_int_cast"),
-// Mod("cost_mod"),
-// Pow("cost_pow"),
-// Sqrti("cost_sqrti"),
-// Log2("cost_log2"),
 // Xor("cost_xor"),
 // Not("cost_not"),
 // Eq("cost_eq"),
