@@ -1,114 +1,23 @@
-use blockstack_lib::chainstate::stacks::index::MarfTrieId;
+use benchmarking_lib::generators::gen;
+use blockstack_lib::{chainstate::stacks::index::MarfTrieId, vm::{contexts::GlobalContext, contexts::ContractContext, costs::LimitedCostTracker}};
 use blockstack_lib::chainstate::stacks::{StacksBlockHeader, StacksBlockId};
 use blockstack_lib::core::{FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
 use blockstack_lib::vm::clarity::ClarityInstance;
+// use blockstack_lib::vm::{ast};
 use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
 use blockstack_lib::vm::costs::ExecutionCost;
 use blockstack_lib::vm::database::{MarfedKV, NULL_BURN_STATE_DB, NULL_HEADER_DB};
 use blockstack_lib::vm::types::{PrincipalData, QualifiedContractIdentifier};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use rand::Rng;
 
-const INPUT_SIZES: [usize; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
-const SCALE: usize = 1000;
-
-// generate arithmetic function call
-fn gen_arithmetic(function_name: &'static str, scale: usize, input_size: usize) -> String {
-    let mut body = String::new();
-    let mut rng = rand::thread_rng();
-
-    for _ in 0..scale {
-        let args = (0..input_size)
-            .map(|_| format!("u{}", rng.gen_range(1..u128::MAX).to_string()))
-            .collect::<Vec<String>>()
-            .join(" ");
-        body.push_str(&*format!("({} {}) ", function_name, args));
-    }
-
-    body
-}
-
-fn gen_cmp(function_name: &'static str, scale: usize) -> String {
-    let mut body = String::new();
-    let mut rng = rand::thread_rng();
-
-    for _ in 0..scale {
-        let n1: u128 = rng.gen();
-        let n2: u128 = rng.gen();
-        body.push_str(&*format!("({} u{} u{}) ", function_name, n1, n2));
-    }
-
-    body
-}
-
-fn gen_logic(function_name: &'static str, scale: usize) -> String {
-    let mut body = String::new();
-    for _ in 0..scale {
-        body.push_str(&*format!("({} true false) ", function_name));
-    }
-    body
-}
-
-fn gen_tuple_get(scale: usize, input_size: usize) -> String {
-    let mut body = String::new();
-    let mut rng = rand::thread_rng();
-
-    let tuple_vals = (0..input_size)
-        .map(|i| format!("(id{} 1337)", i))
-        .collect::<Vec<String>>()
-        .join(" ");
-
-    let tuple = format!("(test-tuple (tuple {}))", tuple_vals);
-
-    for _ in 0..scale {
-        body.push_str(&*format!(
-            "(get id{} test-tuple) ",
-            rng.gen_range(0..input_size)
-        ));
-    }
-
-    format!("(let ({}) {})", tuple, body)
-}
-
-// generate clarity code for benchmarking
-fn gen(function: ClarityCostFunction, scale: usize, input_size: usize) -> String {
-    let mut body = String::new();
-
-    match function {
-        ClarityCostFunction::Add => {
-            body = gen_arithmetic("+", scale, input_size);
-        }
-        ClarityCostFunction::Sub => {
-            body = gen_arithmetic("-", scale, input_size);
-        }
-        ClarityCostFunction::Mul => {
-            body = gen_arithmetic("*", scale, input_size);
-        }
-        ClarityCostFunction::Div => {
-            body = gen_arithmetic("/", scale, input_size);
-        }
-        ClarityCostFunction::Le => body = gen_cmp("<", scale),
-        ClarityCostFunction::Leq => body = gen_cmp("<=", scale),
-        ClarityCostFunction::Ge => body = gen_cmp(">", scale),
-        ClarityCostFunction::Geq => body = gen_cmp(">=", scale),
-        ClarityCostFunction::And => body = gen_logic("and", scale),
-        ClarityCostFunction::Or => body = gen_logic("or", scale),
-        ClarityCostFunction::Mod => body = gen_arithmetic("mod", scale, input_size),
-        ClarityCostFunction::Pow => body = gen_arithmetic("pow", scale, input_size),
-        ClarityCostFunction::Sqrti => body = gen_arithmetic("sqrti", scale, 1),
-        ClarityCostFunction::Log2 => body = gen_arithmetic("log2", scale, 1),
-        ClarityCostFunction::TupleGet => body = gen_tuple_get(scale, input_size),
-        _ => {}
-    }
-
-    format!("(define-public (test) (begin {} (ok true)))", body)
-}
+const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
+const SCALE: u16 = 1;
 
 fn bench_with_input_sizes(
     c: &mut Criterion,
     function: ClarityCostFunction,
-    scale: usize,
-    input_sizes: Vec<usize>,
+    scale: u16,
+    input_sizes: Vec<u16>,
 ) {
     let marf = MarfedKV::temporary();
     let mut clarity_instance = ClarityInstance::new(marf, ExecutionCost::max_value());
@@ -125,6 +34,11 @@ fn bench_with_input_sizes(
         &NULL_BURN_STATE_DB,
     );
 
+    // let cost_tracker = LimitedCostTracker::new(false, BLOCK_LIMIT_MAINNET.clone(), &mut conn).unwrap();
+
+    // let mut global_context = GlobalContext::new(false, conn, cost_tracker);
+    // global_context.begin();
+
     let p = PrincipalData::from(
         PrincipalData::parse_standard_principal("SM2J6ZY48GV1EZ5V2V5RB9MP66SW86PYKKQVX8X0G")
             .unwrap(),
@@ -135,7 +49,25 @@ fn bench_with_input_sizes(
     for input_size in input_sizes.iter() {
         let contract_identifier =
             QualifiedContractIdentifier::local(&*format!("c{}", input_size)).unwrap();
+        // let mut contract_context = ContractContext::new(contract_identifier.clone());
         let contract = gen(function, scale, *input_size);
+
+        // let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
+        //     Ok(res) => res,
+        //     Err(error) => {
+        //         panic!("Parsing error: {}", error.diagnostic.message);
+        //     }
+        // };
+
+        // let mut call_stack = CallStack::new();
+        // let mut env = Environment::new(
+        //     &mut global_context,
+        //     &contract_context,
+        //     &mut call_stack,
+        //     None,
+        //     None,
+        // );
+        // let result = global_context.execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g));
 
         conn.as_transaction(|tx| {
             let (ct_ast, _ct_analysis) = tx
@@ -230,18 +162,18 @@ fn bench_tuple_get(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    // bench_add,
-    // bench_sub,
-    // bench_le,
-    // bench_leq,
-    // bench_ge,
-    // bench_geq,
-    // bench_and,
-    // bench_or,
-    // bench_mod,
-    // bench_pow,
-    // bench_sqrti,
-    // bench_log2,
+    bench_add,
+    bench_sub,
+    bench_le,
+    bench_leq,
+    bench_ge,
+    bench_geq,
+    bench_and,
+    bench_or,
+    bench_mod,
+    bench_pow,
+    bench_sqrti,
+    bench_log2,
     bench_tuple_get,
 );
 
