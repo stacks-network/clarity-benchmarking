@@ -5,11 +5,11 @@ authors = ["Reed Rosenbluth <331327+reedrosenbluth@users.noreply.github.com>"]
 edition = "2018"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.3.4"
 
 [dependencies]
-blockstack-core = { git = "https://github.com/blockstack/stacks-blockchain" }
-rand = "0.8.1"
+blockstack-core = { git = "https://github.com/blockstack/stacks-blockchain", branch = "feat/eval-all-pub" }
+rand = "0.8.3"
 
 [lib]
 name = "benchmarking_lib"

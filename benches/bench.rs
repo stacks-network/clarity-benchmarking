@@ -1,13 +1,10 @@
 use benchmarking_lib::generators::gen;
-use blockstack_lib::{chainstate::stacks::index::MarfTrieId, vm::{contexts::GlobalContext, contexts::ContractContext, costs::LimitedCostTracker}};
-use blockstack_lib::chainstate::stacks::{StacksBlockHeader, StacksBlockId};
-use blockstack_lib::core::{FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
-use blockstack_lib::vm::clarity::ClarityInstance;
-// use blockstack_lib::vm::{ast};
+use blockstack_lib::clarity_vm::database::MemoryBackingStore;
+use blockstack_lib::vm::contexts::{GlobalContext, ContractContext};
+use blockstack_lib::vm::{ast, eval_all};
 use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
-use blockstack_lib::vm::costs::ExecutionCost;
-use blockstack_lib::vm::database::{MarfedKV, NULL_BURN_STATE_DB, NULL_HEADER_DB};
-use blockstack_lib::vm::types::{PrincipalData, QualifiedContractIdentifier};
+use blockstack_lib::vm::costs::LimitedCostTracker;
+use blockstack_lib::vm::types::QualifiedContractIdentifier;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
@@ -19,63 +16,27 @@ fn bench_with_input_sizes(
     scale: u16,
     input_sizes: Vec<u16>,
 ) {
-    let marf = MarfedKV::temporary();
-    let mut clarity_instance = ClarityInstance::new(marf, ExecutionCost::max_value());
-
-    let bhh = StacksBlockHeader::make_index_block_hash(
-        &FIRST_BURNCHAIN_CONSENSUS_HASH,
-        &FIRST_STACKS_BLOCK_HASH,
-    );
-
-    let mut conn = clarity_instance.begin_genesis_block(
-        &StacksBlockId::sentinel(),
-        &bhh.clone(),
-        &NULL_HEADER_DB,
-        &NULL_BURN_STATE_DB,
-    );
-
-    // let cost_tracker = LimitedCostTracker::new(false, BLOCK_LIMIT_MAINNET.clone(), &mut conn).unwrap();
-
-    // let mut global_context = GlobalContext::new(false, conn, cost_tracker);
-    // global_context.begin();
-
-    let p = PrincipalData::from(
-        PrincipalData::parse_standard_principal("SM2J6ZY48GV1EZ5V2V5RB9MP66SW86PYKKQVX8X0G")
-            .unwrap(),
-    );
-
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in input_sizes.iter() {
+        let mut datastore = MemoryBackingStore::new();
+        let clarity_db = datastore.as_clarity_db();
+
+        let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
+        global_context.begin();
+
         let contract_identifier =
             QualifiedContractIdentifier::local(&*format!("c{}", input_size)).unwrap();
-        // let mut contract_context = ContractContext::new(contract_identifier.clone());
+        let mut contract_context = ContractContext::new(contract_identifier.clone());
+
         let contract = gen(function, scale, *input_size);
 
-        // let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
-        //     Ok(res) => res,
-        //     Err(error) => {
-        //         panic!("Parsing error: {}", error.diagnostic.message);
-        //     }
-        // };
-
-        // let mut call_stack = CallStack::new();
-        // let mut env = Environment::new(
-        //     &mut global_context,
-        //     &contract_context,
-        //     &mut call_stack,
-        //     None,
-        //     None,
-        // );
-        // let result = global_context.execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g));
-
-        conn.as_transaction(|tx| {
-            let (ct_ast, _ct_analysis) = tx
-                .analyze_smart_contract(&contract_identifier, &contract)
-                .unwrap();
-            tx.initialize_smart_contract(&contract_identifier, &ct_ast, &*contract, |_, _| false)
-                .unwrap();
-        });
+        let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
+            Ok(res) => res,
+            Err(error) => {
+                panic!("Parsing error: {}", error.diagnostic.message);
+            }
+        };
 
         group.throughput(Throughput::Bytes(input_size.clone() as u64));
         group.bench_with_input(
@@ -83,10 +44,7 @@ fn bench_with_input_sizes(
             input_size,
             |b, &_| {
                 b.iter(|| {
-                    conn.as_transaction(|tx| {
-                        tx.run_contract_call(&p, &contract_identifier, "test", &[], |_, _| false)
-                    })
-                    .unwrap()
+                    global_context.execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g)).unwrap();
                 })
             },
         );

@@ -82,7 +82,7 @@ fn gen_tuple_get(scale: u16, input_size: u16) -> String {
 // }
 
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String {
-    let body = match function {
+    match function {
         // arithmetic
         ClarityCostFunction::Add => gen_arithmetic("+", scale, input_size),
         ClarityCostFunction::Sub =>  gen_arithmetic("-", scale, input_size),
@@ -211,7 +211,5 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String
         ClarityCostFunction::SetVar => unimplemented!(),
         ClarityCostFunction::ContractStorage => unimplemented!(),
         ClarityCostFunction::Match => unimplemented!(),
-    };
-
-    format!("(define-public (test) (ok {}))", body)
+    }
 }
