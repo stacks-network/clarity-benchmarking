@@ -227,6 +227,7 @@ dependencies = [
  "blockstack-core",
  "criterion",
  "rand 0.8.1",
+ "secp256k1",
 ]
 
 [[package]]
