@@ -6,8 +6,9 @@ use blockstack_lib::burnchains::PrivateKey;
 
 use secp256k1::Message as LibSecp256k1Message;
 use blockstack_lib::util::hash::to_hex;
-use blockstack_lib::chainstate::stacks::{StacksAddress, C32_ADDRESS_VERSION_TESTNET_SINGLESIG, StacksPublicKey};
+use blockstack_lib::chainstate::stacks::{C32_ADDRESS_VERSION_TESTNET_SINGLESIG, StacksPublicKey};
 use blockstack_lib::address::AddressHashMode;
+use blockstack_lib::types::chainstate::StacksAddress;
 
 // generate arithmetic function call
 pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) -> String {
@@ -269,7 +270,7 @@ fn gen_tuple_get(scale: u16, input_size: u16) -> String {
 // }
 
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String {
-    let body = match function {
+    match function {
         // arithmetic
         ClarityCostFunction::Add => gen_arithmetic("+", scale, input_size),
         ClarityCostFunction::Sub =>  gen_arithmetic("-", scale, input_size),
@@ -398,7 +399,5 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String
         ClarityCostFunction::SetVar => unimplemented!(),
         ClarityCostFunction::ContractStorage => unimplemented!(),
         ClarityCostFunction::Match => unimplemented!(),
-    };
-
-    format!("(define-public (test) (ok {}))", body)
+    }
 }
