@@ -8,7 +8,8 @@ use blockstack_lib::vm::types::QualifiedContractIdentifier;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
-const SCALE: u16 = 1;
+const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
+const SCALE: u16 = 100;
 
 fn bench_with_input_sizes(
     c: &mut Criterion,
@@ -87,24 +88,24 @@ fn bench_geq(c: &mut Criterion) {
 
 // boolean functions
 fn bench_and(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::And, SCALE.into(), INPUT_SIZES.into())
+    bench_with_input_sizes(c, ClarityCostFunction::And, SCALE, INPUT_SIZES.into())
 }
 
 fn bench_or(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Or, SCALE.into(), INPUT_SIZES.into())
+    bench_with_input_sizes(c, ClarityCostFunction::Or, SCALE, INPUT_SIZES.into())
 }
 
 fn bench_xor(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Xor, SCALE.into(), vec![2])
+    bench_with_input_sizes(c, ClarityCostFunction::Xor, SCALE, vec![2])
 }
 
 fn bench_not(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Not, SCALE.into(), vec![1])
+    bench_with_input_sizes(c, ClarityCostFunction::Not, SCALE, vec![1])
 }
 
 // note: only testing is-eq when the values are bools; could try doing it with ints?
 fn bench_eq(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Eq, SCALE.into(), INPUT_SIZES.into())
+    bench_with_input_sizes(c, ClarityCostFunction::Eq, SCALE, INPUT_SIZES.into())
 }
 
 fn bench_mod(c: &mut Criterion) {
@@ -128,7 +129,7 @@ fn bench_tuple_get(c: &mut Criterion) {
         c,
         ClarityCostFunction::TupleGet,
         SCALE,
-        vec![1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096],
+        MORE_INPUT_SIZES.into(),
     )
 }
 
@@ -146,37 +147,37 @@ fn bench_tuple_cons(c: &mut Criterion) {
         c,
         ClarityCostFunction::TupleCons,
         SCALE,
-        vec![1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096],
+        MORE_INPUT_SIZES.into(),
     )
 }
 
 // hash functions
 fn bench_hash160(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE.into(), vec![1])
+    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, vec![1])
 }
 
 fn bench_sha256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE.into(), vec![1])
+    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, vec![1])
 }
 
 fn bench_sha512(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE.into(), vec![1])
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, vec![1])
 }
 
 fn bench_sha512t256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE.into(), vec![1])
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, vec![1])
 }
 
 fn bench_keccak256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE.into(), vec![1])
+    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, vec![1])
 }
 
 fn bench_secp256k1recover(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Secp256k1recover, SCALE.into(), vec![1])
+    bench_with_input_sizes(c, ClarityCostFunction::Secp256k1recover, SCALE, vec![1])
 }
 
 fn bench_secp256k1verify(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Secp256k1verify, SCALE.into(), vec![1])
+    bench_with_input_sizes(c, ClarityCostFunction::Secp256k1verify, SCALE, vec![1])
 }
 
 fn bench_create_ft(c: &mut Criterion) {
