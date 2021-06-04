@@ -75,11 +75,46 @@ fn gen_tuple_get(scale: u16, input_size: u16) -> String {
     format!("(let ((test-tuple {})) {})", tuple, body)
 }
 
-// fn gen_tuple_merge(scale: u16, input_size: u16) -> String {
-//     let mut body = String::new();
+fn gen_tuple_merge(scale: u16, input_size: u16) -> String {
+    let mut body = String::new();
 
-//     format!("()")
-// }
+    let tuple_a_vals = (0..input_size)
+        .map(|i| format!("(a{} 1337)", i))
+        .collect::<Vec<String>>()
+        .join(" ");
+
+    let tuple_b_vals = (0..input_size)
+        .map(|i| format!("(b{} 1337)", i))
+        .collect::<Vec<String>>()
+        .join(" ");
+
+    let tuple_a = format!("(tuple {})", tuple_a_vals);
+    let tuple_b = format!("(tuple {})", tuple_b_vals);
+
+    for _ in 0..scale {
+        body.push_str(&*format!("(merge tuple-a tuple-b)"));
+    }
+
+    format!("(let ((tuple-a {}) (tuple-b {})) {})", tuple_a, tuple_b, body)
+
+}
+
+fn gen_tuple_cons(scale: u16, input_size: u16) -> String {
+    let mut body = String::new();
+
+    let tuple_vals = (0..input_size)
+        .map(|i| format!("(id{} 1337)", i))
+        .collect::<Vec<String>>()
+        .join(" ");
+
+    let tuple = format!("(tuple {})", tuple_vals);
+
+    for _ in 0..scale {
+        body.push_str(&tuple);
+    }
+
+    body
+}
 
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String {
     match function {
@@ -105,8 +140,8 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String
         ClarityCostFunction::Eq => gen_logic("eq", scale),
         // tuples
         ClarityCostFunction::TupleGet => gen_tuple_get(scale, input_size),
-        ClarityCostFunction::TupleMerge => unimplemented!(),
-        ClarityCostFunction::TupleCons => unimplemented!(),
+        ClarityCostFunction::TupleMerge => gen_tuple_merge(scale, input_size),
+        ClarityCostFunction::TupleCons => gen_tuple_cons(scale, input_size),
         // Analysis
         ClarityCostFunction::AnalysisTypeAnnotate => unimplemented!(),
         ClarityCostFunction::AnalysisTypeCheck => unimplemented!(),
