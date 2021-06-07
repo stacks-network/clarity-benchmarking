@@ -9,6 +9,10 @@ use blockstack_lib::util::hash::to_hex;
 use blockstack_lib::chainstate::stacks::{C32_ADDRESS_VERSION_TESTNET_SINGLESIG, StacksPublicKey};
 use blockstack_lib::address::AddressHashMode;
 use blockstack_lib::types::chainstate::StacksAddress;
+use rand::distributions::uniform::{UniformChar, UniformSampler};
+use rand::rngs::ThreadRng;
+use blockstack_lib::vm::analysis::contract_interface_builder::ContractInterfaceAtomType::principal;
+use std::cmp::min;
 
 // generate arithmetic function call
 pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) -> String {
@@ -111,6 +115,11 @@ fn helper_generate_rand_hex_string(n: usize) -> String {
         .collect::<String>()
 }
 
+fn helper_generate_rand_char_string(n: usize) -> String {
+    let mut rng = rand::thread_rng();
+    (0..n).map(|_| rng.gen_range(b'a'..b'z') as char).collect::<String>()
+}
+
 /// This function generates a single value that either has type uint, int, or buff (randomly chosen)
 /// This value is set as the argument to a hash function ultimately
 fn gen_hash(function_name: &'static str, scale: u16) -> String {
@@ -173,28 +182,38 @@ fn gen_secp256k1(function_name: &'static str, scale: u16, verify: bool) -> Strin
     body
 }
 
-fn gen_create_ft(function_name: &'static str, scale: u16) -> String {
-    let mut body = String::new();
+fn helper_define_fungible_token_statement() -> (String, String) {
     let mut rng = rand::thread_rng();
+    let token_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+    let args = match rng.gen_range(0..=1) {
+        0 => {
+            // no supply arg
+            format!("{}", token_name)
+        }
+        1 => {
+            // provide supply arg
+            let supply: u128 = rng.gen();
+            format!("{} u{}", token_name, supply)
+        }
+        _ => {
+            unreachable!("should only be generating numbers in the range 0..=1.")
+        }
+    };
+    let statement = format!("(define-fungible-token {}) ", args);
+    (statement, token_name)
+}
+
+/// ////////////////////////////////////
+/// FUNGIBLE TOKEN GENERATOR FUNCTIONS
+/// ////////////////////////////////////
+
+/// todo: remove function name input for the generator functions that map to a single clarity fn?
+fn gen_create_ft(_function_name: &'static str, scale: u16) -> String {
+    let mut body = String::new();
 
     for _ in 0..scale {
-        let token_name = helper_generate_rand_hex_string(rng.gen_range(10..20));
-        let args = match rng.gen_range(0..=1) {
-            0 => {
-                // no supply arg
-                format!("{}", token_name)
-            }
-            1 => {
-                // provide supply arg
-                let supply: u128 = rng.gen();
-                format!("{} u{}", token_name, supply)
-            }
-            _ => {
-                unreachable!("should only be generating numbers in the range 0..=1.")
-            }
-        };
-
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        let (statement, _) = helper_define_fungible_token_statement();
+        body.push_str(&statement);
     }
     body
 }
@@ -209,38 +228,228 @@ fn helper_create_principal() -> String {
         &vec![StacksPublicKey::from_private(&privk)],
     )
         .unwrap();
-    let principal = addr.to_account_principal();
+    let principal_data = addr.to_account_principal();
 
-    format!("'{}", principal)
+    format!("'{}", principal_data)
 }
 
 fn gen_ft_mint(function_name: &'static str, scale: u16) -> String {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
-    let token_name = helper_generate_rand_hex_string(rng.gen_range(10..20));
-    body.push_str(&*format!("(define-fungible-token {}) ", token_name));
+    let (statement, token_name) = helper_define_fungible_token_statement();
+    body.push_str(&statement);
 
     for _ in 0..scale {
         let amount: u128 = rng.gen();
-        let principal = helper_create_principal();
-        let args = format!("{} u{} {}", token_name, amount, principal);
+        let principal_data = helper_create_principal();
+        let args = format!("{} u{} {}", token_name, amount, principal_data);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
     body
 }
 
-fn helper_create_ft_boilerplate(scale: u16) -> String {
+fn helper_create_ft_boilerplate(mint_amount: u16) -> (String, String, String) {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
-    let token_name = helper_generate_rand_hex_string(rng.gen_range(10..20));
+    let token_name = helper_generate_rand_char_string(rng.gen_range(10..20));
     body.push_str(&*format!("(define-fungible-token {}) ", token_name));
 
-    let mint_amount = 100 * (scale as u32);
-    let principal = helper_create_principal();
-    body.push_str(&*format!("(ft-mint? {} u{} {}) ", token_name, mint_amount, principal));
+    let principal_data = helper_create_principal();
+    body.push_str(&*format!("(ft-mint? {} u{} {}) ", token_name, mint_amount, principal_data));
+    (token_name, principal_data, body)
+}
+
+fn gen_ft_transfer(function_name: &'static str, scale: u16) -> String {
+    let mut body = String::new();
+    let mut rng = rand::thread_rng();
+    let max_transfer = 100;
+    let (token_name, sender_principal, template) = helper_create_ft_boilerplate(scale*max_transfer);
+    body.push_str(&template);
+
+    let recipient_principal = helper_create_principal();
+    for _ in 0..scale {
+        let transfer_amount = rng.gen_range(1..=max_transfer);
+        let args = format!("{} u{} {} {}", token_name, transfer_amount, sender_principal, recipient_principal);
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    println!("{}", body);
     body
 }
 
+fn gen_ft_balance(function_name: &'static str, scale: u16) -> String {
+    let mut body = String::new();
+    let (token_name, principal_data, template) = helper_create_ft_boilerplate(100);
+    body.push_str(&template);
+    let args = format!("{} {}", token_name, principal_data);
+    for _ in 0..scale {
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    body
+}
+
+fn gen_ft_supply(function_name: &'static str, scale: u16) -> String {
+    let mut body = String::new();
+    let (token_name, _, template) = helper_create_ft_boilerplate(100);
+    body.push_str(&template);
+    let args = format!("{}", token_name);
+    for _ in 0..scale {
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    body
+}
+
+fn gen_ft_burn(function_name: &'static str, scale: u16) -> String {
+    let mut body = String::new();
+    let mut rng = rand::thread_rng();
+    let max_burn = 100;
+    let (token_name, principal_data, template) = helper_create_ft_boilerplate(scale*max_burn);
+    body.push_str(&template);
+    for _ in 0..scale {
+        let burn_amount = rng.gen_range(1..=max_burn);
+        let args = format!("{} u{} {}", token_name, burn_amount, principal_data);
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    body
+}
+
+/// ////////////////////////////////////////
+/// NON FUNGIBLE TOKEN GENERATOR FUNCTIONS
+/// ////////////////////////////////////////
+
+// Returns statement, token_name, the type of the nft, and option for the length of the nft if it is a string
+fn helper_define_non_fungible_token_statement(allow_bool_type: bool) -> (String, String, String, Option<u16>) {
+    let mut rng = rand::thread_rng();
+    let type_no_len = ["int", "uint", "bool"];
+    let type_with_len = ["buff", "string-ascii", "string-utf8"];
+
+    let token_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+    let (args, nft_type, nft_len) = match rng.gen_range(0..=1) {
+        0 => {
+            // a type with no length arg
+            let max_range = type_no_len.len() - (if allow_bool_type { 0 } else { 1 });
+            let index = rng.gen_range(0..max_range);
+            let nft_type = type_no_len[index];
+            (format!("{} {}", token_name, nft_type), nft_type, None)
+        }
+        1 => {
+            // a type with a length arg
+            let index = rng.gen_range(0..type_with_len.len());
+            let length = rng.gen_range(2..=50);
+            let nft_type = type_with_len[index];
+            (format!("{} ({} {})", token_name, nft_type, length), nft_type, Some(length))
+        }
+        _ => {
+            unreachable!("should only be generating numbers in the range 0..=1.")
+        }
+    };
+
+    let statement = format!("(define-non-fungible-token {}) ", args);
+    (statement, token_name, nft_type.to_string(), nft_len)
+}
+
+fn gen_create_nft(function_name: &'static str, scale: u16) -> String {
+    let mut body = String::new();
+    for _ in 0..scale {
+        let (statement, _, _, _) = helper_define_non_fungible_token_statement(true);
+        body.push_str(&statement);
+    }
+    body
+}
+
+fn helper_gen_nft_value(nft_type: &str, num: u16, nft_len: usize) -> String {
+    match nft_type {
+        "int" => format!("{}", num),
+        "uint" => format!("u{}", num),
+        "buff" => {
+            let mut buff = "0x".to_string();
+            buff.push_str(&helper_generate_rand_hex_string(nft_len));
+            buff
+        }
+        "string-ascii" => {
+            let ascii_string = helper_generate_rand_hex_string(nft_len);
+            format!(r##""{}""##, ascii_string)
+        }
+        "string-utf8" => {
+            let utf8_string = helper_generate_rand_hex_string(nft_len);
+            format!(r##"u"{}""##, utf8_string)
+        }
+        _ => {
+            unreachable!("should only be generating the types int, uint, buff, string-ascii, and string-utf8.")
+        }
+    }
+}
+
+fn gen_nft_mint(function_name: &'static str, scale: u16) -> String {
+    let mut body = String::new();
+    let (statement, token_name, nft_type, nft_len) = helper_define_non_fungible_token_statement(false);
+    body.push_str(&statement);
+
+    let nft_len = nft_len.map_or(0, |len| len) as usize;
+    for i in 0..scale {
+        let principal_data = helper_create_principal();
+        let nft_value = helper_gen_nft_value(&nft_type, i, nft_len);
+
+        let args = format!("{} {} {}", token_name, nft_value, principal_data);
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    println!("{}", body);
+    body
+}
+
+fn helper_create_nft_fn_boilerplate() -> (String, String, String, String, String) {
+    let mut body = String::new();
+    let (statement, token_name, nft_type, nft_len) = helper_define_non_fungible_token_statement(false);
+    body.push_str(&statement);
+
+    let nft_len = nft_len.map_or(0, |len| len) as usize;
+    let nft_value = helper_gen_nft_value(&nft_type, 0, nft_len);
+    let invalid_nft_value = helper_gen_nft_value(&nft_type, 0, nft_len);
+    let mut owner_principal = helper_create_principal();
+    let mint_statement = format!("(nft-mint? {} {} {}) ", token_name, nft_value, owner_principal);
+    body.push_str(&mint_statement);
+    (body, token_name, owner_principal, nft_value, invalid_nft_value)
+}
+
+fn gen_nft_transfer(function_name: &'static str, scale: u16) -> String {
+    let (mut body, token_name, mut owner_principal, nft_value, _) = helper_create_nft_fn_boilerplate();
+    for _ in 0..scale {
+        let next_principal = helper_create_principal();
+        let args = format!("{} {} {} {}", token_name, nft_value, owner_principal, next_principal);
+        body.push_str(&*format!("({} {}) ", function_name, args));
+
+        owner_principal = next_principal;
+    }
+    body
+}
+
+fn gen_nft_owner(function_name: &'static str, scale: u16) -> String {
+    let mut rng = rand::thread_rng();
+    let (mut body, token_name, _, nft_value, invalid_nft_value) = helper_create_nft_fn_boilerplate();
+    for _ in 0..scale {
+        let curr_nft_value = match rng.gen_bool(0.5) {
+            true => {
+                // use valid nft value
+                &nft_value
+            }
+            false => {
+                // use invalid nft value
+                &invalid_nft_value
+            }
+        };
+        let args = format!("{} {}", token_name, curr_nft_value);
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    body
+}
+
+fn gen_nft_burn(function_name: &'static str, scale: u16) -> String {
+    let (mut body, token_name, mut owner_principal, nft_value, _) = helper_create_nft_fn_boilerplate();
+    for _ in 0..scale {
+        let args = format!("{} {} {}", token_name, nft_value, owner_principal);
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    body
+}
 
 fn gen_tuple_get(scale: u16, input_size: u16) -> String {
     let mut body = String::new();
@@ -345,21 +554,26 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String
         // FT
         ClarityCostFunction::CreateFt => gen_create_ft("define-fungible-token", scale),
         ClarityCostFunction::FtMint => gen_ft_mint("ft-mint?", scale),
-        ClarityCostFunction::FtTransfer => unimplemented!(),
-        ClarityCostFunction::FtBalance => unimplemented!(),
-        ClarityCostFunction::FtSupply => unimplemented!(),
-        ClarityCostFunction::FtBurn => unimplemented!(),
+        ClarityCostFunction::FtTransfer => gen_ft_transfer("ft-transfer?", scale),
+        ClarityCostFunction::FtBalance => gen_ft_balance("ft-get-balance", scale),
+        ClarityCostFunction::FtSupply => gen_ft_supply("ft-get-supply", scale),
+        ClarityCostFunction::FtBurn => gen_ft_burn("ft-burn?", scale),
         // NFT
-        ClarityCostFunction::CreateNft => unimplemented!(),
-        ClarityCostFunction::NftMint => unimplemented!(),
-        ClarityCostFunction::NftTransfer => unimplemented!(),
-        ClarityCostFunction::NftOwner => unimplemented!(),
-        ClarityCostFunction::NftBurn => unimplemented!(),
+        ClarityCostFunction::CreateNft => gen_create_nft("define-non-fungible-token", scale),
+        ClarityCostFunction::NftMint => gen_nft_mint("nft-mint?", scale),
+        ClarityCostFunction::NftTransfer =>  gen_nft_transfer("nft-transfer?", scale),
+        ClarityCostFunction::NftOwner =>  gen_nft_owner("nft-get-owner?", scale),
+        ClarityCostFunction::NftBurn =>  gen_nft_burn("nft-burn?", scale),
         // Stacks
         ClarityCostFunction::PoisonMicroblock => unimplemented!(),
         ClarityCostFunction::BlockInfo => unimplemented!(),
         ClarityCostFunction::StxBalance => unimplemented!(),
         ClarityCostFunction::StxTransfer => unimplemented!(),
+        // Option & result checks
+        ClarityCostFunction::IsOkay => unimplemented!(),
+        ClarityCostFunction::IsNone => unimplemented!(),
+        ClarityCostFunction::IsErr => unimplemented!(),
+        ClarityCostFunction::IsSome => unimplemented!(),
         // Uncategorized
         ClarityCostFunction::BindName => unimplemented!(),
         ClarityCostFunction::InnerTypeCheckCost => unimplemented!(),
@@ -377,10 +591,6 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String
         ClarityCostFunction::DefaultTo => unimplemented!(),
         ClarityCostFunction::UnwrapRet => unimplemented!(),
         ClarityCostFunction::UnwrapErrOrRet => unimplemented!(),
-        ClarityCostFunction::IsOkay => unimplemented!(),
-        ClarityCostFunction::IsNone => unimplemented!(),
-        ClarityCostFunction::IsErr => unimplemented!(),
-        ClarityCostFunction::IsSome => unimplemented!(),
         ClarityCostFunction::Unwrap => unimplemented!(),
         ClarityCostFunction::UnwrapErr => unimplemented!(),
         ClarityCostFunction::TryRet => unimplemented!(),

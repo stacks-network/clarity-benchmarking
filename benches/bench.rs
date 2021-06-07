@@ -165,8 +165,44 @@ fn bench_create_ft(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::CreateFt, SCALE.into(), vec![1])
 }
 
-fn bench_mint_ft(c: &mut Criterion) {
+fn bench_ft_mint(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::FtMint, SCALE.into(), vec![1])
+}
+
+fn bench_ft_transfer(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::FtTransfer, SCALE.into(), vec![1])
+}
+
+fn bench_ft_balance(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::FtBalance, SCALE.into(), vec![1])
+}
+
+fn bench_ft_supply(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::FtSupply, SCALE.into(), vec![1])
+}
+
+fn bench_ft_burn(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::FtBurn, SCALE.into(), vec![1])
+}
+
+fn bench_create_nft(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::CreateNft, SCALE.into(), vec![1])
+}
+
+fn bench_nft_mint(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::NftMint, SCALE.into(), vec![1])
+}
+
+fn bench_nft_transfer(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::NftTransfer, SCALE.into(), vec![1])
+}
+
+fn bench_nft_owner(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::NftOwner, SCALE.into(), vec![1])
+}
+
+fn bench_nft_burn(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::NftBurn, SCALE.into(), vec![1])
 }
 
 criterion_group!(
@@ -194,6 +230,17 @@ criterion_group!(
     bench_keccak256,
     bench_secp256k1recover,
     bench_secp256k1verify,
+    // bench_create_ft,
+    // bench_ft_mint,
+    // bench_ft_transfer,
+    // bench_ft_balance,
+    // bench_ft_supply,
+    // bench_ft_burn,
+    // bench_create_nft,
+    // bench_nft_mint,
+    // bench_nft_transfer,
+    // bench_nft_owner,
+    // bench_nft_burn,
 );
 
 // AnalysisTypeAnnotate("cost_analysis_type_annotate"),
