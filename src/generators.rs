@@ -79,38 +79,6 @@ fn gen_logic(function_name: &'static str, scale: u16, input_size: u16) -> String
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
 
-    /* match function_name {
-        "and" => {
-            for _ in 0..scale {
-                let args = (0..input_size)
-                    .map(|_| format!("true"))
-                    .collect::<Vec<String>>()
-                    .join(" ");
-                body.push_str(&*format!("({} {}) ", function_name, args));
-            }
-        },
-        "or" => {
-            for _ in 0..scale {
-                let args = (0..input_size)
-                    .map(|_| format!("false"))
-                    .collect::<Vec<String>>()
-                    .join(" ");
-                body.push_str(&*format!("({} {}) ", function_name, args));
-            }
-        },
-        _ => {
-            for _ in 0..scale {
-                let args = (0..input_size)
-                    .map(|_| {
-                        format!("{}", bools[rng.gen_range(0..=1)])
-                    })
-                    .collect::<Vec<String>>()
-                    .join(" ");
-                body.push_str(&*format!("({} {}) ", function_name, args));
-            }
-        },
-    } */
-
     body
 }
 
