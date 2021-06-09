@@ -220,6 +220,10 @@ fn gen_secp256k1(function_name: &'static str, scale: u16, verify: bool) -> Strin
     body
 }
 
+/// ////////////////////////////////////
+/// FUNGIBLE TOKEN GENERATOR FUNCTIONS
+/// ////////////////////////////////////
+
 fn helper_define_fungible_token_statement() -> (String, String) {
     let mut rng = rand::thread_rng();
     let token_name = helper_generate_rand_char_string(rng.gen_range(10..20));
@@ -240,10 +244,6 @@ fn helper_define_fungible_token_statement() -> (String, String) {
     let statement = format!("(define-fungible-token {}) ", args);
     (statement, token_name)
 }
-
-/// ////////////////////////////////////
-/// FUNGIBLE TOKEN GENERATOR FUNCTIONS
-/// ////////////////////////////////////
 
 /// todo: remove function name input for the generator functions that map to a single clarity fn?
 fn gen_create_ft(_function_name: &'static str, scale: u16) -> String {
@@ -278,11 +278,12 @@ fn gen_ft_mint(function_name: &'static str, scale: u16) -> String {
     body.push_str(&statement);
 
     for _ in 0..scale {
-        let amount: u128 = rng.gen();
+        let amount: u128 = rng.gen_range(1..1000);
         let principal_data = helper_create_principal();
         let args = format!("{} u{} {}", token_name, amount, principal_data);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
+    println!("{}", body);
     body
 }
 
@@ -354,31 +355,42 @@ fn gen_ft_burn(function_name: &'static str, scale: u16) -> String {
 /// NON FUNGIBLE TOKEN GENERATOR FUNCTIONS
 /// ////////////////////////////////////////
 
-// Returns statement, token_name, the type of the nft, and option for the length of the nft if it is a string
-fn helper_define_non_fungible_token_statement(allow_bool_type: bool) -> (String, String, String, Option<u16>) {
+fn helper_gen_clarity_type(allow_bool_type: bool) -> (String, Option<u16>) {
     let mut rng = rand::thread_rng();
     let type_no_len = ["int", "uint", "bool"];
     let type_with_len = ["buff", "string-ascii", "string-utf8"];
 
-    let token_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-    let (args, nft_type, nft_len) = match rng.gen_range(0..=1) {
+    let (nft_type, nft_len) = match rng.gen_range(0..=1) {
         0 => {
             // a type with no length arg
             let max_range = type_no_len.len() - (if allow_bool_type { 0 } else { 1 });
             let index = rng.gen_range(0..max_range);
             let nft_type = type_no_len[index];
-            (format!("{} {}", token_name, nft_type), nft_type, None)
+            (nft_type, None)
         }
         1 => {
             // a type with a length arg
             let index = rng.gen_range(0..type_with_len.len());
-            let length = rng.gen_range(2..=50);
+            let mut length = rng.gen_range(2..=50);
+            length = if length % 2 == 0 {length} else { length + 1 };
             let nft_type = type_with_len[index];
-            (format!("{} ({} {})", token_name, nft_type, length), nft_type, Some(length))
+            (nft_type, Some(length))
         }
         _ => {
             unreachable!("should only be generating numbers in the range 0..=1.")
         }
+    };
+    (nft_type.to_string(), nft_len)
+}
+
+// Returns statement, token_name, the type of the nft, and option for the length of the nft if it is a string
+fn helper_define_non_fungible_token_statement(allow_bool_type: bool) -> (String, String, String, Option<u16>) {
+    let mut rng = rand::thread_rng();
+    let token_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+    let (nft_type, nft_len) = helper_gen_clarity_type(allow_bool_type);
+    let args = match nft_len {
+        Some(length) => format!("{} ({} {})", token_name, nft_type, length),
+        None => format!("{} {}", token_name, nft_type)
     };
 
     let statement = format!("(define-non-fungible-token {}) ", args);
@@ -394,8 +406,9 @@ fn gen_create_nft(function_name: &'static str, scale: u16) -> String {
     body
 }
 
-fn helper_gen_nft_value(nft_type: &str, num: u16, nft_len: usize) -> String {
-    match nft_type {
+fn helper_gen_clarity_value(value_type: &str, num: u16, nft_len: usize) -> String {
+    let mut rng = rand::thread_rng();
+    match value_type {
         "int" => format!("{}", num),
         "uint" => format!("u{}", num),
         "buff" => {
@@ -411,10 +424,19 @@ fn helper_gen_nft_value(nft_type: &str, num: u16, nft_len: usize) -> String {
             let utf8_string = helper_generate_rand_hex_string(nft_len);
             format!(r##"u"{}""##, utf8_string)
         }
+        "bool" => {
+            let rand_bool = rng.gen_bool(0.5);
+            format!("{}", rand_bool)
+        }
         _ => {
             unreachable!("should only be generating the types int, uint, buff, string-ascii, and string-utf8.")
         }
     }
+}
+
+fn helper_gen_random_clarity_value(num: u16) -> String {
+    let (clarity_type, length) = helper_gen_clarity_type(true);
+    helper_gen_clarity_value(&clarity_type, num, length.map_or(0, |len| len as usize))
 }
 
 fn gen_nft_mint(function_name: &'static str, scale: u16) -> String {
@@ -425,7 +447,7 @@ fn gen_nft_mint(function_name: &'static str, scale: u16) -> String {
     let nft_len = nft_len.map_or(0, |len| len) as usize;
     for i in 0..scale {
         let principal_data = helper_create_principal();
-        let nft_value = helper_gen_nft_value(&nft_type, i, nft_len);
+        let nft_value = helper_gen_clarity_value(&nft_type, i, nft_len);
 
         let args = format!("{} {} {}", token_name, nft_value, principal_data);
         body.push_str(&*format!("({} {}) ", function_name, args));
@@ -440,8 +462,8 @@ fn helper_create_nft_fn_boilerplate() -> (String, String, String, String, String
     body.push_str(&statement);
 
     let nft_len = nft_len.map_or(0, |len| len) as usize;
-    let nft_value = helper_gen_nft_value(&nft_type, 0, nft_len);
-    let invalid_nft_value = helper_gen_nft_value(&nft_type, 0, nft_len);
+    let nft_value = helper_gen_clarity_value(&nft_type, 0, nft_len);
+    let invalid_nft_value = helper_gen_clarity_value(&nft_type, 0, nft_len);
     let mut owner_principal = helper_create_principal();
     let mint_statement = format!("(nft-mint? {} {} {}) ", token_name, nft_value, owner_principal);
     body.push_str(&mint_statement);
@@ -488,6 +510,10 @@ fn gen_nft_burn(function_name: &'static str, scale: u16) -> String {
     }
     body
 }
+
+/// ////////////////////////////////////////
+/// TUPLE GENERATOR FUNCTIONS
+/// ////////////////////////////////////////
 
 fn gen_tuple_get(scale: u16, input_size: u16) -> String {
     let mut body = String::new();
@@ -548,6 +574,140 @@ fn gen_tuple_cons(scale: u16, input_size: u16) -> String {
         body.push_str(&tuple);
     }
 
+    body
+}
+
+/// ////////////////////////////////////////
+/// OPTIONAL/ RESPONSE GENERATOR FUNCTIONS
+/// ////////////////////////////////////////
+
+fn helper_gen_random_optional_value(num: u16, only_some: bool) -> String {
+    let mut rng = rand::thread_rng();
+    let p = if only_some {0.0} else {0.5};
+    match rng.gen_bool(p) {
+        true => {
+            "none".to_string()
+        }
+        false => {
+            // let (clarity_type, length) = helper_gen_clarity_type(true);
+            // let clarity_val = helper_gen_clarity_value(&clarity_type, num, length.map_or(0, |len| len as usize));
+            let clarity_val = helper_gen_random_clarity_value(num);
+            format!("(some {})", clarity_val)
+        }
+    }
+}
+
+fn gen_optional(function_name: &'static str, scale: u16) -> String {
+    let mut body = String::new();
+    for i in 0..scale {
+        let args = helper_gen_random_optional_value(i, false);
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    body
+}
+
+fn helper_gen_random_response_value(num: u16, only_ok: bool, only_err: bool) -> String {
+    let mut rng = rand::thread_rng();
+    // let (clarity_type, length) = helper_gen_clarity_type(true);
+    // let clarity_val = helper_gen_clarity_value(&clarity_type, num, length.map_or(0, |len| len as usize));
+    let clarity_val = helper_gen_random_clarity_value(num);
+    let p = if only_ok {0.0} else if only_err {1.0} else {0.5};
+    match rng.gen_bool(p) {
+        true => {
+            format!("(err {})", clarity_val)
+        }
+        false => {
+
+            format!("(ok {})", clarity_val)
+        }
+    }
+}
+
+fn gen_response(function_name: &'static str, scale: u16) -> String {
+    let mut body = String::new();
+    for i in 0..scale {
+        let args = helper_gen_random_response_value(i, false, false);
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    body
+}
+
+fn gen_unwrap(function_name: &'static str, scale: u16, ret_value: bool) -> String {
+    let mut rng = rand::thread_rng();
+    let mut body = String::new();
+    for i in 0..scale {
+        let mut args = match rng.gen_bool(0.5) {
+            true => helper_gen_random_response_value(i, true, false),
+            false => helper_gen_random_optional_value(i, true)
+        };
+        if ret_value {
+            let (clarity_type, length) = helper_gen_clarity_type(true);
+            let clarity_val = helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as usize));
+            args = format!("{} {}", args, clarity_val)
+        }
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    println!("{}", body);
+    body
+}
+
+fn gen_unwrap_err(function_name: &'static str, scale: u16, ret_value: bool) -> String {
+    let mut body = String::new();
+    for i in 0..scale {
+        let mut args = helper_gen_random_response_value(i, false, true);
+
+        if ret_value {
+            // let (clarity_type, length) = helper_gen_clarity_type(true);
+            // let clarity_val = helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as usize));
+            let clarity_val = helper_gen_random_clarity_value(i);
+            args = format!("{} {}", args, clarity_val)
+        }
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    println!("{}", body);
+    body
+}
+
+fn gen_create_map(function_name: &'static str, scale: u16) -> String {
+    let mut body = String::new();
+    let mut rng = rand::thread_rng();
+    for _ in 0..scale {
+        let map_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+        let key_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+        let (key_type, key_type_len) = helper_gen_clarity_type(true);
+        let key_args = match key_type_len {
+            Some(length) => format!("{{ {}: ({} {}) }}", key_name, key_type, length),
+            None => format!("{{ {}: {} }}", key_name, key_type)
+        };
+
+        let value_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+        let (value_type, value_type_len) = helper_gen_clarity_type(true);
+        let value_args = match value_type_len {
+            Some(length) => format!("{{ {}: ({} {}) }}", value_name, value_type, length),
+            None => format!("{{ {}: {} }}", value_name, value_type)
+        };
+
+        let args = format!("{} {} {}", map_name, key_args, value_args);
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    println!("{}", body);
+    body
+}
+
+fn gen_create_var(function_name: &'static str, scale: u16) -> String  {
+    let mut body = String::new();
+    let mut rng = rand::thread_rng();
+    for i in 0..scale {
+        let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+        let (clarity_type, length) = helper_gen_clarity_type(true);
+        let clarity_value = helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as usize));
+        let args = match length {
+            Some(l) => format!("{} ({} {}) {}", var_name, clarity_type, l, clarity_value),
+            None => format!("{} {} {}", var_name, clarity_type, clarity_value),
+        };
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+    println!("{}", body);
     body
 }
 
@@ -643,10 +803,19 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String
         ClarityCostFunction::StxBalance => unimplemented!(),
         ClarityCostFunction::StxTransfer => unimplemented!(),
         // Option & result checks
-        ClarityCostFunction::IsOkay => unimplemented!(),
-        ClarityCostFunction::IsNone => unimplemented!(),
-        ClarityCostFunction::IsErr => unimplemented!(),
-        ClarityCostFunction::IsSome => unimplemented!(),
+        ClarityCostFunction::IsOkay => gen_response("is-ok", scale),
+        ClarityCostFunction::IsNone => gen_optional("is-none", scale),
+        ClarityCostFunction::IsErr => gen_response("is-err", scale),
+        ClarityCostFunction::IsSome => gen_optional("is-some", scale),
+        // Unwrap functions
+        ClarityCostFunction::UnwrapRet => gen_unwrap("unwrap!", scale, true),
+        ClarityCostFunction::UnwrapErrOrRet => gen_unwrap_err("unwrap-err!", scale, true),
+        ClarityCostFunction::Unwrap => gen_unwrap("unwrap-panic", scale, false),
+        ClarityCostFunction::UnwrapErr => gen_unwrap_err("unwrap-err-panic", scale, false),
+        // Map
+        ClarityCostFunction::CreateMap => gen_create_map("define-map", scale),
+        // Var
+        ClarityCostFunction::CreateVar => gen_create_var("define-data-var", scale),
         // Uncategorized
         ClarityCostFunction::BindName => unimplemented!(),
         ClarityCostFunction::InnerTypeCheckCost => unimplemented!(),
@@ -662,10 +831,6 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String
         ClarityCostFunction::OkCons => unimplemented!(),
         ClarityCostFunction::ErrCons => unimplemented!(),
         ClarityCostFunction::DefaultTo => unimplemented!(),
-        ClarityCostFunction::UnwrapRet => unimplemented!(),
-        ClarityCostFunction::UnwrapErrOrRet => unimplemented!(),
-        ClarityCostFunction::Unwrap => unimplemented!(),
-        ClarityCostFunction::UnwrapErr => unimplemented!(),
         ClarityCostFunction::TryRet => unimplemented!(),
         ClarityCostFunction::Concat => unimplemented!(),
         ClarityCostFunction::AsMaxLen => unimplemented!(),
@@ -674,8 +839,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String
         ClarityCostFunction::PrincipalOf => unimplemented!(),
         ClarityCostFunction::AtBlock => unimplemented!(),
         ClarityCostFunction::LoadContract => unimplemented!(),
-        ClarityCostFunction::CreateMap => unimplemented!(),
-        ClarityCostFunction::CreateVar => unimplemented!(),
+
         ClarityCostFunction::FetchEntry => unimplemented!(),
         ClarityCostFunction::SetEntry => unimplemented!(),
         ClarityCostFunction::FetchVar => unimplemented!(),

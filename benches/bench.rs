@@ -224,6 +224,46 @@ fn bench_nft_burn(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::NftBurn, SCALE.into(), vec![1])
 }
 
+fn bench_is_none(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::IsNone, SCALE.into(), vec![1])
+}
+
+fn bench_is_some(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::IsSome, SCALE.into(), vec![1])
+}
+
+fn bench_is_ok(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::IsOkay, SCALE.into(), vec![1])
+}
+
+fn bench_is_err(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::IsErr, SCALE.into(), vec![1])
+}
+
+fn bench_unwrap(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Unwrap, SCALE.into(), vec![1])
+}
+
+fn bench_unwrap_ret(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::UnwrapRet, SCALE.into(), vec![1])
+}
+
+fn bench_unwrap_err(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::UnwrapErr, SCALE.into(), vec![1])
+}
+
+fn bench_unwrap_err_or_ret(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::UnwrapErrOrRet, SCALE.into(), vec![1])
+}
+
+fn bench_create_map(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::CreateMap, SCALE.into(), vec![1])
+}
+
+fn bench_create_var(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::CreateVar, SCALE.into(), vec![1])
+}
+
 criterion_group!(
     benches,
     bench_add,
@@ -262,6 +302,16 @@ criterion_group!(
     // bench_nft_transfer,
     // bench_nft_owner,
     // bench_nft_burn,
+    bench_is_none,
+    bench_is_some,
+    bench_is_ok,
+    bench_is_err,
+    bench_unwrap,
+    bench_unwrap_ret,
+    bench_unwrap_err,
+    bench_unwrap_err_or_ret
+    bench_create_map,
+    bench_create_var,
 );
 
 // AnalysisTypeAnnotate("cost_analysis_type_annotate"),
