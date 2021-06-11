@@ -62,7 +62,6 @@ fn gen_cmp(function_name: &'static str, scale: u16) -> String {
 fn gen_logic(function_name: &'static str, scale: u16, input_size: u16) -> String {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
-    let bools = vec!["true", "false"];
 
     for _ in 0..scale {
         let args = (0..input_size)
@@ -70,7 +69,7 @@ fn gen_logic(function_name: &'static str, scale: u16, input_size: u16) -> String
                 match function_name {
                     "and" => format!("true"),
                     "or"  => format!("false"),
-                    _     => format!("{}", bools[rng.gen_range(0..=1)]),
+                    _     => format!("{}", rng.gen_bool(0.5)),
                 }
             })
             .collect::<Vec<String>>()
@@ -92,10 +91,10 @@ fn gen_xor(function_name: &'static str, scale: u16) -> String {
                 // uint
                 let x: u128 = rng.gen();
                 let y: u128 = rng.gen();
-                format!("{} {}", x, y)
+                format!("u{} u{}", x, y)
             }
             1 => {
-                // uint
+                // int
                 let x: i128 = rng.gen();
                 let y: i128 = rng.gen();
                 format!("{} {}", x, y)
