@@ -1,24 +1,121 @@
+use std::fs;
+
 use benchmarking_lib::generators::gen;
 use blockstack_lib::clarity_vm::database::{MemoryBackingStore, marf::MarfedKV};
+use blockstack_lib::clarity_vm::clarity::ClarityInstance;
 use blockstack_lib::types::proof::ClarityMarfTrieId;
 use blockstack_lib::vm::contexts::{GlobalContext, ContractContext};
-use blockstack_lib::vm::database::{NULL_BURN_STATE_DB, NULL_HEADER_DB};
-use blockstack_lib::vm::{ast, eval_all};
+use blockstack_lib::vm::database::{NULL_BURN_STATE_DB, NULL_HEADER_DB, HeadersDB, ClarityDatabase};
+use blockstack_lib::vm::{ast, eval_all, Value};
 use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
-use blockstack_lib::vm::costs::LimitedCostTracker;
+use blockstack_lib::vm::costs::{LimitedCostTracker, ExecutionCost};
 use blockstack_lib::vm::types::QualifiedContractIdentifier;
-use blockstack_lib::types::chainstate::StacksBlockId;
+use blockstack_lib::types::chainstate::{BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, VRFSeed};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const SCALE: u16 = 100;
 
+struct TestHeadersDB;
+
+impl HeadersDB for TestHeadersDB {
+    fn get_stacks_block_header_hash_for_block(
+        &self,
+        id_bhh: &StacksBlockId,
+    ) -> Option<BlockHeaderHash> {
+        Some(BlockHeaderHash(id_bhh.0.clone()))
+    }
+
+    fn get_burn_header_hash_for_block(
+        &self,
+        id_bhh: &StacksBlockId,
+    ) -> Option<BurnchainHeaderHash> {
+        Some(BurnchainHeaderHash(id_bhh.0.clone()))
+    }
+
+    fn get_vrf_seed_for_block(&self, _id_bhh: &StacksBlockId) -> Option<VRFSeed> {
+        Some(VRFSeed([0; 32]))
+    }
+
+    fn get_burn_block_time_for_block(&self, _id_bhh: &StacksBlockId) -> Option<u64> {
+        Some(1)
+    }
+
+    fn get_burn_block_height_for_block(&self, id_bhh: &StacksBlockId) -> Option<u32> {
+        if id_bhh == &StacksBlockId::sentinel() {
+            Some(0)
+        } else {
+            let mut bytes = [0; 4];
+            bytes.copy_from_slice(&id_bhh.0[0..4]);
+            let height = u32::from_le_bytes(bytes);
+            Some(height)
+        }
+    }
+
+    fn get_miner_address(&self, _id_bhh: &StacksBlockId) -> Option<StacksAddress> {
+        None
+    }
+}
+
+
 fn height_to_hash(burn_height: u64, fork: u64) -> [u8; 32] {
     let mut out = [0; 32];
     out[0..8].copy_from_slice(&burn_height.to_le_bytes());
     out[8..16].copy_from_slice(&fork.to_le_bytes());
     out
+}
+
+fn as_hash(inp: u32) -> [u8; 32] {
+    let mut out = [0; 32];
+    out[0..4].copy_from_slice(&inp.to_le_bytes());
+    out
+}
+
+fn as_hash160(inp: u32) -> [u8; 20] {
+    let mut out = [0; 20];
+    out[0..4].copy_from_slice(&inp.to_le_bytes());
+    out
+}
+
+fn setup_chain_state(scaling: u32) -> MarfedKV {
+    let pre_initialized_path = format!("/tmp/clarity_bench_{}.marf", scaling);
+    let out_path = "/tmp/clarity_bench_last.marf";
+
+    if fs::metadata(&pre_initialized_path).is_err() {
+        let marf = MarfedKV::open(&pre_initialized_path, None).unwrap();
+        let mut clarity_instance = ClarityInstance::new(false, marf, ExecutionCost::max_value());
+        let mut conn = clarity_instance.begin_test_genesis_block(
+            &StacksBlockId::sentinel(),
+            &StacksBlockId(as_hash(0)),
+            &TestHeadersDB,
+            &NULL_BURN_STATE_DB,
+        );
+
+        conn.as_transaction(|tx| {
+            for j in 0..scaling {
+                tx.with_clarity_db(|db| {
+                    db.put(format!("key{}", j).as_str(), &Value::none());
+                    Ok(())
+                })
+                .unwrap();
+            }
+        });
+
+        conn.commit_to_block(&StacksBlockId(as_hash(0)));
+    };
+
+    if fs::metadata(&out_path).is_err() {
+        fs::create_dir(out_path).unwrap();
+    }
+
+    fs::copy(
+        &format!("{}/marf.sqlite", pre_initialized_path),
+        &format!("{}/marf.sqlite", out_path),
+    )
+    .unwrap();
+
+    return MarfedKV::open(out_path, None).unwrap();
 }
 
 fn bench_with_input_sizes(
@@ -31,76 +128,47 @@ fn bench_with_input_sizes(
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in input_sizes.iter() {
-        if use_marf {
-            let mut marf = MarfedKV::temporary();
-            let mut store = marf.begin(
-                &StacksBlockId::sentinel(),
-                &StacksBlockId(height_to_hash(0, 0)),
-                );
+        let mut memory_backing_store = MemoryBackingStore::new();
 
-            store
-                .as_clarity_db(&NULL_HEADER_DB, &NULL_BURN_STATE_DB)
-                .initialize();
+        let mut marf = setup_chain_state(1000);
 
-            let clarity_db = store.as_clarity_db(&NULL_HEADER_DB, &NULL_BURN_STATE_DB);
+        let mut marf_store = marf.begin(
+            &StacksBlockId(as_hash(0)),
+            &StacksBlockId(as_hash(1)),
+        );
 
-            let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
-            global_context.begin();
-
-            let contract_identifier =
-                QualifiedContractIdentifier::local(&*format!("c{}", input_size)).unwrap();
-            let mut contract_context = ContractContext::new(contract_identifier.clone());
-
-            let contract = gen(function, scale, *input_size);
-
-            let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
-                Ok(res) => res,
-                Err(error) => {
-                    panic!("Parsing error: {}", error.diagnostic.message);
-                }
-            };
-
-            group.throughput(Throughput::Bytes(input_size.clone() as u64));
-            group.bench_with_input(
-                BenchmarkId::from_parameter(input_size),
-                input_size,
-                |b, &_| {
-                    b.iter(|| {
-                        global_context.execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g)).unwrap();
-                    })
-                },
-            );
+        let clarity_db = if use_marf {
+            marf_store.as_clarity_db(&TestHeadersDB, &NULL_BURN_STATE_DB)
         } else {
-            let mut datastore = MemoryBackingStore::new();
-            let clarity_db = datastore.as_clarity_db();
+            memory_backing_store.as_clarity_db()
+        };
 
-            let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
-            global_context.begin();
+        let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
+        global_context.begin();
 
-            let contract_identifier =
-                QualifiedContractIdentifier::local(&*format!("c{}", input_size)).unwrap();
-            let mut contract_context = ContractContext::new(contract_identifier.clone());
+        let contract_identifier =
+            QualifiedContractIdentifier::local(&*format!("c{}", input_size)).unwrap();
+        let mut contract_context = ContractContext::new(contract_identifier.clone());
 
-            let contract = gen(function, scale, *input_size);
+        let contract = gen(function, scale, *input_size);
 
-            let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
-                Ok(res) => res,
-                Err(error) => {
-                    panic!("Parsing error: {}", error.diagnostic.message);
-                }
-            };
+        let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
+            Ok(res) => res,
+            Err(error) => {
+                panic!("Parsing error: {}", error.diagnostic.message);
+            }
+        };
 
-            group.throughput(Throughput::Bytes(input_size.clone() as u64));
-            group.bench_with_input(
-                BenchmarkId::from_parameter(input_size),
-                input_size,
-                |b, &_| {
-                    b.iter(|| {
-                        global_context.execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g)).unwrap();
-                    })
-                },
-            );
-        }
+        group.throughput(Throughput::Bytes(input_size.clone() as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(input_size),
+            input_size,
+            |b, &_| {
+                b.iter(|| {
+                    global_context.execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g)).unwrap();
+                })
+            },
+        );
     }
 }
 
