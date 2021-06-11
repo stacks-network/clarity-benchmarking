@@ -59,21 +59,8 @@ impl HeadersDB for TestHeadersDB {
 }
 
 
-fn height_to_hash(burn_height: u64, fork: u64) -> [u8; 32] {
-    let mut out = [0; 32];
-    out[0..8].copy_from_slice(&burn_height.to_le_bytes());
-    out[8..16].copy_from_slice(&fork.to_le_bytes());
-    out
-}
-
 fn as_hash(inp: u32) -> [u8; 32] {
     let mut out = [0; 32];
-    out[0..4].copy_from_slice(&inp.to_le_bytes());
-    out
-}
-
-fn as_hash160(inp: u32) -> [u8; 20] {
-    let mut out = [0; 20];
     out[0..4].copy_from_slice(&inp.to_le_bytes());
     out
 }
