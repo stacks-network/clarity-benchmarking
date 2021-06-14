@@ -45,6 +45,11 @@ fn bench_with_input_sizes(
             input_size,
             |b, &_| {
                 b.iter(|| {
+                    let mut datastore = MemoryBackingStore::new();
+                    let clarity_db = datastore.as_clarity_db();
+                    let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
+                    global_context.begin();
+                    let mut contract_context = ContractContext::new(contract_identifier.clone());
                     global_context.execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g)).unwrap();
                 })
             },
@@ -264,6 +269,114 @@ fn bench_create_var(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::CreateVar, SCALE.into(), vec![1])
 }
 
+fn bench_set_var(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::SetVar, SCALE.into(), vec![1])
+}
+
+fn bench_fetch_var(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::FetchVar, SCALE.into(), vec![1])
+}
+
+fn bench_print(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Print, SCALE.into(), vec![1])
+}
+
+fn bench_if(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::If, SCALE.into(), vec![1])
+}
+
+fn bench_asserts(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Asserts, SCALE.into(), vec![1])
+}
+
+fn bench_ok_cons(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::OkCons, SCALE.into(), vec![1])
+}
+
+fn bench_err_cons(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::ErrCons, SCALE.into(), vec![1])
+}
+
+fn bench_some_cons(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::SomeCons, SCALE.into(), vec![1])
+}
+
+fn bench_concat(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Concat, SCALE.into(), vec![1])
+}
+
+fn bench_as_max_len(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::AsMaxLen, SCALE.into(), vec![1])
+}
+
+fn bench_begin(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Begin, SCALE.into(), vec![1])
+}
+
+fn bench_bind_name(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::BindName, SCALE.into(), vec![1])
+}
+
+fn bench_default_to(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::DefaultTo, SCALE.into(), vec![1])
+}
+
+fn bench_try(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::TryRet, SCALE.into(), vec![1])
+}
+
+fn bench_int_cast(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::IntCast, SCALE.into(), vec![1])
+}
+
+fn bench_set_entry(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::SetEntry, SCALE.into(), vec![1])
+}
+
+fn bench_fetch_entry(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::FetchEntry, SCALE.into(), vec![1])
+}
+
+fn bench_match(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Match, SCALE.into(), vec![1])
+}
+
+fn bench_let(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Let, SCALE.into(), vec![1])
+}
+
+fn bench_index_of(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::IndexOf, SCALE.into(), vec![1])
+}
+
+fn bench_element_at(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::ElementAt, SCALE.into(), vec![1])
+}
+
+fn bench_len(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Len, SCALE.into(), vec![1])
+}
+
+fn bench_list_cons(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::ListCons, SCALE.into(), vec![1])
+}
+
+fn bench_append(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Append, SCALE.into(), vec![1])
+}
+
+fn bench_filter(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Filter, SCALE.into(), vec![1])
+}
+
+fn bench_map(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Map, SCALE.into(), vec![1])
+}
+
+fn bench_fold(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::Fold, SCALE.into(), vec![1])
+}
+
 criterion_group!(
     benches,
     bench_add,
@@ -302,16 +415,42 @@ criterion_group!(
     // bench_nft_transfer,
     // bench_nft_owner,
     // bench_nft_burn,
-    bench_is_none,
-    bench_is_some,
-    bench_is_ok,
-    bench_is_err,
-    bench_unwrap,
-    bench_unwrap_ret,
-    bench_unwrap_err,
-    bench_unwrap_err_or_ret
-    bench_create_map,
-    bench_create_var,
+    // bench_is_none,
+    // bench_is_some,
+    // bench_is_ok,
+    // bench_is_err,
+    // bench_unwrap,
+    // bench_unwrap_ret,
+    // bench_unwrap_err,
+    // bench_unwrap_err_or_ret
+    // bench_create_map,
+    // bench_create_var,
+    // bench_set_var,
+    // bench_fetch_var,
+    // bench_print,
+    // bench_if,
+    // bench_asserts,
+    // bench_ok_cons,
+    // bench_some_cons,
+    // bench_err_cons,
+    // bench_concat,
+    // bench_as_max_len,
+    // bench_begin,
+    // bench_bind_name,
+    // bench_default_to,
+    // bench_try,
+    // bench_int_cast,
+    // bench_set_entry,
+    // bench_fetch_entry,
+    // bench_match,
+    // bench_let,
+    // bench_index_of,
+    // bench_element_at,
+    // bench_len,
+    // bench_list_cons,
+    // bench_append,
+    // bench_filter,
+    bench_fold,
 );
 
 // AnalysisTypeAnnotate("cost_analysis_type_annotate"),
