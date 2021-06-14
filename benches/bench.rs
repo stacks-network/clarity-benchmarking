@@ -11,11 +11,13 @@ use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
 use blockstack_lib::vm::costs::{LimitedCostTracker, ExecutionCost};
 use blockstack_lib::vm::types::QualifiedContractIdentifier;
 use blockstack_lib::types::chainstate::{BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, VRFSeed};
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::measurement::WallTime;
+use criterion::{BenchmarkGroup, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const SCALE: u16 = 100;
+const MARF_SCALE: u32 = 100000;
 
 struct TestHeadersDB;
 
@@ -115,48 +117,58 @@ fn bench_with_input_sizes(
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in input_sizes.iter() {
-        let mut memory_backing_store = MemoryBackingStore::new();
+        if use_marf {
+            let mut marf = setup_chain_state(MARF_SCALE);
+            let mut marf_store = marf.begin(
+                &StacksBlockId(as_hash(0)),
+                &StacksBlockId(as_hash(1)),
+            );
 
-        let mut marf = setup_chain_state(1000);
+            let clarity_db = marf_store.as_clarity_db(&TestHeadersDB, &NULL_BURN_STATE_DB);
 
-        let mut marf_store = marf.begin(
-            &StacksBlockId(as_hash(0)),
-            &StacksBlockId(as_hash(1)),
-        );
-
-        let clarity_db = if use_marf {
-            marf_store.as_clarity_db(&TestHeadersDB, &NULL_BURN_STATE_DB)
+            run_bench(&mut group, function, scale, *input_size, clarity_db)
         } else {
-            memory_backing_store.as_clarity_db()
-        };
+            let mut memory_backing_store = MemoryBackingStore::new();
+            let clarity_db = memory_backing_store.as_clarity_db();
 
-        let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
-        global_context.begin();
-
-        let contract_identifier =
-            QualifiedContractIdentifier::local(&*format!("c{}", input_size)).unwrap();
-        let mut contract_context = ContractContext::new(contract_identifier.clone());
-
-        let contract = gen(function, scale, *input_size);
-
-        let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
-            Ok(res) => res,
-            Err(error) => {
-                panic!("Parsing error: {}", error.diagnostic.message);
-            }
-        };
-
-        group.throughput(Throughput::Bytes(input_size.clone() as u64));
-        group.bench_with_input(
-            BenchmarkId::from_parameter(input_size),
-            input_size,
-            |b, &_| {
-                b.iter(|| {
-                    global_context.execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g)).unwrap();
-                })
-            },
-        );
+            run_bench(&mut group, function, scale, *input_size, clarity_db)
+        }
     }
+}
+
+fn run_bench(
+    group: &mut BenchmarkGroup<WallTime>,
+    function: ClarityCostFunction,
+    scale: u16,
+    input_size: u16,
+    clarity_db: ClarityDatabase,
+) {
+    let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
+    global_context.begin();
+
+    let contract_identifier =
+        QualifiedContractIdentifier::local(&*format!("c{}", input_size)).unwrap();
+    let mut contract_context = ContractContext::new(contract_identifier.clone());
+
+    let contract = gen(function, scale, input_size);
+
+    let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
+        Ok(res) => res,
+        Err(error) => {
+            panic!("Parsing error: {}", error.diagnostic.message);
+        }
+    };
+
+    group.throughput(Throughput::Bytes(input_size.clone() as u64));
+    group.bench_with_input(
+        BenchmarkId::from_parameter(input_size),
+        &input_size,
+        |b, &_| {
+            b.iter(|| {
+                global_context.execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g)).unwrap();
+            })
+        },
+    );
 }
 
 fn bench_add(c: &mut Criterion) {
