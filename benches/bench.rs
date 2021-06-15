@@ -4,6 +4,7 @@ use benchmarking_lib::generators::gen;
 use blockstack_lib::clarity_vm::database::{MemoryBackingStore, marf::MarfedKV};
 use blockstack_lib::clarity_vm::clarity::ClarityInstance;
 use blockstack_lib::types::proof::ClarityMarfTrieId;
+use blockstack_lib::util::hash::Hash160;
 use blockstack_lib::vm::contexts::{GlobalContext, ContractContext};
 use blockstack_lib::vm::database::{NULL_BURN_STATE_DB, NULL_HEADER_DB, HeadersDB, ClarityDatabase};
 use blockstack_lib::vm::{ast, eval_all, Value};
@@ -56,7 +57,7 @@ impl HeadersDB for TestHeadersDB {
     }
 
     fn get_miner_address(&self, _id_bhh: &StacksBlockId) -> Option<StacksAddress> {
-        None
+        Some(StacksAddress::new(0, Hash160([0u8; 20])))
     }
 }
 
@@ -496,33 +497,38 @@ fn bench_fold(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::Fold, SCALE.into(), vec![1], false)
 }
 
+// TODO: figure out more accurate benchmark that doesn't use TestHeadersDB
+fn bench_block_info(c: &mut Criterion) {
+    bench_with_input_sizes(c, ClarityCostFunction::BlockInfo, SCALE.into(), vec![1], true)
+}
+
 criterion_group!(
     benches,
-    bench_add,
-    bench_sub,
-    bench_le,
-    bench_leq,
-    bench_ge,
-    bench_geq,
-    bench_and,
-    bench_or,
-    bench_xor,
-    bench_not,
-    bench_eq,
-    bench_mod,
-    bench_pow,
-    bench_sqrti,
-    bench_log2,
-    bench_tuple_get,
-    bench_tuple_merge,
-    bench_tuple_cons,
-    bench_hash160,
-    bench_sha256,
-    bench_sha512,
-    bench_sha512t256,
-    bench_keccak256,
-    bench_secp256k1recover,
-    bench_secp256k1verify,
+    // bench_add,
+    // bench_sub,
+    // bench_le,
+    // bench_leq,
+    // bench_ge,
+    // bench_geq,
+    // bench_and,
+    // bench_or,
+    // bench_xor,
+    // bench_not,
+    // bench_eq,
+    // bench_mod,
+    // bench_pow,
+    // bench_sqrti,
+    // bench_log2,
+    // bench_tuple_get,
+    // bench_tuple_merge,
+    // bench_tuple_cons,
+    // bench_hash160,
+    // bench_sha256,
+    // bench_sha512,
+    // bench_sha512t256,
+    // bench_keccak256,
+    // bench_secp256k1recover,
+    // bench_secp256k1verify,
     // bench_create_ft,
     // bench_ft_mint,
     // bench_ft_transfer,
@@ -534,14 +540,14 @@ criterion_group!(
     // bench_nft_transfer,
     // bench_nft_owner,
     // bench_nft_burn,
-    bench_is_none,
-    bench_is_some,
-    bench_is_ok,
-    bench_is_err,
-    bench_unwrap,
+    // bench_is_none,
+    // bench_is_some,
+    // bench_is_ok,
+    // bench_is_err,
+    // bench_unwrap,
     bench_unwrap_ret,
-    bench_unwrap_err,
-    bench_unwrap_err_or_ret,
+    // bench_unwrap_err,
+    // bench_unwrap_err_or_ret,
     // bench_create_map,
     // bench_create_var,
     // bench_set_var,
@@ -569,7 +575,8 @@ criterion_group!(
     // bench_list_cons,
     // bench_append,
     // bench_filter,
-    bench_fold,
+    // bench_fold,
+    // bench_block_info,
 );
 
 criterion_main!(benches);

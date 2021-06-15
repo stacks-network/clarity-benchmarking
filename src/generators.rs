@@ -1,4 +1,5 @@
 use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
+use rand::prelude::SliceRandom;
 use rand::{Rng, RngCore};
 use rand::distributions::Uniform;
 use blockstack_lib::util::secp256k1::{Secp256k1PrivateKey, Secp256k1PublicKey};
@@ -603,10 +604,11 @@ fn gen_unwrap(function_name: &'static str, scale: u16, ret_value: bool) -> Strin
     let mut rng = rand::thread_rng();
     let mut body = String::new();
     for i in 0..scale {
-        let mut args = match rng.gen_bool(0.5) {
-            true => helper_gen_random_response_value(i, true, false),
-            false => helper_gen_random_optional_value(i, true)
-        };
+        let mut args = [
+            helper_gen_random_response_value(i, true, false),
+            helper_gen_random_optional_value(i, true)
+        ].choose(&mut rng).unwrap().clone();
+
         if ret_value {
             let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
             let clarity_val = helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as usize), None);
@@ -1044,6 +1046,26 @@ fn gen_fold(scale: u16) -> String {
     body
 }
 
+fn gen_get_block_info(scale: u16) -> String {
+    let mut body = String::new();
+    let mut rng = rand::thread_rng();
+
+    let props = [
+        "time",
+        "header-hash",
+        "burnchain-header-hash",
+        "id-header-hash",
+        "miner-address",
+        "vrf-seed",
+    ];
+
+    for _ in 0..scale {
+        body.push_str(format!("(get-block-info? {} u0) ", props.choose(&mut rng).unwrap()).as_str())
+    }
+
+    body
+}
+
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String {
     match function {
         // arithmetic
@@ -1132,7 +1154,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String
         ClarityCostFunction::NftBurn =>  gen_nft_burn("nft-burn?", scale),
         // Stacks
         ClarityCostFunction::PoisonMicroblock => unimplemented!(),
-        ClarityCostFunction::BlockInfo => unimplemented!(),
+        ClarityCostFunction::BlockInfo => gen_get_block_info(scale),
         ClarityCostFunction::StxBalance => unimplemented!(),
         ClarityCostFunction::StxTransfer => unimplemented!(),
         // Option & result checks
