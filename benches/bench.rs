@@ -5,6 +5,7 @@ use blockstack_lib::clarity_vm::database::{MemoryBackingStore, marf::MarfedKV};
 use blockstack_lib::clarity_vm::clarity::ClarityInstance;
 use blockstack_lib::types::proof::ClarityMarfTrieId;
 use blockstack_lib::util::hash::Hash160;
+use blockstack_lib::vm::ast::ContractAST;
 use blockstack_lib::vm::contexts::{GlobalContext, ContractContext};
 use blockstack_lib::vm::database::{NULL_BURN_STATE_DB, NULL_HEADER_DB, HeadersDB, ClarityDatabase};
 use blockstack_lib::vm::{ast, eval_all, Value};
@@ -108,6 +109,10 @@ fn setup_chain_state(scaling: u32) -> MarfedKV {
     return MarfedKV::open(out_path, None).unwrap();
 }
 
+fn eval(contract_ast: &ContractAST, global_context: &mut GlobalContext, contract_context: &mut ContractContext) {
+    global_context.execute(|g| eval_all(&contract_ast.expressions, contract_context, g)).unwrap();
+}
+
 fn bench_with_input_sizes(
     c: &mut Criterion,
     function: ClarityCostFunction,
@@ -127,23 +132,24 @@ fn bench_with_input_sizes(
 
             let clarity_db = marf_store.as_clarity_db(&TestHeadersDB, &NULL_BURN_STATE_DB);
 
-            run_bench(&mut group, function, scale, *input_size, clarity_db)
+            run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
         } else {
             let mut memory_backing_store = MemoryBackingStore::new();
             let clarity_db = memory_backing_store.as_clarity_db();
 
-            run_bench(&mut group, function, scale, *input_size, clarity_db)
+            run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
         }
     }
 }
 
-fn run_bench(
+fn run_bench<F>(
     group: &mut BenchmarkGroup<WallTime>,
     function: ClarityCostFunction,
     scale: u16,
     input_size: u16,
     clarity_db: ClarityDatabase,
-) {
+    code_to_bench: F,
+) where F: Fn(&ContractAST, &mut GlobalContext, &mut ContractContext) {
     let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
     global_context.begin();
 
@@ -166,7 +172,7 @@ fn run_bench(
         &input_size,
         |b, &_| {
             b.iter(|| {
-                global_context.execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g)).unwrap();
+                code_to_bench(&contract_ast, &mut global_context, &mut contract_context);
             })
         },
     );
