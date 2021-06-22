@@ -10,7 +10,7 @@ use blockstack_lib::{
     vm::database::HeadersDB,
 };
 
-use rusqlite::{Connection, Error as sqlite_error, OpenFlags, OptionalExtension};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 
 pub struct TestHeadersDB;
 
@@ -60,9 +60,8 @@ pub struct SimHeadersDB {
 impl SimHeadersDB {
     pub fn new() -> Self {
         let db_path = "../chainstate.sqlite";
-        let metadata = fs::metadata(&db_path);
 
-        let open_flags = match &metadata {
+        let open_flags = match fs::metadata(&db_path) {
             Err(e) => {
                 if e.kind() == io::ErrorKind::NotFound {
                     // need to create
@@ -81,24 +80,7 @@ impl SimHeadersDB {
 
         let conn = Connection::open_with_flags(db_path, open_flags).unwrap();
 
-        let mut db = SimHeadersDB { conn };
-
-        if metadata.is_err() {
-            if db.instantiate().is_err() {
-                panic!("FATAL: could not instantiate db");
-            };
-        }
-        db
-    }
-
-    fn instantiate(&mut self) -> Result<(), sqlite_error> {
-        let tx = self.conn.transaction().unwrap();
-
-        for cmd in CHAINSTATE_INITIAL_SCHEMA {
-            tx.execute_batch(cmd)?;
-        }
-
-        tx.commit()
+        SimHeadersDB { conn }
     }
 }
 
@@ -155,154 +137,3 @@ fn get_miner_info(conn: &Connection, id_bhh: &StacksBlockId) -> Option<MinerPaym
     .optional()
     .expect("Unexpected SQL failure querying payment table")
 }
-
-const CHAINSTATE_INITIAL_SCHEMA: &'static [&'static str] = &[
-    "PRAGMA foreign_keys = ON;",
-    r#"
-    -- Anchored stacks block headers
-    CREATE TABLE block_headers(
-        version INTEGER NOT NULL,
-        total_burn TEXT NOT NULL,       -- converted to/from u64
-        total_work TEXT NOT NULL,       -- converted to/from u64
-        proof TEXT NOT NULL,
-        parent_block TEXT NOT NULL,             -- hash of parent Stacks block
-        parent_microblock TEXT NOT NULL,
-        parent_microblock_sequence INTEGER NOT NULL,
-        tx_merkle_root TEXT NOT NULL,
-        state_index_root TEXT NOT NULL,
-        microblock_pubkey_hash TEXT NOT NULL,
-        
-        block_hash TEXT NOT NULL,                   -- NOTE: this is *not* unique, since two burn chain forks can commit to the same Stacks block.
-        index_block_hash TEXT UNIQUE NOT NULL,      -- NOTE: this is the hash of the block hash and consensus hash of the burn block that selected it, 
-                                                    -- and is guaranteed to be globally unique (across all Stacks forks and across all PoX forks).
-                                                    -- index_block_hash is the block hash fed into the MARF index.
-
-        -- internal use only
-        block_height INTEGER NOT NULL,
-        index_root TEXT NOT NULL,                    -- root hash of the internal, not-consensus-critical MARF that allows us to track chainstate /fork metadata
-        consensus_hash TEXT UNIQUE NOT NULL,         -- all consensus hashes are guaranteed to be unique
-        burn_header_hash TEXT NOT NULL,              -- burn header hash corresponding to the consensus hash (NOT guaranteed to be unique, since we can have 2+ blocks per burn block if there's a PoX fork)
-        burn_header_height INT NOT NULL,             -- height of the burnchain block header that generated this consensus hash
-        burn_header_timestamp INT NOT NULL,          -- timestamp from burnchain block header that generated this consensus hash
-        parent_block_id TEXT NOT NULL,               -- NOTE: this is the parent index_block_hash
-
-        cost TEXT NOT NULL,
-        block_size TEXT NOT NULL,       -- converted to/from u64
-
-        PRIMARY KEY(consensus_hash,block_hash)
-    );"#,
-    "CREATE INDEX index_block_hash_to_primary_key ON block_headers(index_block_hash,consensus_hash,block_hash);",
-    "CREATE INDEX block_headers_hash_index ON block_headers(block_hash,block_height);",
-    "CREATE INDEX block_index_hash_index ON block_headers(index_block_hash,consensus_hash,block_hash);",
-    r#"
-    -- scheduled payments
-    -- no designated primary key since there can be duplicate entries
-    CREATE TABLE payments(
-        address TEXT NOT NULL,              -- miner that produced this block and microblock stream
-        block_hash TEXT NOT NULL,
-        consensus_hash TEXT NOT NULL,
-        parent_block_hash TEXT NOT NULL,
-        parent_consensus_hash TEXT NOT NULL,
-        coinbase TEXT NOT NULL,             -- encodes u128
-        tx_fees_anchored TEXT NOT NULL,     -- encodes u128
-        tx_fees_streamed TEXT NOT NULL,     -- encodes u128
-        stx_burns TEXT NOT NULL,            -- encodes u128
-        burnchain_commit_burn INT NOT NULL,
-        burnchain_sortition_burn INT NOT NULL,
-        miner INT NOT NULL,
-        
-        -- internal use
-        stacks_block_height INTEGER NOT NULL,
-        index_block_hash TEXT NOT NULL,     -- NOTE: can't enforce UNIQUE here, because there will be multiple entries per block
-        vtxindex INT NOT NULL               -- user burn support vtxindex
-    );"#,
-    r#"
-    -- users who supported miners
-    CREATE TABLE user_supporters(
-        address TEXT NOT NULL,
-        support_burn INT NOT NULL,
-        block_hash TEXT NOT NULL,
-        consensus_hash TEXT NOT NULL,
-
-
-        PRIMARY KEY(address,block_hash,consensus_hash)
-    );"#,
-    r#"
-    CREATE TABLE db_config(
-        version TEXT NOT NULL,
-        mainnet INTEGER NOT NULL,
-        chain_id INTEGER NOT NULL
-    );"#,
-    r#"
-    -- Staging microblocks -- preprocessed microblocks queued up for subsequent processing and inclusion in the chunk store.
-    CREATE TABLE staging_microblocks(anchored_block_hash TEXT NOT NULL,     -- this is the hash of the parent anchored block
-                                     consensus_hash TEXT NOT NULL,          -- this is the hash of the burn chain block that holds the parent anchored block's block-commit
-                                     index_block_hash TEXT NOT NULL,        -- this is the anchored block's index hash
-                                     microblock_hash TEXT NOT NULL,
-                                     parent_hash TEXT NOT NULL,             -- previous microblock
-                                     index_microblock_hash TEXT NOT NULL,   -- this is the hash of consensus_hash and microblock_hash
-                                     sequence INT NOT NULL,
-                                     processed INT NOT NULL,
-                                     orphaned INT NOT NULL,
-                                     PRIMARY KEY(anchored_block_hash,consensus_hash,microblock_hash)
-    );"#,
-    "CREATE INDEX staging_microblocks_index_hash ON staging_microblocks(index_block_hash);",
-    r#"
-    -- Staging microblocks data
-    CREATE TABLE staging_microblocks_data(block_hash TEXT NOT NULL,
-                                          block_data BLOB NOT NULL,
-                                          PRIMARY KEY(block_hash)
-    );"#,
-    r#"
-    -- Invalidated staging microblocks data
-    CREATE TABLE invalidated_microblocks_data(block_hash TEXT NOT NULL,
-                                              block_data BLOB NOT NULL,
-                                              PRIMARY KEY(block_hash)
-    );"#,
-    r#"
-    -- Staging blocks -- preprocessed blocks queued up for subsequent processing and inclusion in the chunk store.
-    CREATE TABLE staging_blocks(anchored_block_hash TEXT NOT NULL,
-                                parent_anchored_block_hash TEXT NOT NULL,
-                                consensus_hash TEXT NOT NULL,
-                                -- parent_consensus_hash is the consensus hash of the parent sortition of the sortition that chose this block
-                                parent_consensus_hash TEXT NOT NULL,
-                                parent_microblock_hash TEXT NOT NULL,
-                                parent_microblock_seq INT NOT NULL,
-                                microblock_pubkey_hash TEXT NOT NULL,
-                                height INT NOT NULL,
-                                attachable INT NOT NULL,            -- set to 1 if this block's parent is processed; 0 if not
-                                orphaned INT NOT NULL,              -- set to 1 if this block can never be attached
-                                processed INT NOT NULL,
-                                commit_burn INT NOT NULL,
-                                sortition_burn INT NOT NULL,
-                                index_block_hash TEXT NOT NULL,           -- used internally; hash of consensus hash and block header
-                                download_time INT NOT NULL,               -- how long the block was in-flight
-                                arrival_time INT NOT NULL,                -- when this block was stored
-                                processed_time INT NOT NULL,              -- when this block was processed
-                                PRIMARY KEY(anchored_block_hash,consensus_hash)
-    );"#,
-    "CREATE INDEX processed_stacks_blocks ON staging_blocks(processed,anchored_block_hash,consensus_hash);",
-    "CREATE INDEX orphaned_stacks_blocks ON staging_blocks(orphaned,anchored_block_hash,consensus_hash);",
-    "CREATE INDEX parent_blocks ON staging_blocks(parent_anchored_block_hash);",
-    "CREATE INDEX parent_consensus_hashes ON staging_blocks(parent_consensus_hash);",
-    "CREATE INDEX index_block_hashes ON staging_blocks(index_block_hash);",
-    r#"
-    -- users who burned in support of a block
-    CREATE TABLE staging_user_burn_support(anchored_block_hash TEXT NOT NULL,
-                                           consensus_hash TEXT NOT NULL,
-                                           address TEXT NOT NULL,
-                                           burn_amount INT NOT NULL,
-                                           vtxindex INT NOT NULL
-    );"#,
-    r#"
-    CREATE TABLE transactions(
-        id INTEGER PRIMARY KEY,
-        txid TEXT NOT NULL,
-        index_block_hash TEXT NOT NULL,
-        tx_hex TEXT NOT NULL,
-        result TEXT NOT NULL,
-        UNIQUE (txid,index_block_hash)
-    );"#,
-    "CREATE INDEX txid_tx_index ON transactions(txid);",
-    "CREATE INDEX index_block_hash_tx_index ON transactions(index_block_hash);",
-];
