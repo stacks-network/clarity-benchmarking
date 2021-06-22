@@ -1,67 +1,27 @@
 use std::fs;
 
 use benchmarking_lib::generators::gen;
-use blockstack_lib::clarity_vm::database::{MemoryBackingStore, marf::MarfedKV};
+use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
 use blockstack_lib::clarity_vm::clarity::ClarityInstance;
+use blockstack_lib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
+use blockstack_lib::types::chainstate::StacksBlockId;
 use blockstack_lib::types::proof::ClarityMarfTrieId;
-use blockstack_lib::util::hash::Hash160;
 use blockstack_lib::vm::ast::ContractAST;
-use blockstack_lib::vm::contexts::{GlobalContext, ContractContext};
-use blockstack_lib::vm::database::{NULL_BURN_STATE_DB, NULL_HEADER_DB, HeadersDB, ClarityDatabase};
-use blockstack_lib::vm::{ast, eval_all, Value};
+use blockstack_lib::vm::contexts::{ContractContext, GlobalContext};
 use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
-use blockstack_lib::vm::costs::{LimitedCostTracker, ExecutionCost};
+use blockstack_lib::vm::costs::{ExecutionCost, LimitedCostTracker};
+use blockstack_lib::vm::database::{ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB};
 use blockstack_lib::vm::types::QualifiedContractIdentifier;
-use blockstack_lib::types::chainstate::{BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, VRFSeed};
+use blockstack_lib::vm::{ast, eval_all, Value};
 use criterion::measurement::WallTime;
-use criterion::{BenchmarkGroup, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{
+    criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
+};
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const SCALE: u16 = 100;
 const MARF_SCALE: u32 = 100000;
-
-struct TestHeadersDB;
-
-impl HeadersDB for TestHeadersDB {
-    fn get_stacks_block_header_hash_for_block(
-        &self,
-        id_bhh: &StacksBlockId,
-    ) -> Option<BlockHeaderHash> {
-        Some(BlockHeaderHash(id_bhh.0.clone()))
-    }
-
-    fn get_burn_header_hash_for_block(
-        &self,
-        id_bhh: &StacksBlockId,
-    ) -> Option<BurnchainHeaderHash> {
-        Some(BurnchainHeaderHash(id_bhh.0.clone()))
-    }
-
-    fn get_vrf_seed_for_block(&self, _id_bhh: &StacksBlockId) -> Option<VRFSeed> {
-        Some(VRFSeed([0; 32]))
-    }
-
-    fn get_burn_block_time_for_block(&self, _id_bhh: &StacksBlockId) -> Option<u64> {
-        Some(1)
-    }
-
-    fn get_burn_block_height_for_block(&self, id_bhh: &StacksBlockId) -> Option<u32> {
-        if id_bhh == &StacksBlockId::sentinel() {
-            Some(0)
-        } else {
-            let mut bytes = [0; 4];
-            bytes.copy_from_slice(&id_bhh.0[0..4]);
-            let height = u32::from_le_bytes(bytes);
-            Some(height)
-        }
-    }
-
-    fn get_miner_address(&self, _id_bhh: &StacksBlockId) -> Option<StacksAddress> {
-        Some(StacksAddress::new(0, Hash160([0u8; 20])))
-    }
-}
-
 
 fn as_hash(inp: u32) -> [u8; 32] {
     let mut out = [0; 32];
@@ -69,7 +29,7 @@ fn as_hash(inp: u32) -> [u8; 32] {
     out
 }
 
-fn setup_chain_state(scaling: u32) -> MarfedKV {
+fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedKV {
     let pre_initialized_path = format!("/tmp/clarity_bench_{}.marf", scaling);
     let out_path = "/tmp/clarity_bench_last.marf";
 
@@ -79,7 +39,7 @@ fn setup_chain_state(scaling: u32) -> MarfedKV {
         let mut conn = clarity_instance.begin_test_genesis_block(
             &StacksBlockId::sentinel(),
             &StacksBlockId(as_hash(0)),
-            &TestHeadersDB,
+            &*headers_db,
             &NULL_BURN_STATE_DB,
         );
 
@@ -109,8 +69,14 @@ fn setup_chain_state(scaling: u32) -> MarfedKV {
     return MarfedKV::open(out_path, None).unwrap();
 }
 
-fn eval(contract_ast: &ContractAST, global_context: &mut GlobalContext, contract_context: &mut ContractContext) {
-    global_context.execute(|g| eval_all(&contract_ast.expressions, contract_context, g)).unwrap();
+fn eval(
+    contract_ast: &ContractAST,
+    global_context: &mut GlobalContext,
+    contract_context: &mut ContractContext,
+) {
+    global_context
+        .execute(|g| eval_all(&contract_ast.expressions, contract_context, g))
+        .unwrap();
 }
 
 fn bench_with_input_sizes(
@@ -124,13 +90,12 @@ fn bench_with_input_sizes(
 
     for input_size in input_sizes.iter() {
         if use_marf {
-            let mut marf = setup_chain_state(MARF_SCALE);
-            let mut marf_store = marf.begin(
-                &StacksBlockId(as_hash(0)),
-                &StacksBlockId(as_hash(1)),
-            );
+            let headers_db = SimHeadersDB::new();
 
-            let clarity_db = marf_store.as_clarity_db(&TestHeadersDB, &NULL_BURN_STATE_DB);
+            let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+            let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+
+            let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
             run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
         } else {
@@ -149,7 +114,9 @@ fn run_bench<F>(
     input_size: u16,
     clarity_db: ClarityDatabase,
     code_to_bench: F,
-) where F: Fn(&ContractAST, &mut GlobalContext, &mut ContractContext) {
+) where
+    F: Fn(&ContractAST, &mut GlobalContext, &mut ContractContext),
+{
     let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
     global_context.begin();
 
@@ -216,7 +183,13 @@ fn bench_geq(c: &mut Criterion) {
 
 // boolean functions
 fn bench_and(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::And, SCALE, INPUT_SIZES.into(), false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::And,
+        SCALE,
+        INPUT_SIZES.into(),
+        false,
+    )
 }
 
 fn bench_or(c: &mut Criterion) {
@@ -304,15 +277,33 @@ fn bench_keccak256(c: &mut Criterion) {
 }
 
 fn bench_secp256k1recover(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Secp256k1recover, SCALE, vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Secp256k1recover,
+        SCALE,
+        vec![1],
+        false,
+    )
 }
 
 fn bench_secp256k1verify(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Secp256k1verify, SCALE, vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Secp256k1verify,
+        SCALE,
+        vec![1],
+        false,
+    )
 }
 
 fn bench_create_ft(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::CreateFt, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::CreateFt,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_mint_ft(c: &mut Criterion) {
@@ -320,15 +311,33 @@ fn bench_mint_ft(c: &mut Criterion) {
 }
 
 fn bench_ft_transfer(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::FtTransfer, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::FtTransfer,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_ft_balance(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::FtBalance, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::FtBalance,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_ft_supply(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::FtSupply, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::FtSupply,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_ft_burn(c: &mut Criterion) {
@@ -336,23 +345,53 @@ fn bench_ft_burn(c: &mut Criterion) {
 }
 
 fn bench_create_nft(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::CreateNft, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::CreateNft,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_nft_mint(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::NftMint, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::NftMint,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_nft_transfer(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::NftTransfer, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::NftTransfer,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_nft_owner(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::NftOwner, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::NftOwner,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_nft_burn(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::NftBurn, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::NftBurn,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_is_none(c: &mut Criterion) {
@@ -376,23 +415,53 @@ fn bench_unwrap(c: &mut Criterion) {
 }
 
 fn bench_unwrap_ret(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::UnwrapRet, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::UnwrapRet,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_unwrap_err(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::UnwrapErr, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::UnwrapErr,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_unwrap_err_or_ret(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::UnwrapErrOrRet, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::UnwrapErrOrRet,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_create_map(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::CreateMap, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::CreateMap,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_create_var(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::CreateVar, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::CreateVar,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_set_var(c: &mut Criterion) {
@@ -400,7 +469,13 @@ fn bench_set_var(c: &mut Criterion) {
 }
 
 fn bench_fetch_var(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::FetchVar, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::FetchVar,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_print(c: &mut Criterion) {
@@ -412,7 +487,13 @@ fn bench_if(c: &mut Criterion) {
 }
 
 fn bench_asserts(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Asserts, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Asserts,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_ok_cons(c: &mut Criterion) {
@@ -420,11 +501,23 @@ fn bench_ok_cons(c: &mut Criterion) {
 }
 
 fn bench_err_cons(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::ErrCons, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::ErrCons,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_some_cons(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::SomeCons, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::SomeCons,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_concat(c: &mut Criterion) {
@@ -432,7 +525,13 @@ fn bench_concat(c: &mut Criterion) {
 }
 
 fn bench_as_max_len(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::AsMaxLen, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::AsMaxLen,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_begin(c: &mut Criterion) {
@@ -440,11 +539,23 @@ fn bench_begin(c: &mut Criterion) {
 }
 
 fn bench_bind_name(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::BindName, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::BindName,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_default_to(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::DefaultTo, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::DefaultTo,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_try(c: &mut Criterion) {
@@ -452,15 +563,33 @@ fn bench_try(c: &mut Criterion) {
 }
 
 fn bench_int_cast(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::IntCast, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::IntCast,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_set_entry(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::SetEntry, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::SetEntry,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_fetch_entry(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::FetchEntry, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::FetchEntry,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_match(c: &mut Criterion) {
@@ -472,11 +601,23 @@ fn bench_let(c: &mut Criterion) {
 }
 
 fn bench_index_of(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::IndexOf, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::IndexOf,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_element_at(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::ElementAt, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::ElementAt,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_len(c: &mut Criterion) {
@@ -484,7 +625,13 @@ fn bench_len(c: &mut Criterion) {
 }
 
 fn bench_list_cons(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::ListCons, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::ListCons,
+        SCALE.into(),
+        vec![1],
+        false,
+    )
 }
 
 fn bench_append(c: &mut Criterion) {
@@ -505,7 +652,13 @@ fn bench_fold(c: &mut Criterion) {
 
 // TODO: figure out more accurate benchmark that doesn't use TestHeadersDB
 fn bench_block_info(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::BlockInfo, SCALE.into(), vec![1], true)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::BlockInfo,
+        SCALE.into(),
+        vec![1],
+        true,
+    )
 }
 
 criterion_group!(
@@ -551,7 +704,7 @@ criterion_group!(
     // bench_is_ok,
     // bench_is_err,
     // bench_unwrap,
-    bench_unwrap_ret,
+    // bench_unwrap_ret,
     // bench_unwrap_err,
     // bench_unwrap_err_or_ret,
     // bench_create_map,
@@ -582,7 +735,7 @@ criterion_group!(
     // bench_append,
     // bench_filter,
     // bench_fold,
-    // bench_block_info,
+    bench_block_info,
 );
 
 criterion_main!(benches);
