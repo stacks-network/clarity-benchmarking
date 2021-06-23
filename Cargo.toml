@@ -15,6 +15,10 @@ rand = "0.8.3"
 version = "0.19.0"
 features = ["serde", "recovery"]
 
+[dependencies.rusqlite]
+version = "=0.24.2"
+features = ["blob", "serde_json", "i128_blob", "bundled", "trace"]
+
 [lib]
 name = "benchmarking_lib"
 path = "src/lib.rs"

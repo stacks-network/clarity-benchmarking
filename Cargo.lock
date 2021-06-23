@@ -201,6 +201,7 @@ dependencies = [
  "blockstack-core",
  "criterion",
  "rand 0.8.3",
+ "rusqlite",
  "secp256k1",
 ]
 
