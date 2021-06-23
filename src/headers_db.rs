@@ -118,7 +118,6 @@ impl HeadersDB for SimHeadersDB {
 }
 
 fn get_stacks_header_info(conn: &Connection, id_bhh: &StacksBlockId) -> Option<StacksHeaderInfo> {
-    dbg!(id_bhh);
     conn.query_row(
         "SELECT * FROM block_headers WHERE index_block_hash = ?",
         [id_bhh].iter(),

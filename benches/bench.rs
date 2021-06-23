@@ -650,7 +650,6 @@ fn bench_fold(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::Fold, SCALE.into(), vec![1], false)
 }
 
-// TODO: figure out more accurate benchmark that doesn't use TestHeadersDB
 fn bench_block_info(c: &mut Criterion) {
     bench_with_input_sizes(
         c,
