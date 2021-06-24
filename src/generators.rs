@@ -1278,6 +1278,16 @@ fn gen_get_block_info(scale: u16) -> String {
     body
 }
 
+fn gen_at_block(scale: u16) -> String {
+    let mut body = String::new();
+
+    for _ in 0..scale {
+        body.push_str(format!("(at-block 0x0000000000000000000000000000000000000000000000000000000000000000 (no-op)) ").as_str());
+    }
+
+    body
+}
+
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String {
     match function {
         // arithmetic
@@ -1417,7 +1427,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String
         ClarityCostFunction::ContractCall => unimplemented!(),
         ClarityCostFunction::ContractOf => unimplemented!(),
         ClarityCostFunction::PrincipalOf => unimplemented!(),
-        ClarityCostFunction::AtBlock => unimplemented!(),
+        ClarityCostFunction::AtBlock => gen_at_block(scale),
         ClarityCostFunction::LoadContract => unimplemented!(), // called at start of execute_contract
         ClarityCostFunction::ContractStorage => unimplemented!(), // start of `initialize_contract_from_ast`
     }

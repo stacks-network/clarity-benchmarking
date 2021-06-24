@@ -8,7 +8,7 @@ edition = "2018"
 criterion = "0.3.4"
 
 [dependencies]
-blockstack-core = { git = "https://github.com/blockstack/stacks-blockchain", branch = "feat/eval-all-pub" }
+blockstack-core = { git = "https://github.com/blockstack/stacks-blockchain", branch = "exp/clarity-bench-no-op" }
 rand = "0.8.3"
 
 [dependencies.secp256k1]

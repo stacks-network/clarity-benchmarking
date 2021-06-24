@@ -68,7 +68,7 @@ dependencies = [
 [[package]]
 name = "blockstack-core"
 version = "0.0.1"
-source = "git+https://github.com/blockstack/stacks-blockchain?branch=feat/eval-all-pub#ba66c9ae815bfe0c184f0af4182e4a67eb125675"
+source = "git+https://github.com/blockstack/stacks-blockchain?branch=exp/clarity-bench-no-op#857c1c4324106465df7adaa38b7735cff24640bf"
 dependencies = [
  "chrono",
  "curve25519-dalek",
@@ -94,7 +94,6 @@ dependencies = [
  "slog",
  "slog-term",
  "time 0.2.26",
- "tini",
  "url",
 ]
 
@@ -1352,12 +1351,6 @@ dependencies = [
  "standback",
  "syn",
 ]
-
-[[package]]
-name = "tini"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11eeaa68267376df2aacbaaed9b0092544ebbc897cd59f61e81a1105fbaf102e"
 
 [[package]]
 name = "tinytemplate"

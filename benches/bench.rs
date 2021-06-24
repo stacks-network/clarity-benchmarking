@@ -660,6 +660,16 @@ fn bench_block_info(c: &mut Criterion) {
     )
 }
 
+fn bench_at_block(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::AtBlock,
+        SCALE.into(),
+        vec![1],
+        true,
+    )
+}
+
 criterion_group!(
     benches,
     // bench_add,
@@ -734,7 +744,8 @@ criterion_group!(
     // bench_append,
     // bench_filter,
     // bench_fold,
-    bench_block_info,
+    // bench_block_info,
+    bench_at_block,
 );
 
 criterion_main!(benches);
