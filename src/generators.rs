@@ -16,6 +16,7 @@ use rand::distributions::uniform::{UniformChar, UniformSampler};
 use rand::rngs::ThreadRng;
 use secp256k1::Message as LibSecp256k1Message;
 use std::cmp::min;
+use std::fmt::format;
 
 // generate arithmetic function call
 pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) -> String {
@@ -1286,6 +1287,13 @@ fn gen_at_block(scale: u16) -> String {
     }
 
     body
+}
+
+pub fn gen_read_only_func(scale: u16) -> String {
+    let mut body = String::new();
+    body.push_str(gen_arithmetic("+", scale, 2).as_str());
+
+    dbg!(format!("(define-read-only (benchmark-load-contract) (begin {}))", body))
 }
 
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String {

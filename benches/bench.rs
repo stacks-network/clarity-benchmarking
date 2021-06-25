@@ -1,18 +1,19 @@
 use std::fs;
 
-use benchmarking_lib::generators::gen;
-use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
+use benchmarking_lib::generators::{gen, gen_read_only_func};
+use benchmarking_lib::headers_db::{SimHeadersDB};
 use blockstack_lib::clarity_vm::clarity::ClarityInstance;
 use blockstack_lib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
-use blockstack_lib::types::chainstate::StacksBlockId;
+use blockstack_lib::core::{BLOCK_LIMIT_MAINNET, FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
+use blockstack_lib::types::chainstate::{StacksBlockHeader, StacksBlockId};
 use blockstack_lib::types::proof::ClarityMarfTrieId;
 use blockstack_lib::vm::ast::ContractAST;
-use blockstack_lib::vm::contexts::{ContractContext, GlobalContext};
+use blockstack_lib::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
 use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
 use blockstack_lib::vm::costs::{ExecutionCost, LimitedCostTracker};
-use blockstack_lib::vm::database::{ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB};
+use blockstack_lib::vm::database::{ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB};
 use blockstack_lib::vm::types::QualifiedContractIdentifier;
-use blockstack_lib::vm::{ast, eval_all, Value};
+use blockstack_lib::vm::{CallStack, Environment, Value, ast, eval_all};
 use criterion::measurement::WallTime;
 use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
@@ -670,6 +671,45 @@ fn bench_at_block(c: &mut Criterion) {
     )
 }
 
+fn bench_load_contract(
+    c: &mut Criterion,
+) {
+    let mut group = c.benchmark_group(ClarityCostFunction::LoadContract.to_string());
+
+    let headers_db = SimHeadersDB::new();
+
+    let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+    let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+
+    let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+
+    let mut owned_env = OwnedEnvironment::new_free(true, clarity_db);
+    owned_env.begin();
+
+    let mut env = owned_env.get_exec_environment(None);
+
+    for size in INPUT_SIZES.iter() {
+        let contract_identifier = QualifiedContractIdentifier::local(format!("contract{}", size).as_str()).unwrap();
+        let contract = gen_read_only_func(*size);
+
+        env.initialize_contract(
+            contract_identifier.clone(),
+            &contract
+        ).unwrap();
+
+        group.throughput(Throughput::Bytes(contract.len() as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(contract.len()),
+            &contract.len(),
+            |b, &_| {
+                b.iter(|| {
+                    env.load_contract_for_bench(&contract_identifier).unwrap();
+                })
+            },
+        );
+    }
+}
+
 criterion_group!(
     benches,
     // bench_add,
@@ -745,7 +785,8 @@ criterion_group!(
     // bench_filter,
     // bench_fold,
     // bench_block_info,
-    bench_at_block,
+    // bench_at_block,
+    bench_load_contract,
 );
 
 criterion_main!(benches);
