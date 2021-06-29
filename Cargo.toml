@@ -9,7 +9,9 @@ criterion = "0.3.4"
 
 [dependencies]
 blockstack-core = { git = "https://github.com/blockstack/stacks-blockchain", branch = "exp/clarity-bench-no-op" }
+#blockstack-core = { path = "../stacks-blockchain" }
 rand = "0.8.3"
+lazy_static = "1.4.0"
 
 [dependencies.secp256k1]
 version = "0.19.0"

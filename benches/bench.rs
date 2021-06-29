@@ -1,28 +1,95 @@
 use std::fs;
 
-use benchmarking_lib::generators::{gen, gen_read_only_func};
-use benchmarking_lib::headers_db::{SimHeadersDB};
+// <<<<<<< HEAD
+// use benchmarking_lib::generators::{gen, gen_read_only_func};
+// use benchmarking_lib::headers_db::{SimHeadersDB};
+// use blockstack_lib::clarity_vm::clarity::ClarityInstance;
+// use blockstack_lib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
+// use blockstack_lib::core::{BLOCK_LIMIT_MAINNET, FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
+// use blockstack_lib::types::chainstate::{StacksBlockHeader, StacksBlockId};
+// use blockstack_lib::types::proof::ClarityMarfTrieId;
+// use blockstack_lib::vm::ast::ContractAST;
+// use blockstack_lib::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
+// use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
+// use blockstack_lib::vm::costs::{ExecutionCost, LimitedCostTracker};
+// use blockstack_lib::vm::database::{ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB};
+// use blockstack_lib::vm::types::QualifiedContractIdentifier;
+// use blockstack_lib::vm::{CallStack, Environment, Value, ast, eval_all};
+// =======
+use benchmarking_lib::generators::{
+    gen, gen_read_only_func, helper_generate_rand_char_string, make_sized_contracts_map, make_sized_tuple_sigs_map,
+    make_sized_type_sig_map, make_sized_values_map,
+};
+use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
 use blockstack_lib::clarity_vm::clarity::ClarityInstance;
 use blockstack_lib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
 use blockstack_lib::core::{BLOCK_LIMIT_MAINNET, FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
-use blockstack_lib::types::chainstate::{StacksBlockHeader, StacksBlockId};
+use blockstack_lib::types::chainstate::{
+    BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockHeader, StacksBlockId, VRFSeed,
+};
 use blockstack_lib::types::proof::ClarityMarfTrieId;
-use blockstack_lib::vm::ast::ContractAST;
+use blockstack_lib::util::hash::Hash160;
+use blockstack_lib::vm::analysis::type_checker::contexts::TypingContext;
+use blockstack_lib::vm::analysis::type_checker::natives::assets::bench_check_special_mint_asset;
+use blockstack_lib::vm::analysis::type_checker::natives::options::{
+    check_special_is_response, check_special_some,
+};
+use blockstack_lib::vm::analysis::type_checker::natives::sequences::{
+    check_special_map, get_simple_native_or_user_define,
+};
+use blockstack_lib::vm::analysis::type_checker::natives::{
+    check_special_get, check_special_let, check_special_list_cons, check_special_merge,
+    check_special_tuple_cons, inner_handle_tuple_get,
+};
+use blockstack_lib::vm::analysis::type_checker::TypeChecker;
+use blockstack_lib::vm::analysis::ContractAnalysis;
+use blockstack_lib::vm::ast::definition_sorter::DefinitionSorter;
+use blockstack_lib::vm::ast::expression_identifier::ExpressionIdentifier;
+use blockstack_lib::vm::ast::{build_ast, parser, ContractAST};
 use blockstack_lib::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
 use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
-use blockstack_lib::vm::costs::{ExecutionCost, LimitedCostTracker};
-use blockstack_lib::vm::database::{ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB};
+use blockstack_lib::vm::costs::{CostTracker, ExecutionCost, LimitedCostTracker};
+use blockstack_lib::vm::database::clarity_store::NullBackingStore;
+use blockstack_lib::vm::database::{
+    ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB,
+};
+use blockstack_lib::vm::functions::crypto::special_principal_of;
+use blockstack_lib::vm::representations::depth_traverse;
+use blockstack_lib::vm::types::signatures::TypeSignature::{
+    BoolType, IntType, NoType, PrincipalType, TupleType, UIntType,
+};
+use blockstack_lib::vm::types::signatures::{TupleTypeSignature, TypeSignature};
 use blockstack_lib::vm::types::QualifiedContractIdentifier;
-use blockstack_lib::vm::{CallStack, Environment, Value, ast, eval_all};
+use blockstack_lib::vm::{
+    ast, eval_all, lookup_variable, CallStack, ClarityName, Environment, LocalContext,
+    SymbolicExpression, Value,
+};
 use criterion::measurement::WallTime;
 use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
 };
+use lazy_static::lazy_static;
+use rand::prelude::SliceRandom;
+use rand::Rng;
+use std::borrow::BorrowMut;
+use std::collections::HashMap;
+use std::convert::TryFrom;
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const SCALE: u16 = 100;
 const MARF_SCALE: u32 = 100000;
+
+lazy_static! {
+    pub static ref SIZED_VALUES: HashMap<u16, Value> = make_sized_values_map(INPUT_SIZES.to_vec());
+    pub static ref SIZED_CONTRACTS: HashMap<u16, String> =
+        make_sized_contracts_map(INPUT_SIZES.to_vec());
+    // The size of the TupleTypeSignature is measured by the length of its type map
+    pub static ref SIZED_TUPLE_SIG: HashMap<u16, TupleTypeSignature> =
+        make_sized_tuple_sigs_map(INPUT_SIZES.to_vec());
+    pub static ref SIZED_TYPE_SIG: HashMap<u16, TypeSignature> =
+        make_sized_type_sig_map(INPUT_SIZES.to_vec());
+}
 
 fn as_hash(inp: u32) -> [u8; 32] {
     let mut out = [0; 32];
@@ -108,6 +175,350 @@ fn bench_with_input_sizes(
     }
 }
 
+fn dummy_setup_code(
+    _ca: &mut ContractAST,
+    _lc: &mut TypingContext,
+    _tc: &mut TypeChecker,
+    _i: u16,
+    _c: &mut LimitedCostTracker,
+) {
+}
+
+fn bench_analysis<F, G>(
+    c: &mut Criterion,
+    function: ClarityCostFunction,
+    scale: u16,
+    input_sizes: Vec<u16>,
+    setup_code: G,
+    code_to_bench: F,
+) where
+    F: Fn(&mut ContractAST, &mut TypingContext, &mut TypeChecker, u16, &mut LimitedCostTracker),
+    G: Fn(&mut ContractAST, &mut TypingContext, &mut TypeChecker, u16, &mut LimitedCostTracker),
+{
+    let mut group = c.benchmark_group(function.to_string());
+
+    for input_size in input_sizes.iter() {
+        let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
+
+        let contract = gen(function, scale, *input_size);
+
+        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
+            Ok(res) => res,
+            Err(error) => {
+                panic!("Parsing error: {}", error.diagnostic.message);
+            }
+        };
+
+        let mut local_context = TypingContext::new();
+        let mut cost_tracker = LimitedCostTracker::new_free();
+        let mut null_store = NullBackingStore::new();
+        let mut analysis_db = null_store.as_analysis_db();
+        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
+
+        group.throughput(Throughput::Bytes(*input_size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(input_size),
+            &input_size,
+            |b, &_| {
+                setup_code(
+                    &mut contract_ast,
+                    &mut local_context,
+                    &mut type_checker,
+                    *input_size,
+                    &mut cost_tracker,
+                );
+                b.iter(|| {
+                    code_to_bench(
+                        &mut contract_ast,
+                        &mut local_context,
+                        &mut type_checker,
+                        *input_size,
+                        &mut cost_tracker,
+                    );
+                })
+            },
+        );
+    }
+}
+
+fn helper_deepen_typing_context(
+    i: u16,
+    input_size: u16,
+    context: &TypingContext,
+    group: &mut BenchmarkGroup<WallTime>,
+) {
+    if i != 0 {
+        helper_deepen_typing_context(i - 1, input_size, &context.extend().unwrap(), group);
+    } else {
+        let mut cost_tracker = LimitedCostTracker::new_free();
+        let mut null_store = NullBackingStore::new();
+        let mut analysis_db = null_store.as_analysis_db();
+        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
+
+        group.throughput(Throughput::Bytes(input_size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(input_size),
+            &input_size,
+            |b, &_| {
+                b.iter(|| {
+                    for _ in 0..SCALE {
+                        type_checker.lookup_variable("dummy", &context);
+                    }
+                })
+            },
+        );
+    }
+}
+
+fn bench_analysis_lookup_variable_depth(c: &mut Criterion) {
+    let function = ClarityCostFunction::AnalysisLookupVariableDepth;
+    let mut group = c.benchmark_group(function.to_string());
+
+    for input_size in &INPUT_SIZES {
+        let mut local_context = TypingContext::new();
+        helper_deepen_typing_context(*input_size, *input_size, &local_context, &mut group);
+    }
+}
+
+fn helper_deepen_local_context(
+    i: u16,
+    input_size: u16,
+    context: &LocalContext,
+    group: &mut BenchmarkGroup<WallTime>,
+) {
+    if i != 0 {
+        helper_deepen_local_context(i - 1, input_size, &context.extend().unwrap(), group);
+    } else {
+        let mut memory_backing_store = MemoryBackingStore::new();
+        let clarity_db = memory_backing_store.as_clarity_db();
+        let mut global_context =
+            GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
+        global_context.begin();
+
+        let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
+        let mut contract_context = ContractContext::new(contract_identifier.clone());
+        let mut call_stack = CallStack::new();
+        let mut environment = Environment::new(
+            global_context.borrow_mut(),
+            &contract_context,
+            &mut call_stack,
+            None,
+            None,
+        );
+
+        group.throughput(Throughput::Bytes(input_size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(input_size),
+            &input_size,
+            |b, &_| {
+                b.iter(|| {
+                    for _ in 0..SCALE {
+                        lookup_variable("dummy", &context, &mut environment);
+                    }
+                })
+            },
+        );
+    }
+}
+
+fn bench_lookup_variable_depth(c: &mut Criterion) {
+    let function = ClarityCostFunction::LookupVariableDepth;
+    let mut group = c.benchmark_group(function.to_string());
+
+    for input_size in &INPUT_SIZES {
+        let mut local_context = LocalContext::new();
+        helper_deepen_local_context(*input_size, *input_size, &local_context, &mut group);
+    }
+}
+
+// note: could write `bench_run` function, and split out adding nodes to the graph from finding dependencies
+fn bench_ast_cycle_detection(c: &mut Criterion) {
+    let function = ClarityCostFunction::AstCycleDetection;
+    let mut group = c.benchmark_group(function.to_string());
+
+    for input_size in &INPUT_SIZES {
+        let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
+
+        let contract = gen(function, 1, *input_size);
+
+        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
+            Ok(res) => res,
+            Err(error) => {
+                panic!("Parsing error: {}", error.diagnostic.message);
+            }
+        };
+
+        let mut cost_tracker = LimitedCostTracker::new_free();
+        let mut def_sorter = DefinitionSorter::new();
+
+        group.throughput(Throughput::Bytes(*input_size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(input_size),
+            &input_size,
+            |b, &_| {
+                b.iter(|| {
+                    for _ in 0..SCALE {
+                        def_sorter.clear_graph();
+                        def_sorter.run(&mut contract_ast, &mut cost_tracker);
+                    }
+                })
+            },
+        );
+    }
+}
+
+fn bench_contract_storage(c: &mut Criterion) {
+    let function = ClarityCostFunction::ContractStorage;
+    let mut group = c.benchmark_group(function.to_string());
+    let mut rng = rand::thread_rng();
+
+    for input_size in &INPUT_SIZES {
+        // want a warmed-up marf
+        let headers_db = SimHeadersDB::new();
+
+        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+
+        let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+
+        let mut global_context =
+            GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
+        global_context.begin();
+
+        let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
+        let mut contract_context = ContractContext::new(contract_identifier.clone());
+
+        let contract = gen(function, 1, *input_size);
+        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
+            Ok(res) => res,
+            Err(error) => {
+                panic!("Parsing error: {}", error.diagnostic.message);
+            }
+        };
+
+        let mut call_stack = CallStack::new();
+
+        let mut environment = Environment::new(
+            global_context.borrow_mut(),
+            &contract_context,
+            &mut call_stack,
+            None,
+            None,
+        );
+
+        group.throughput(Throughput::Bytes(*input_size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(input_size),
+            &input_size,
+            |b, &_| {
+                b.iter(|| {
+                    for _ in 0..SCALE {
+                        let contract_identifier =
+                            QualifiedContractIdentifier::local(&*format!("c{}", rng.gen::<u32>()))
+                                .unwrap();
+                        environment.initialize_contract_from_ast(
+                            contract_identifier.clone(),
+                            &contract_ast,
+                            &contract,
+                        );
+                    }
+                })
+            },
+        );
+    }
+}
+
+fn bench_principal_of(c: &mut Criterion) {
+    let function = ClarityCostFunction::PrincipalOf;
+    let mut group = c.benchmark_group(function.to_string());
+
+    let mut memory_backing_store = MemoryBackingStore::new();
+    let clarity_db = memory_backing_store.as_clarity_db();
+    let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
+    global_context.begin();
+
+    let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
+    let mut contract_context = ContractContext::new(contract_identifier.clone());
+    let contract = gen(function, SCALE, 0);
+    let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
+        Ok(res) => res,
+        Err(error) => {
+            panic!("Parsing error: {}", error.diagnostic.message);
+        }
+    };
+
+    let mut call_stack = CallStack::new();
+    let mut environment = Environment::new(
+        global_context.borrow_mut(),
+        &contract_context,
+        &mut call_stack,
+        None,
+        None,
+    );
+    let mut local_context = LocalContext::new();
+
+    group.throughput(Throughput::Bytes(0));
+    group.bench_with_input(BenchmarkId::from_parameter(0), &0, |b, &_| {
+        b.iter(|| {
+            for expr in &contract_ast.expressions {
+                special_principal_of(&[expr.clone()], &mut environment, &local_context);
+            }
+        })
+    });
+}
+
+fn bench_lookup_variable_size(c: &mut Criterion) {
+    let function = ClarityCostFunction::LookupVariableSize;
+    let mut group = c.benchmark_group(function.to_string());
+
+    for input_size in &INPUT_SIZES {
+        let mut memory_backing_store = MemoryBackingStore::new();
+        let clarity_db = memory_backing_store.as_clarity_db();
+        let mut global_context =
+            GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
+        global_context.begin();
+
+        let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
+        let mut contract_context = ContractContext::new(contract_identifier.clone());
+
+        let mut call_stack = CallStack::new();
+
+        let mut environment = Environment::new(
+            global_context.borrow_mut(),
+            &contract_context,
+            &mut call_stack,
+            None,
+            None,
+        );
+        let mut local_context = LocalContext::new();
+        let inner_val = SIZED_VALUES.get(input_size).unwrap();
+        let val_name = "dummy";
+        let clar_val_name = ClarityName::try_from(val_name.to_string()).unwrap();
+        local_context
+            .variables
+            .insert(clar_val_name, inner_val.clone());
+
+        // add more values to the local context
+        for _ in 0..1000 {
+            let name = ClarityName::try_from(helper_generate_rand_char_string(10)).unwrap();
+            local_context.variables.insert(name, inner_val.clone());
+        }
+
+        group.throughput(Throughput::Bytes(*input_size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(input_size),
+            &input_size,
+            |b, &_| {
+                b.iter(|| {
+                    for _ in 0..SCALE {
+                        lookup_variable(val_name, &local_context, &mut environment);
+                    }
+                })
+            },
+        );
+    }
+}
+
 fn run_bench<F>(
     group: &mut BenchmarkGroup<WallTime>,
     function: ClarityCostFunction,
@@ -144,6 +555,564 @@ fn run_bench<F>(
             })
         },
     );
+}
+
+/// ////////////////////////////////////
+/// ANALYSIS FUNCTIONS
+/// ////////////////////////////////////
+fn bench_analysis_option_cons(c: &mut Criterion) {
+    fn eval_check_special_some(
+        contract_ast: &mut ContractAST,
+        local_context: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _i: u16,
+        _c: &mut LimitedCostTracker,
+    ) {
+        type_checker.type_map.delete_all();
+        for exp in &contract_ast.expressions {
+            let arg = [exp.clone()];
+            check_special_some(type_checker.borrow_mut(), &arg, &local_context);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisOptionCons,
+        SCALE,
+        vec![1],
+        dummy_setup_code,
+        eval_check_special_some,
+    )
+}
+
+fn bench_analysis_option_check(c: &mut Criterion) {
+    fn eval_check_special_is_response(
+        contract_ast: &mut ContractAST,
+        local_context: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _i: u16,
+        _c: &mut LimitedCostTracker,
+    ) {
+        type_checker.type_map.delete_all();
+        for exp in &contract_ast.expressions {
+            let arg = [exp.clone()];
+            check_special_is_response(type_checker.borrow_mut(), &arg, &local_context);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisOptionCheck,
+        SCALE,
+        vec![1],
+        dummy_setup_code,
+        eval_check_special_is_response,
+    )
+}
+
+fn bench_analysis_bind_name(c: &mut Criterion) {
+    fn eval_type_check_define<T: CostTracker>(
+        contract_ast: &mut ContractAST,
+        local_context: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _i: u16,
+        _c: &mut T,
+    ) {
+        type_checker.type_map.delete_all();
+        for exp in &contract_ast.expressions {
+            type_checker.try_type_check_define(&exp, local_context);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisBindName,
+        SCALE,
+        vec![1],
+        dummy_setup_code,
+        eval_type_check_define,
+    )
+}
+
+fn bench_analysis_list_items_check(c: &mut Criterion) {
+    fn eval_check_special_list_cons<T: CostTracker>(
+        contract_ast: &mut ContractAST,
+        local_context: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _is: u16,
+        _c: &mut T,
+    ) {
+        type_checker.type_map.delete_all();
+        for exp in &contract_ast.expressions {
+            let exp_list = exp.match_list().unwrap();
+            check_special_list_cons(type_checker, exp_list, local_context);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisListItemsCheck,
+        SCALE,
+        INPUT_SIZES.into(),
+        dummy_setup_code,
+        eval_check_special_list_cons,
+    )
+}
+
+fn bench_analysis_check_tuple_get(c: &mut Criterion) {
+    // SIZED_TUPLE_SIG is a lazy static. This setup function makes sur eit is initialized before
+    // the benchmarking function is called.
+    fn setup_fn<T: CostTracker>(
+        _ca: &mut ContractAST,
+        _lc: &mut TypingContext,
+        _tc: &mut TypeChecker,
+        i: u16,
+        _c: &mut T,
+    ) {
+        SIZED_TUPLE_SIG.get(&i);
+    }
+
+    fn eval_check_special_get<T: CostTracker>(
+        _ca: &mut ContractAST,
+        _lc: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        i: u16,
+        _c: &mut T,
+    ) {
+        let tuple_type_sig = SIZED_TUPLE_SIG.get(&i).unwrap();
+        inner_handle_tuple_get(tuple_type_sig, "id0", type_checker);
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisCheckTupleGet,
+        SCALE,
+        INPUT_SIZES.into(),
+        setup_fn,
+        eval_check_special_get,
+    )
+}
+
+fn bench_analysis_check_tuple_merge(c: &mut Criterion) {
+    fn eval_check_special_merge<T: CostTracker>(
+        contract_ast: &mut ContractAST,
+        local_context: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _i: u16,
+        _c: &mut T,
+    ) {
+        type_checker.type_map.delete_all();
+        for exp in &contract_ast.expressions {
+            let exp_list = exp.match_list().unwrap();
+            check_special_merge(type_checker, exp_list, local_context);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisCheckTupleMerge,
+        SCALE,
+        INPUT_SIZES.into(),
+        dummy_setup_code,
+        eval_check_special_merge,
+    )
+}
+
+fn bench_analysis_check_tuple_cons(c: &mut Criterion) {
+    fn eval_check_special_tuple_cons<T: CostTracker>(
+        contract_ast: &mut ContractAST,
+        local_context: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _is: u16,
+        _c: &mut T,
+    ) {
+        type_checker.type_map.delete_all();
+        for exp in &contract_ast.expressions {
+            let exp_list = exp.match_list().unwrap();
+            check_special_tuple_cons(type_checker, exp_list, local_context);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisCheckTupleCons,
+        SCALE,
+        INPUT_SIZES.into(),
+        dummy_setup_code,
+        eval_check_special_tuple_cons,
+    )
+}
+
+// includes cost of AnalysisCheckTupleCons
+fn bench_analysis_tuple_items_check(c: &mut Criterion) {
+    fn eval_check_special_tuple_cons<T: CostTracker>(
+        contract_ast: &mut ContractAST,
+        local_context: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _is: u16,
+        _c: &mut T,
+    ) {
+        type_checker.type_map.delete_all();
+        for exp in &contract_ast.expressions {
+            let arg = [exp.clone()];
+            check_special_tuple_cons(type_checker, &arg, local_context);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisTupleItemsCheck,
+        SCALE,
+        INPUT_SIZES.into(),
+        dummy_setup_code,
+        eval_check_special_tuple_cons,
+    )
+}
+
+fn bench_analysis_check_let(c: &mut Criterion) {
+    fn eval_check_special_let<T: CostTracker>(
+        contract_ast: &mut ContractAST,
+        local_context: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _i: u16,
+        _c: &mut T,
+    ) {
+        type_checker.type_map.delete_all();
+        for exp in &contract_ast.expressions {
+            let exp_list = exp.match_list().unwrap();
+            check_special_let(type_checker, exp_list, local_context);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisCheckLet,
+        SCALE,
+        INPUT_SIZES.into(),
+        dummy_setup_code,
+        eval_check_special_let,
+    )
+}
+
+fn bench_analysis_lookup_function(c: &mut Criterion) {
+    let function = ClarityCostFunction::AnalysisLookupFunction;
+    let mut group = c.benchmark_group(function.to_string());
+
+    let mut cost_tracker = LimitedCostTracker::new_free();
+    let mut null_store = NullBackingStore::new();
+    let mut analysis_db = null_store.as_analysis_db();
+    let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
+
+    let mut rng = rand::thread_rng();
+    let mut fn_names = Vec::new();
+    for _ in 0..SCALE {
+        let fn_name = match rng.gen_range(0..3) {
+            0 => {
+                // return simple native function
+                ["pow", "mod", "xor"].choose(&mut rng).unwrap().clone()
+            }
+            1 => {
+                // return special native function
+                ["if", "map", "filter"].choose(&mut rng).unwrap().clone()
+            }
+            2 => {
+                // return non-existant function
+                ["efdf", "suddsfb", "apod"]
+                    .choose(&mut rng)
+                    .unwrap()
+                    .clone()
+            }
+            _ => unreachable!(),
+        };
+        fn_names.push(fn_name.to_string());
+    }
+
+    group.throughput(Throughput::Bytes(0));
+    group.bench_with_input(BenchmarkId::from_parameter(0), &0, |b, &_| {
+        b.iter(|| {
+            for fn_name in &fn_names {
+                get_simple_native_or_user_define(fn_name, &mut type_checker);
+            }
+        })
+    });
+}
+
+fn bench_analysis_type_annotate(c: &mut Criterion) {
+    fn setup_fn(
+        contract_ast: &mut ContractAST,
+        _lc: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        input_size: u16,
+        _c: &mut LimitedCostTracker,
+    ) {
+        let var_type_sig = SIZED_TYPE_SIG.get(&input_size).unwrap();
+        for exp in &contract_ast.expressions {
+            let var_name = exp.match_atom().unwrap();
+            type_checker
+                .contract_context
+                .add_variable_type(var_name.clone(), var_type_sig.clone());
+        }
+    }
+
+    fn eval_inner_type_check<T: CostTracker>(
+        contract_ast: &mut ContractAST,
+        local_context: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _is: u16,
+        _c: &mut T,
+    ) {
+        type_checker.type_map.delete_all();
+        for expr in &contract_ast.expressions {
+            type_checker.inner_type_check(expr, local_context);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisTypeAnnotate,
+        SCALE,
+        INPUT_SIZES.into(),
+        setup_fn,
+        eval_inner_type_check,
+    )
+}
+
+fn bench_analysis_type_check(c: &mut Criterion) {
+    fn setup_fn<T: CostTracker>(
+        _ca: &mut ContractAST,
+        _lc: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        i: u16,
+        _c: &mut T,
+    ) {
+        let tuple_type_sig = SIZED_TYPE_SIG.get(&i).unwrap().clone();
+        type_checker.function_return_tracker = Some(Some(tuple_type_sig.clone()));
+    }
+
+    fn eval_track_return_type<T: CostTracker>(
+        _ca: &mut ContractAST,
+        _lc: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        i: u16,
+        _c: &mut T,
+    ) {
+        let tuple_type_sig = SIZED_TYPE_SIG.get(&i).unwrap().clone();
+        for _ in 0..SCALE {
+            type_checker.track_return_type(tuple_type_sig.clone());
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisTypeCheck,
+        1,
+        INPUT_SIZES.into(),
+        setup_fn,
+        eval_track_return_type,
+    )
+}
+
+fn bench_analysis_iterable_func(c: &mut Criterion) {
+    fn eval_check_special_map<T: CostTracker>(
+        contract_ast: &mut ContractAST,
+        local_context: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _i: u16,
+        _c: &mut T,
+    ) {
+        type_checker.type_map.delete_all();
+        for exp in &contract_ast.expressions {
+            let exp_list = exp.match_list().unwrap();
+            check_special_map(type_checker, exp_list, local_context);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisIterableFunc,
+        SCALE,
+        INPUT_SIZES.into(),
+        dummy_setup_code,
+        eval_check_special_map,
+    )
+}
+
+fn bench_analysis_storage(c: &mut Criterion) {
+    let function = ClarityCostFunction::AnalysisStorage;
+    let mut group = c.benchmark_group(function.to_string());
+
+    for input_size in &INPUT_SIZES {
+        let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
+
+        let contract = gen(function, 1, *input_size);
+
+        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
+            Ok(res) => res,
+            Err(error) => {
+                panic!("Parsing error: {}", error.diagnostic.message);
+            }
+        };
+
+        let mut cost_tracker = LimitedCostTracker::new_free();
+        let mut null_store = NullBackingStore::new();
+        let mut analysis_db = null_store.as_analysis_db();
+        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
+
+        let mut contract_analyses = Vec::new();
+        for exp in &contract_ast.expressions {
+            let contract_id = QualifiedContractIdentifier::local("analysis_test").unwrap();
+            let cost_tracker = LimitedCostTracker::new_free();
+            let exp_list = exp.match_list().unwrap();
+            let mut contract_analysis =
+                ContractAnalysis::new(contract_id.clone(), exp_list.to_vec(), cost_tracker);
+            contract_analyses.push(contract_analysis);
+        }
+
+        let mut size: u64 = 0;
+        for exp in contract_analyses[0].expressions.iter() {
+            depth_traverse(exp, |_x| match size.checked_add(1) {
+                Some(new_size) => {
+                    size = new_size;
+                    Ok(())
+                }
+                None => Err("overflow"),
+            })
+            .unwrap();
+        }
+
+        group.throughput(Throughput::Bytes(size as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, &_| {
+            b.iter(|| {
+                type_checker.type_map.delete_all();
+                type_checker.contract_context.clear_variable_types();
+                for analysis in &mut contract_analyses {
+                    let res = type_checker.run(analysis);
+                    println!("res: {:?}", res);
+                }
+            })
+        });
+    }
+}
+
+fn bench_analysis_type_lookup(c: &mut Criterion) {
+    fn setup_fn(
+        contract_ast: &mut ContractAST,
+        _lc: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        input_size: u16,
+        _c: &mut LimitedCostTracker,
+    ) {
+        let token_type = SIZED_TYPE_SIG.get(&input_size).unwrap();
+        for exp in &contract_ast.expressions {
+            let exp_list = exp.match_list().unwrap();
+            let asset_name = exp_list[0].match_atom().unwrap();
+            type_checker
+                .contract_context
+                .add_nft(asset_name.clone(), token_type.clone());
+        }
+    }
+
+    fn eval_check_special_mint_asset(
+        contract_ast: &mut ContractAST,
+        _lc: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _i: u16,
+        _c: &mut LimitedCostTracker,
+    ) {
+        for exp in &contract_ast.expressions {
+            let exp_list = exp.match_list().unwrap();
+            bench_check_special_mint_asset(type_checker, exp_list);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisTypeLookup,
+        SCALE,
+        INPUT_SIZES.into(),
+        setup_fn,
+        eval_check_special_mint_asset,
+    )
+}
+
+fn bench_analysis_lookup_variable_const(c: &mut Criterion) {
+    fn setup_fn(
+        contract_ast: &mut ContractAST,
+        _lc: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _is: u16,
+        _c: &mut LimitedCostTracker,
+    ) {
+        let mut rng = rand::thread_rng();
+        let type_sig_list = [IntType, BoolType, NoType, PrincipalType, UIntType];
+        for exp in &contract_ast.expressions {
+            let var_name = exp.match_atom().unwrap();
+            let var_type_sig = type_sig_list.choose(&mut rng).unwrap();
+            type_checker
+                .contract_context
+                .add_variable_type(var_name.clone(), var_type_sig.clone());
+        }
+    }
+
+    fn eval_lookup_variable(
+        contract_ast: &mut ContractAST,
+        local_context: &mut TypingContext,
+        type_checker: &mut TypeChecker,
+        _i: u16,
+        _c: &mut LimitedCostTracker,
+    ) {
+        for exp in &contract_ast.expressions {
+            let var_name = exp.match_atom().unwrap().to_string();
+            type_checker.lookup_variable(&var_name, local_context);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AnalysisLookupVariableConst,
+        SCALE,
+        vec![1],
+        setup_fn,
+        eval_lookup_variable,
+    )
+}
+
+/// ////////////////////////////////////
+/// AST FUNCTIONS
+/// ////////////////////////////////////
+fn bench_ast_parse(c: &mut Criterion) {
+    fn setup_fn<T: CostTracker>(
+        _ca: &mut ContractAST,
+        _lc: &mut TypingContext,
+        _tc: &mut TypeChecker,
+        input_size: u16,
+        _ct: &mut T,
+    ) {
+        SIZED_CONTRACTS.get(&input_size);
+    }
+
+    fn eval_build_ast<T: CostTracker>(
+        _ca: &mut ContractAST,
+        _lc: &mut TypingContext,
+        _tc: &mut TypeChecker,
+        input_size: u16,
+        cost_tracker: &mut T,
+    ) {
+        let contract = SIZED_CONTRACTS.get(&input_size).unwrap();
+        let contract_id = QualifiedContractIdentifier::transient();
+        for _ in 0..SCALE {
+            build_ast(&contract_id, &contract, cost_tracker);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::AstParse,
+        1,
+        INPUT_SIZES.into(),
+        setup_fn,
+        eval_build_ast,
+    )
 }
 
 fn bench_add(c: &mut Criterion) {
@@ -643,8 +1612,15 @@ fn bench_filter(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::Filter, SCALE.into(), vec![1], false)
 }
 
+// note: this takes a lot of time to run; can shorten the list sizes to make it faster
 fn bench_map(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Map, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Map,
+        SCALE.into(),
+        INPUT_SIZES.into(),
+        false,
+    )
 }
 
 fn bench_fold(c: &mut Criterion) {
@@ -708,6 +1684,29 @@ fn bench_load_contract(
             },
         );
     }
+}
+
+fn bench_type_parse_step(c: &mut Criterion) {
+    fn eval_track_return_type<T: CostTracker>(
+        contract_ast: &mut ContractAST,
+        _lc: &mut TypingContext,
+        _tc: &mut TypeChecker,
+        _i: u16,
+        cost_tracker: &mut T,
+    ) {
+        for exp in &contract_ast.expressions {
+            TypeSignature::parse_type_repr(exp, cost_tracker);
+        }
+    }
+
+    bench_analysis(
+        c,
+        ClarityCostFunction::TypeParseStep,
+        SCALE,
+        vec![1],
+        dummy_setup_code,
+        eval_track_return_type,
+    )
 }
 
 criterion_group!(
@@ -784,9 +1783,34 @@ criterion_group!(
     // bench_append,
     // bench_filter,
     // bench_fold,
-    // bench_block_info,
     // bench_at_block,
     bench_load_contract,
+    // bench_map,
+    // bench_block_info,
+    // bench_lookup_variable_depth,
+    // bench_lookup_variable_size,
+    // bench_type_parse_step,
+    // bench_analysis_option_cons,
+    // bench_analysis_option_check,
+    // bench_analysis_bind_name,
+    // bench_analysis_list_items_check,
+    // bench_analysis_check_tuple_get,
+    // bench_analysis_check_tuple_merge,
+    // bench_analysis_check_tuple_cons,
+    // bench_analysis_tuple_items_check,
+    // bench_analysis_check_let,
+    // bench_analysis_lookup_function, // check from here below
+    // bench_analysis_type_annotate,
+    // bench_analysis_iterable_func,
+    // bench_analysis_storage,
+    // bench_analysis_type_check,
+    // bench_analysis_lookup_variable_depth,
+    // bench_analysis_type_lookup,
+    // bench_analysis_lookup_variable_const,
+    // bench_ast_cycle_detection,
+    // bench_ast_parse,
+    // bench_contract_storage,
+    // bench_principal_of,
 );
 
 criterion_main!(benches);
