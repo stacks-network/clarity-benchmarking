@@ -1720,19 +1720,6 @@ fn gen_ast_cycle_detection(input_size: u16) -> (Option<String>, String) {
     (None, body)
 }
 
-fn gen_ast_cycle_detection_old(input_size: u16) -> (Option<String>, String) {
-    let mut body = String::new();
-    let var_val = helper_gen_random_clarity_value(46);
-    let var_name = helper_generate_rand_char_string(10);
-    body.push_str(&*format!("(define-constant {} {}) ", var_name, var_val));
-    let refs = (0..input_size)
-        .map(|_x| format!("{} ", var_name))
-        .collect::<String>();
-    body.push_str(&*format!("(no-op {}) ", refs));
-    println!("{}", body);
-    (None, body)
-}
-
 fn gen_empty() -> (Option<String>, String) {
     (None, "".to_string())
 }
