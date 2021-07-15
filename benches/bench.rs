@@ -1,7 +1,7 @@
 use std::fs;
 
 use benchmarking_lib::generators::{gen, gen_read_only_func};
-use benchmarking_lib::headers_db::{SimHeadersDB};
+use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
 use blockstack_lib::clarity_vm::clarity::ClarityInstance;
 use blockstack_lib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
 use blockstack_lib::core::{BLOCK_LIMIT_MAINNET, FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
@@ -12,7 +12,7 @@ use blockstack_lib::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironm
 use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
 use blockstack_lib::vm::costs::{ExecutionCost, LimitedCostTracker};
 use blockstack_lib::vm::database::{ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB};
-use blockstack_lib::vm::types::QualifiedContractIdentifier;
+use blockstack_lib::vm::types::{PrincipalData, QualifiedContractIdentifier, StandardPrincipalData};
 use blockstack_lib::vm::{CallStack, Environment, Value, ast, eval_all};
 use criterion::measurement::WallTime;
 use criterion::{
@@ -21,11 +21,17 @@ use criterion::{
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
-const SCALE: u16 = 100;
+const SCALE: u16 = 10;
 const MARF_SCALE: u32 = 100000;
 
 fn as_hash(inp: u32) -> [u8; 32] {
     let mut out = [0; 32];
+    out[0..4].copy_from_slice(&inp.to_le_bytes());
+    out
+}
+
+fn as_hash160(inp: u32) -> [u8; 20] {
+    let mut out = [0; 20];
     out[0..4].copy_from_slice(&inp.to_le_bytes());
     out
 }
@@ -37,6 +43,14 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
     if fs::metadata(&pre_initialized_path).is_err() {
         let marf = MarfedKV::open(&pre_initialized_path, None).unwrap();
         let mut clarity_instance = ClarityInstance::new(false, marf, ExecutionCost::max_value());
+
+        let p1 = QualifiedContractIdentifier::parse("S1G2081040G2081040G2081040G208105NK8PE5.c1").unwrap().issuer;
+        let principals: [PrincipalData; 2] = [
+            p1.into(), StandardPrincipalData(0, as_hash160(2)).into(),
+        ];
+
+        // Setup genesis chainstate
+
         let mut conn = clarity_instance.begin_test_genesis_block(
             &StacksBlockId::sentinel(),
             &StacksBlockId(as_hash(0)),
@@ -45,13 +59,23 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
         );
 
         conn.as_transaction(|tx| {
-            for j in 0..scaling {
-                tx.with_clarity_db(|db| {
+            // minting
+            tx.with_clarity_db(|db| {
+                principals.iter().for_each(|p| {
+                    let mut stx_account = db.get_stx_balance_snapshot_genesis(&p);
+                    stx_account.credit(1_000_000);
+                    stx_account.save();
+                });
+                Ok(())
+            }).unwrap();
+
+            // scaling
+            tx.with_clarity_db(|db| {
+                (0..scaling).for_each(|j| {
                     db.put(format!("key{}", j).as_str(), &Value::none());
-                    Ok(())
-                })
-                .unwrap();
-            }
+                });
+                Ok(())
+            }).unwrap();
         });
 
         conn.commit_to_block(&StacksBlockId(as_hash(0)));
@@ -91,12 +115,10 @@ fn bench_with_input_sizes(
 
     for input_size in input_sizes.iter() {
         if use_marf {
-            let headers_db = SimHeadersDB::new();
-
-            let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+            let mut marf = setup_chain_state(MARF_SCALE, &TestHeadersDB);
             let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
 
-            let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+            let clarity_db = marf_store.as_clarity_db(&TestHeadersDB, &NULL_BURN_STATE_DB);
 
             run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
         } else {
@@ -118,14 +140,14 @@ fn run_bench<F>(
 ) where
     F: Fn(&ContractAST, &mut GlobalContext, &mut ContractContext),
 {
+    let contract = gen(function, scale, input_size);
+
     let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
     global_context.begin();
 
     let contract_identifier =
         QualifiedContractIdentifier::local(&*format!("c{}", input_size)).unwrap();
     let mut contract_context = ContractContext::new(contract_identifier.clone());
-
-    let contract = gen(function, scale, input_size);
 
     let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
         Ok(res) => res,
@@ -710,6 +732,16 @@ fn bench_load_contract(
     }
 }
 
+fn bench_stx_transfer(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::StxTransfer,
+        SCALE.into(),
+        vec![3],
+        true,
+    )
+}
+
 criterion_group!(
     benches,
     // bench_add,
@@ -787,6 +819,7 @@ criterion_group!(
     // bench_block_info,
     // bench_at_block,
     bench_load_contract,
+    bench_stx_transfer,
 );
 
 criterion_main!(benches);

@@ -26,6 +26,7 @@ pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) 
     for _ in 0..scale {
         let args = (0..input_size)
             .map(|_| {
+                // TODO: fix this to work with mul/div
                 let max = i128::MAX / (i128::from(input_size) + 1);
                 format!("{}", rng.gen_range(1..max).to_string())
             })
@@ -1283,7 +1284,7 @@ fn gen_at_block(scale: u16) -> String {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str(format!("(at-block 0x0000000000000000000000000000000000000000000000000000000000000000 (no-op)) ").as_str());
+        body.push_str("(at-block 0x0000000000000000000000000000000000000000000000000000000000000000 (no-op)) ");
     }
 
     body
@@ -1293,7 +1294,17 @@ pub fn gen_read_only_func(scale: u16) -> String {
     let mut body = String::new();
     body.push_str(gen_arithmetic("+", scale, 2).as_str());
 
-    dbg!(format!("(define-read-only (benchmark-load-contract) (begin {}))", body))
+    format!("(define-read-only (benchmark-load-contract) (begin {}))", body)
+}
+
+pub fn gen_stx_transfer(scale: u16) -> String {
+    let mut body = String::new();
+
+    for _ in 0..scale {
+        body.push_str("(stx-transfer? u1 tx-sender 'S0G0000000000000000000000000000015XM0F7) ");
+    }
+
+    body
 }
 
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String {
@@ -1386,7 +1397,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> String
         ClarityCostFunction::PoisonMicroblock => unimplemented!(),
         ClarityCostFunction::BlockInfo => gen_get_block_info(scale),
         ClarityCostFunction::StxBalance => unimplemented!(),
-        ClarityCostFunction::StxTransfer => unimplemented!(),
+        ClarityCostFunction::StxTransfer => gen_stx_transfer(scale),
         // Option & result checks
         ClarityCostFunction::IsSome => gen_optional("is-some", scale),
         ClarityCostFunction::IsNone => gen_optional("is-none", scale),
