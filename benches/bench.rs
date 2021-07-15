@@ -290,8 +290,10 @@ fn helper_deepen_typing_context(
         helper_deepen_typing_context(i - 1, input_size, &context.extend().unwrap(), group);
     } else {
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut null_store = NullBackingStore::new();
-        let mut analysis_db = null_store.as_analysis_db();
+        let headers_db = SimHeadersDB::new();
+        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut analysis_db = marf_store.as_analysis_db();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
         group.throughput(Throughput::Bytes(input_size as u64));
@@ -794,8 +796,12 @@ fn bench_lookup_function(c: &mut Criterion) {
     let function = ClarityCostFunction::LookupFunction;
     let mut group = c.benchmark_group(function.to_string());
 
-    let mut memory_backing_store = MemoryBackingStore::new();
-    let clarity_db = memory_backing_store.as_clarity_db();
+    // use warmed up marf
+    let headers_db = SimHeadersDB::new();
+    let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+    let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+    let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+
     let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
     global_context.begin();
 
@@ -1315,9 +1321,12 @@ fn bench_analysis_storage(c: &mut Criterion) {
             }
         };
 
+        // use warmed up marf
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut null_store = NullBackingStore::new();
-        let mut analysis_db = null_store.as_analysis_db();
+        let headers_db = SimHeadersDB::new();
+        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut analysis_db = marf_store.as_analysis_db();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
         let mut contract_analyses = Vec::new();
@@ -1348,8 +1357,7 @@ fn bench_analysis_storage(c: &mut Criterion) {
                 type_checker.type_map.delete_all();
                 type_checker.contract_context.clear_variable_types();
                 for analysis in &mut contract_analyses {
-                    let res = type_checker.run(analysis);
-                    println!("res: {:?}", res);
+                    type_checker.run(analysis);
                 }
             })
         });
@@ -2276,7 +2284,7 @@ criterion_group!(
     // bench_filter,
     // bench_fold,
     // bench_at_block,
-    bench_load_contract,
+    // bench_load_contract,
     // bench_map,
     // bench_block_info,
     // bench_lookup_variable_depth,
@@ -2299,13 +2307,13 @@ criterion_group!(
     // bench_analysis_iterable_func,
     // bench_analysis_storage,
     // bench_analysis_type_check,
-    // bench_analysis_lookup_variable_depth,
+    bench_analysis_lookup_variable_depth,
     // bench_analysis_type_lookup,
     // bench_analysis_lookup_variable_const,
     // bench_analysis_use_trait_entry,
     // bench_analysis_get_function_entry,
     // bench_inner_type_check_cost,
-    bench_user_function_application,
+    // bench_user_function_application,
     // bench_ast_cycle_detection,
     // bench_ast_parse,
     // bench_contract_storage,
