@@ -204,11 +204,6 @@ fn run_bench<F>(
         &input_size,
         |b, &_| {
             b.iter(|| {
-                // let mut datastore = MemoryBackingStore::new();
-                // let clarity_db = datastore.as_clarity_db();
-                // let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
-                // global_context.begin();
-                // let mut contract_context = ContractContext::new(contract_identifier.clone());
                 code_to_bench(&contract_ast, &mut global_context, &mut contract_context);
             })
         },
@@ -249,10 +244,14 @@ fn bench_analysis<F, G>(
             }
         };
 
+        // use warmed up marf
+        let headers_db = SimHeadersDB::new();
+        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+
         let mut local_context = TypingContext::new();
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut null_store = NullBackingStore::new();
-        let mut analysis_db = null_store.as_analysis_db();
+        let mut analysis_db = marf_store.as_analysis_db();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
         group.throughput(Throughput::Bytes(*input_size as u64));
@@ -2041,7 +2040,7 @@ fn bench_set_entry(c: &mut Criterion) {
         ClarityCostFunction::SetEntry,
         SCALE.into(),
         vec![1],
-        false,
+        true,
     )
 }
 
@@ -2051,7 +2050,7 @@ fn bench_fetch_entry(c: &mut Criterion) {
         ClarityCostFunction::FetchEntry,
         SCALE.into(),
         vec![1],
-        false,
+        true,
     )
 }
 
@@ -2265,8 +2264,8 @@ criterion_group!(
     // bench_default_to,
     // bench_try,
     // bench_int_cast,
-    // bench_set_entry,
-    // bench_fetch_entry,
+    // bench_set_entry, // g
+    // bench_fetch_entry, // g
     // bench_match,
     // bench_let,
     // bench_index_of,

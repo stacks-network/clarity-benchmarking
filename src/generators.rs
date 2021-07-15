@@ -468,7 +468,8 @@ fn helper_create_principal_in_hex() -> String {
     format!("0x{} ", privk)
 }
 
-fn helper_create_principal_string() -> String {
+/// Creates a random principal to use in a clarity contract. The output includes the prefixing tick mark.
+fn helper_create_principal() -> String {
     let privk = Secp256k1PrivateKey::new();
     let addr = StacksAddress::from_public_keys(
         C32_ADDRESS_VERSION_TESTNET_SINGLESIG,
@@ -476,21 +477,15 @@ fn helper_create_principal_string() -> String {
         1,
         &vec![StacksPublicKey::from_private(&privk)],
     )
-    .unwrap();
+        .unwrap();
     let principal_data = addr.to_account_principal();
-    format!("{}", principal_data)
-}
-
-/// Creates a random principal to use in a clarity contract. The output includes the prefixing tick mark.
-fn helper_create_principal() -> String {
-    format!("'{}", helper_create_principal_string())
+    format!("'{}", principal_data)
 }
 
 fn gen_ft_mint(function_name: &'static str, scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     let (statement, token_name) = helper_define_fungible_token_statement();
-    // body.push_str(&statement);
 
     for _ in 0..scale {
         let amount: u128 = rng.gen_range(1..1000);
@@ -539,7 +534,6 @@ fn gen_ft_transfer(function_name: &'static str, scale: u16) -> (Option<String>, 
 fn gen_ft_balance(function_name: &'static str, scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let (token_name, principal_data, template) = helper_create_ft_boilerplate(100);
-    // body.push_str(&template);
     let args = format!("{} {}", token_name, principal_data);
     for _ in 0..scale {
         body.push_str(&*format!("({} {}) ", function_name, args));
@@ -550,7 +544,6 @@ fn gen_ft_balance(function_name: &'static str, scale: u16) -> (Option<String>, S
 fn gen_ft_supply(function_name: &'static str, scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let (token_name, _, template) = helper_create_ft_boilerplate(100);
-    // body.push_str(&template);
     let args = format!("{}", token_name);
     for _ in 0..scale {
         body.push_str(&*format!("({} {}) ", function_name, args));
@@ -563,7 +556,6 @@ fn gen_ft_burn(function_name: &'static str, scale: u16) -> (Option<String>, Stri
     let mut rng = rand::thread_rng();
     let max_burn = 100;
     let (token_name, principal_data, template) = helper_create_ft_boilerplate(scale * max_burn);
-    // body.push_str(&template);
     for _ in 0..scale {
         let burn_amount = rng.gen_range(1..=max_burn);
         let args = format!("{} u{} {}", token_name, burn_amount, principal_data);
@@ -692,7 +684,6 @@ fn gen_nft_mint(scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let (statement, token_name, nft_type, nft_len) =
         helper_define_non_fungible_token_statement(false);
-    // body.push_str(&statement);
 
     let nft_len = nft_len.map_or(0, |len| len) as usize;
     for i in 0..scale {
@@ -1004,6 +995,7 @@ fn gen_create_map(_function_name: &'static str, scale: u16) -> (Option<String>, 
 }
 
 // setEntry is the cost for map-delete, map-insert, & map-set
+// q: only ever deleting non-existent key; should we change that?
 fn gen_set_entry(scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
@@ -1017,7 +1009,6 @@ fn gen_set_entry(scale: u16) -> (Option<String>, String) {
         value_type,
         value_type_len,
     ) = helper_create_map();
-    body.push_str(&statement);
     for i in 0..scale {
         let curr_key = helper_gen_clarity_value(
             &key_type,
@@ -1055,35 +1046,58 @@ fn gen_set_entry(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+    (Some(statement), body)
 }
 
-// todo: might not be worst case because keys are already in the map
 fn gen_fetch_entry(scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let (
-        statement,
+        mut statement,
         map_name,
         key_name,
         key_type,
         key_type_len,
         value_name,
         value_type,
-        value_type_len,
+        value_type_len
     ) = helper_create_map();
-    body.push_str(&statement);
+
+    // insert a value into map
+    let curr_key = helper_gen_clarity_value(
+        &key_type,
+        23,
+        key_type_len.map_or(0, |len| len as usize),
+        None,
+    );
+    let curr_value = helper_gen_clarity_value(
+        &value_type,
+        89,
+        value_type_len.map_or(0, |len| len as usize),
+        None,
+    );
+
+    statement.push_str(&format!(
+        "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
+        map_name, key_name, curr_key, value_name, curr_value
+    ))
+;
     for i in 0..scale {
-        let new_key = helper_gen_clarity_value(
-            &key_type,
-            i,
-            key_type_len.map_or(0, |len| len as usize),
-            None,
-        );
-        let statement = format!("(map-delete {} {{ {}: {} }}) ", map_name, key_name, new_key);
+        let curr_key_value = if i % 2 == 0 {
+            helper_gen_clarity_value(
+                &key_type,
+                i,
+                key_type_len.map_or(0, |len| len as usize),
+                None,
+            )
+        } else {
+            curr_key.clone()
+        };
+
+        let statement = format!("(map-get? {} {{ {}: {} }}) ", map_name, key_name, curr_key_value);
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+    (Some(statement), body)
 }
 
 fn gen_create_var(scale: u16) -> (Option<String>, String) {
@@ -1649,8 +1663,6 @@ fn gen_analysis_tuple_cons(scale: u16, input_size: u16) -> (Option<String>, Stri
 fn gen_analysis_tuple_items_check(scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
     for _ in 0..scale {
-        // let (list_type, _) = helper_gen_clarity_type(true, false, true);
-        // let list_val = helper_gen_clarity_value("list", i, input_size as usize, Some(&list_type));
         let field_name = helper_generate_rand_char_string(10);
         let sized_val = helper_make_sized_clarity_value(input_size);
         body.push_str(&*format!("({} {}) ", field_name, sized_val));
@@ -1806,6 +1818,7 @@ fn gen_inner_type_check_cost(input_size: u16) -> (Option<String>, String) {
     (None, body)
 }
 
+/// Returns tuple of optional setup clarity code, and "main" clarity code
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Option<String>, String) {
     match function {
         // arithmetic
