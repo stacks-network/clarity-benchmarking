@@ -39,7 +39,7 @@ use blockstack_lib::vm::types::signatures::TypeSignature::{
     BoolType, IntType, NoType, PrincipalType, TupleType, UIntType,
 };
 use blockstack_lib::vm::types::signatures::{TupleTypeSignature, TypeSignature};
-use blockstack_lib::vm::types::{QualifiedContractIdentifier, TraitIdentifier, FunctionType, FunctionSignature};
+use blockstack_lib::vm::types::{FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier, StandardPrincipalData, TraitIdentifier};
 use blockstack_lib::vm::{ast, eval_all, lookup_variable, CallStack, ClarityName, Environment,
                          LocalContext, SymbolicExpression, Value, lookup_function,
                          bench_create_nft_in_context, bench_create_ft_in_context,
@@ -77,6 +77,12 @@ fn as_hash(inp: u32) -> [u8; 32] {
     out
 }
 
+fn as_hash160(inp: u32) -> [u8; 20] {
+    let mut out = [0; 20];
+    out[0..4].copy_from_slice(&inp.to_le_bytes());
+    out
+}
+
 fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedKV {
     let pre_initialized_path = format!("/tmp/clarity_bench_{}.marf", scaling);
     let out_path = "/tmp/clarity_bench_last.marf";
@@ -84,6 +90,12 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
     if fs::metadata(&pre_initialized_path).is_err() {
         let marf = MarfedKV::open(&pre_initialized_path, None).unwrap();
         let mut clarity_instance = ClarityInstance::new(false, marf, ExecutionCost::max_value());
+
+        let p1 = QualifiedContractIdentifier::parse("S1G2081040G2081040G2081040G208105NK8PE5.c1").unwrap().issuer;
+        let principals: [PrincipalData; 2] = [
+            p1.into(), StandardPrincipalData(0, as_hash160(2)).into(),
+        ];
+
         let mut conn = clarity_instance.begin_test_genesis_block(
             &StacksBlockId::sentinel(),
             &StacksBlockId(as_hash(0)),
@@ -92,13 +104,24 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
         );
 
         conn.as_transaction(|tx| {
-            for j in 0..scaling {
-                tx.with_clarity_db(|db| {
+            // minting
+            tx.with_clarity_db(|db| {
+                principals.iter().for_each(|p| {
+                    let mut stx_account = db.get_stx_balance_snapshot_genesis(&p);
+                    stx_account.credit(1_000_000);
+                    stx_account.save();
+                });
+                Ok(())
+            }).unwrap();
+
+            // scaling
+            tx.with_clarity_db(|db| {
+                (0..scaling).for_each(|j| {
                     db.put(format!("key{}", j).as_str(), &Value::none());
-                    Ok(())
-                })
-                .unwrap();
-            }
+                });
+                Ok(())
+            })
+            .unwrap();
         });
 
         conn.commit_to_block(&StacksBlockId(as_hash(0)));
@@ -138,12 +161,10 @@ fn bench_with_input_sizes(
 
     for input_size in input_sizes.iter() {
         if use_marf {
-            let headers_db = SimHeadersDB::new();
-
-            let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+            let mut marf = setup_chain_state(MARF_SCALE, &TestHeadersDB);
             let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
 
-            let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+            let clarity_db = marf_store.as_clarity_db(&TestHeadersDB, &NULL_BURN_STATE_DB);
 
             run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
         } else {
@@ -2201,6 +2222,16 @@ fn bench_type_parse_step(c: &mut Criterion) {
     )
 }
 
+fn bench_stx_transfer(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::StxTransfer,
+        SCALE.into(),
+        vec![3],
+        true
+    )
+}
+
 criterion_group!(
     benches,
     // bench_add,
@@ -2276,7 +2307,7 @@ criterion_group!(
     // bench_filter,
     // bench_fold,
     // bench_at_block,
-    bench_load_contract,
+    // bench_load_contract,
     // bench_map,
     // bench_block_info,
     // bench_lookup_variable_depth,
@@ -2305,11 +2336,12 @@ criterion_group!(
     // bench_analysis_use_trait_entry,
     // bench_analysis_get_function_entry,
     // bench_inner_type_check_cost,
-    bench_user_function_application,
+    // bench_user_function_application,
     // bench_ast_cycle_detection,
     // bench_ast_parse,
     // bench_contract_storage,
     // bench_principal_of,
+    bench_stx_transfer,
 );
 
 criterion_main!(benches);

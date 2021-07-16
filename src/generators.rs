@@ -1548,7 +1548,7 @@ fn gen_at_block(scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str(format!("(at-block 0x0000000000000000000000000000000000000000000000000000000000000000 (no-op)) ").as_str());
+        body.push_str("(at-block 0x0000000000000000000000000000000000000000000000000000000000000000 (no-op)) ");
     }
 
     (None, body)
@@ -1818,6 +1818,16 @@ fn gen_inner_type_check_cost(input_size: u16) -> (Option<String>, String) {
     (None, body)
 }
 
+pub fn gen_stx_transfer(scale: u16) -> (Option<String>, String) {
+    let mut body = String::new();
+
+    for _ in 0..scale {
+        body.push_str("(stx-transfer? u1 tx-sender 'S0G0000000000000000000000000000015XM0F7) ");
+    }
+
+    (None, body)
+}
+
 /// Returns tuple of optional setup clarity code, and "main" clarity code
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Option<String>, String) {
     match function {
@@ -1916,7 +1926,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         ClarityCostFunction::PoisonMicroblock => unimplemented!(),
         ClarityCostFunction::BlockInfo => gen_get_block_info(scale),
         ClarityCostFunction::StxBalance => unimplemented!(),
-        ClarityCostFunction::StxTransfer => unimplemented!(),
+        ClarityCostFunction::StxTransfer => gen_stx_transfer(scale),
         // Option & result checks
         ClarityCostFunction::IsSome => gen_optional("is-some", scale),
         ClarityCostFunction::IsNone => gen_optional("is-none", scale),
