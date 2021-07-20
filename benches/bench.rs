@@ -1,4 +1,5 @@
 use std::fs;
+use std::num::ParseIntError;
 
 use benchmarking_lib::generators::{gen, gen_read_only_func, helper_generate_rand_char_string, make_sized_contracts_map,
                                    make_sized_tuple_sigs_map, make_sized_type_sig_map, make_sized_values_map,
@@ -53,12 +54,14 @@ use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const SCALE: u16 = 100;
 const MARF_SCALE: u32 = 100000;
+
+pub const NUM_BLOCKS: u32 = 60;
 
 lazy_static! {
     pub static ref SIZED_VALUES: HashMap<u16, Value> = make_sized_values_map(INPUT_SIZES.to_vec());
@@ -103,6 +106,7 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
             &NULL_BURN_STATE_DB,
         );
 
+        // mint and scale marf in genesis block
         conn.as_transaction(|tx| {
             // minting
             tx.with_clarity_db(|db| {
@@ -116,7 +120,7 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
 
             // scaling
             tx.with_clarity_db(|db| {
-                (0..scaling).for_each(|j| {
+                (0..100000).for_each(|j| {
                     db.put(format!("key{}", j).as_str(), &Value::none());
                 });
                 Ok(())
@@ -125,6 +129,36 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
         });
 
         conn.commit_to_block(&StacksBlockId(as_hash(0)));
+
+        // append more blocks
+        let blocks: Vec<_> = (0..=NUM_BLOCKS)
+            .into_iter()
+            .map(|i| StacksBlockId(as_hash(i)))
+            .collect();
+
+        for ix in 1..=(blocks.len() - 1) {
+            let parent_block = &blocks[ix - 1];
+            let current_block = &blocks[ix];
+
+            let mut conn = clarity_instance.begin_block(
+                &parent_block,
+                &current_block,
+                &*headers_db,
+                &NULL_BURN_STATE_DB,
+            );
+
+            conn.as_transaction(|tx| {
+                tx.with_clarity_db(|db| {
+                    (0..100).for_each(|j| {
+                        db.put(format!("key{}", j).as_str(), &Value::none());
+                    });
+                    Ok(())
+                })
+                .unwrap();
+            });
+
+            conn.commit_to_block(current_block);
+        }
     };
 
     if fs::metadata(&out_path).is_err() {
@@ -161,10 +195,11 @@ fn bench_with_input_sizes(
 
     for input_size in input_sizes.iter() {
         if use_marf {
-            let mut marf = setup_chain_state(MARF_SCALE, &TestHeadersDB);
-            let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+            let headers_db = SimHeadersDB::new();
+            let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
 
-            let clarity_db = marf_store.as_clarity_db(&TestHeadersDB, &NULL_BURN_STATE_DB);
+            let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
+            let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
             run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
         } else {
@@ -2227,7 +2262,7 @@ fn bench_stx_transfer(c: &mut Criterion) {
         c,
         ClarityCostFunction::StxTransfer,
         SCALE.into(),
-        vec![3],
+        vec![1],
         true
     )
 }
@@ -2309,7 +2344,7 @@ criterion_group!(
     // bench_at_block,
     // bench_load_contract,
     // bench_map,
-    // bench_block_info,
+    bench_block_info,
     // bench_lookup_variable_depth,
     // bench_lookup_variable_size,
     // bench_lookup_function,
