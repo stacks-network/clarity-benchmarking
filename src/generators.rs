@@ -250,6 +250,7 @@ pub fn helper_make_sized_clarity_value(input_size: u16) -> String {
 // generate arithmetic function call
 pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
+    // TODO: replace thread range with deterministic random
     let mut rng = rand::thread_rng();
 
     for _ in 0..scale {
@@ -1530,12 +1531,13 @@ fn gen_get_block_info(scale: u16) -> (Option<String>, String) {
         "vrf-seed",
     ];
 
+    // must use block 5 here b/c it has a hardcoded id_bhh
+    // TODO: consider hardcoding more id_bhhs and making this random
     for _ in 0..scale {
         body.push_str(
             format!(
-                "(get-block-info? {} u{}) ",
-                props.choose(&mut rng).unwrap(),
-                rng.gen_range(1..=70)
+                "(get-block-info? {} u5) ",
+                props.choose(&mut rng).unwrap()
             )
             .as_str(),
         )
@@ -1548,7 +1550,7 @@ fn gen_at_block(scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str(format!("(at-block 0x0000000000000000000000000000000000000000000000000000000000000000 (no-op)) ").as_str());
+        body.push_str("(at-block 0x0000000000000000000000000000000000000000000000000000000000000000 (no-op)) ");
     }
 
     (None, body)
@@ -1818,6 +1820,16 @@ fn gen_inner_type_check_cost(input_size: u16) -> (Option<String>, String) {
     (None, body)
 }
 
+pub fn gen_stx_transfer(scale: u16) -> (Option<String>, String) {
+    let mut body = String::new();
+
+    for _ in 0..scale {
+        body.push_str("(stx-transfer? u1 tx-sender 'S0G0000000000000000000000000000015XM0F7) ");
+    }
+
+    (None, body)
+}
+
 /// Returns tuple of optional setup clarity code, and "main" clarity code
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Option<String>, String) {
     match function {
@@ -1916,7 +1928,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         ClarityCostFunction::PoisonMicroblock => unimplemented!(),
         ClarityCostFunction::BlockInfo => gen_get_block_info(scale),
         ClarityCostFunction::StxBalance => unimplemented!(),
-        ClarityCostFunction::StxTransfer => unimplemented!(),
+        ClarityCostFunction::StxTransfer => gen_stx_transfer(scale),
         // Option & result checks
         ClarityCostFunction::IsSome => gen_optional("is-some", scale),
         ClarityCostFunction::IsNone => gen_optional("is-none", scale),

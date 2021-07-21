@@ -59,8 +59,12 @@ pub struct SimHeadersDB {
 
 impl SimHeadersDB {
     pub fn new() -> Self {
-        let db_path = "../chainstate.sqlite";
+        let db_path = "./chainstate.sqlite";
 
+        Self::new_with_path(db_path)
+    }
+
+    fn new_with_path(db_path: &str) -> Self {
         let open_flags = match fs::metadata(&db_path) {
             Err(e) => {
                 if e.kind() == io::ErrorKind::NotFound {

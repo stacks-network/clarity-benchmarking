@@ -1,4 +1,5 @@
 use std::fs;
+use std::num::ParseIntError;
 
 use benchmarking_lib::generators::{gen, gen_read_only_func, helper_generate_rand_char_string, make_sized_contracts_map,
                                    make_sized_tuple_sigs_map, make_sized_type_sig_map, make_sized_values_map,
@@ -39,7 +40,7 @@ use blockstack_lib::vm::types::signatures::TypeSignature::{
     BoolType, IntType, NoType, PrincipalType, TupleType, UIntType,
 };
 use blockstack_lib::vm::types::signatures::{TupleTypeSignature, TypeSignature};
-use blockstack_lib::vm::types::{QualifiedContractIdentifier, TraitIdentifier, FunctionType, FunctionSignature};
+use blockstack_lib::vm::types::{FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier, StandardPrincipalData, TraitIdentifier};
 use blockstack_lib::vm::{ast, eval_all, lookup_variable, CallStack, ClarityName, Environment,
                          LocalContext, SymbolicExpression, Value, lookup_function,
                          bench_create_nft_in_context, bench_create_ft_in_context,
@@ -53,12 +54,14 @@ use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const SCALE: u16 = 100;
 const MARF_SCALE: u32 = 100000;
+
+pub const NUM_BLOCKS: u32 = 60;
 
 lazy_static! {
     pub static ref SIZED_VALUES: HashMap<u16, Value> = make_sized_values_map(INPUT_SIZES.to_vec());
@@ -77,6 +80,12 @@ fn as_hash(inp: u32) -> [u8; 32] {
     out
 }
 
+fn as_hash160(inp: u32) -> [u8; 20] {
+    let mut out = [0; 20];
+    out[0..4].copy_from_slice(&inp.to_le_bytes());
+    out
+}
+
 fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedKV {
     let pre_initialized_path = format!("/tmp/clarity_bench_{}.marf", scaling);
     let out_path = "/tmp/clarity_bench_last.marf";
@@ -84,6 +93,12 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
     if fs::metadata(&pre_initialized_path).is_err() {
         let marf = MarfedKV::open(&pre_initialized_path, None).unwrap();
         let mut clarity_instance = ClarityInstance::new(false, marf, ExecutionCost::max_value());
+
+        let p1 = QualifiedContractIdentifier::parse("S1G2081040G2081040G2081040G208105NK8PE5.c1").unwrap().issuer;
+        let principals: [PrincipalData; 2] = [
+            p1.into(), StandardPrincipalData(0, as_hash160(2)).into(),
+        ];
+
         let mut conn = clarity_instance.begin_test_genesis_block(
             &StacksBlockId::sentinel(),
             &StacksBlockId(as_hash(0)),
@@ -91,17 +106,59 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
             &NULL_BURN_STATE_DB,
         );
 
+        // mint and scale marf in genesis block
         conn.as_transaction(|tx| {
-            for j in 0..scaling {
-                tx.with_clarity_db(|db| {
+            // minting
+            tx.with_clarity_db(|db| {
+                principals.iter().for_each(|p| {
+                    let mut stx_account = db.get_stx_balance_snapshot_genesis(&p);
+                    stx_account.credit(1_000_000);
+                    stx_account.save();
+                });
+                Ok(())
+            }).unwrap();
+
+            // scaling
+            tx.with_clarity_db(|db| {
+                (0..100000).for_each(|j| {
                     db.put(format!("key{}", j).as_str(), &Value::none());
-                    Ok(())
-                })
-                .unwrap();
-            }
+                });
+                Ok(())
+            })
+            .unwrap();
         });
 
         conn.commit_to_block(&StacksBlockId(as_hash(0)));
+
+        // append more blocks
+        let blocks: Vec<_> = (0..=NUM_BLOCKS)
+            .into_iter()
+            .map(|i| StacksBlockId(as_hash(i)))
+            .collect();
+
+        for ix in 1..blocks.len() {
+            let parent_block = &blocks[ix - 1];
+            let current_block = &blocks[ix];
+
+            let mut conn = clarity_instance.begin_block(
+                &parent_block,
+                &current_block,
+                &*headers_db,
+                &NULL_BURN_STATE_DB,
+            );
+
+            conn.as_transaction(|tx| {
+                tx.with_clarity_db(|db| {
+                    (0..100).for_each(|j| {
+                        db.put(format!("key{}", j).as_str(), &Value::none());
+                    });
+                    Ok(())
+                })
+                .unwrap();
+            });
+
+            conn.commit_to_block(current_block);
+        }
     };
 
     if fs::metadata(&out_path).is_err() {
@@ -139,10 +196,9 @@ fn bench_with_input_sizes(
     for input_size in input_sizes.iter() {
         if use_marf {
             let headers_db = SimHeadersDB::new();
-
             let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-            let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
 
+            let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
             let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
             run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
@@ -2209,6 +2265,16 @@ fn bench_type_parse_step(c: &mut Criterion) {
     )
 }
 
+fn bench_stx_transfer(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::StxTransfer,
+        SCALE.into(),
+        vec![1],
+        true
+    )
+}
+
 criterion_group!(
     benches,
     // bench_add,
@@ -2286,7 +2352,7 @@ criterion_group!(
     // bench_at_block,
     // bench_load_contract,
     // bench_map,
-    // bench_block_info,
+    bench_block_info,
     // bench_lookup_variable_depth,
     // bench_lookup_variable_size,
     // bench_lookup_function,
@@ -2318,6 +2384,7 @@ criterion_group!(
     // bench_ast_parse,
     // bench_contract_storage,
     // bench_principal_of,
+    bench_stx_transfer,
 );
 
 criterion_main!(benches);
