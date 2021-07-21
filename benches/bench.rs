@@ -56,7 +56,6 @@ use std::convert::{TryFrom, TryInto};
 use blockstack_lib::vm::analysis::read_only_checker::ReadOnlyChecker;
 use blockstack_lib::vm::analysis::trait_checker::TraitChecker;
 use blockstack_lib::vm::analysis::arithmetic_checker::ArithmeticOnlyChecker;
-use blockstack_lib::vm::analysis::contract_interface_builder::ContractInterfaceAtomType::principal;
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
