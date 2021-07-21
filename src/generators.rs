@@ -18,7 +18,6 @@ use blockstack_lib::vm::types::signatures::TypeSignature::{
 use blockstack_lib::vm::types::{ASCIIData, CharType, ListData, SequenceData, TupleData, TupleTypeSignature, TypeSignature, OptionalData};
 use blockstack_lib::vm::{ClarityName, Value};
 use lazy_static::lazy_static;
-use rand::distributions::uniform::{UniformChar, UniformSampler};
 use rand::rngs::ThreadRng;
 use secp256k1::Message as LibSecp256k1Message;
 use std::cmp::min;
@@ -28,6 +27,17 @@ use std::convert::TryFrom;
 
 lazy_static! {
     pub static ref TUPLE_NAMES: Vec<String> = create_tuple_names(16);
+}
+
+struct ClaritySnippet {
+    pre: Option<String>,
+    body: String,
+}
+
+impl ClaritySnippet {
+    pub fn new(pre: Option<String>, body: String) -> Self {
+        Self { pre, body }
+    }
 }
 
 fn create_tuple_names(len: u16) -> Vec<String> {
@@ -248,16 +258,36 @@ pub fn helper_make_sized_clarity_value(input_size: u16) -> String {
 }
 
 // generate arithmetic function call
+// pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) -> (Option<String>, String) {
+//     let mut body = String::new();
+//     // TODO: replace thread range with deterministic random
+//     let mut rng = rand::thread_rng();
+
+//     let distr = Normal::new(0.0, 1.0).unwrap();
+
+//     for _ in 0..scale {
+//         let args = (0..input_size)
+//             .map(|_| {
+//                 let z: f64 = distr.sample(&mut rng);
+//                 (z.clamp(-4.0, 4.0) * i128::MAX as f64 / 4.0)
+//             })
+//             .collect::<Vec<f64>>();
+        
+//         let result = args.iter().reduce(|a, b| a.checked_mul(b));
+
+//         body.push_str(&format!("({} {}) ", function_name, args));
+//     }
+
+//     (None, body)
+// }
 pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
-    // TODO: replace thread range with deterministic random
     let mut rng = rand::thread_rng();
 
     for _ in 0..scale {
         let args = (0..input_size)
             .map(|_| {
-                let max = i128::MAX / (i128::from(input_size) + 1);
-                format!("{}", rng.gen_range(1..max).to_string())
+                rng.gen::<i16>().to_string()
             })
             .collect::<Vec<String>>()
             .join(" ");
