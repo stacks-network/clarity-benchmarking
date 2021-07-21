@@ -2596,7 +2596,7 @@ criterion_group!(
     // bench_at_block,
     // bench_load_contract,
     // bench_map,
-    bench_block_info,
+    // bench_block_info,
     // bench_lookup_variable_depth,
     // bench_lookup_variable_size,
     // bench_lookup_function,
@@ -2628,9 +2628,9 @@ criterion_group!(
     // bench_ast_parse,
     // bench_contract_storage,
     // bench_principal_of,
-    bench_stx_transfer,
-    bench_read_only, // g
-    // bench_arithmetic_only_checker, // g
+    // bench_stx_transfer,
+    bench_analysis_pass_read_only, // g
+    bench_analysis_pass_arithmetic_only_checker, // g
     // bench_analysis_pass_trait_checker, // g
     // bench_analysis_pass_type_checker // g
 );
