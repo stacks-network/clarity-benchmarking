@@ -136,7 +136,7 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
             .map(|i| StacksBlockId(as_hash(i)))
             .collect();
 
-        for ix in 1..=(blocks.len() - 1) {
+        for ix in 1..blocks.len() {
             let parent_block = &blocks[ix - 1];
             let current_block = &blocks[ix];
 
