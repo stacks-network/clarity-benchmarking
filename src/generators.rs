@@ -1835,7 +1835,7 @@ pub fn gen_stx_get_balance(scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str("(stx-get-balance 'S0G0000000000000000000000000000015XM0F7) ");
+        body.push_str("(stx-get-balance 'S1G2081040G2081040G2081040G208105NK8PE5) ");
     }
 
     (None, body)
@@ -2009,7 +2009,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         // Stacks
         ClarityCostFunction::PoisonMicroblock => unimplemented!(),
         ClarityCostFunction::BlockInfo => gen_get_block_info(scale),
-        ClarityCostFunction::StxBalance => unimplemented!(),
+        ClarityCostFunction::StxBalance => gen_stx_get_balance(scale),
         ClarityCostFunction::StxTransfer => gen_stx_transfer(scale),
         // Option & result checks
         ClarityCostFunction::IsSome => gen_optional("is-some", scale),

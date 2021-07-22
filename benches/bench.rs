@@ -2531,6 +2531,16 @@ fn bench_stx_transfer(c: &mut Criterion) {
     )
 }
 
+fn bench_stx_get_balance(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::StxBalance,
+        SCALE.into(),
+        vec![1],
+        true
+    )
+}
+
 criterion_group!(
     benches,
     // bench_add,
@@ -2643,6 +2653,7 @@ criterion_group!(
     // bench_contract_storage,
     // bench_principal_of,
     // bench_stx_transfer,
+    bench_stx_get_balance,
     bench_analysis_pass_read_only, // g
     bench_analysis_pass_arithmetic_only_checker, // g
     bench_analysis_pass_trait_checker, // g
