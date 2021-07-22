@@ -29,17 +29,6 @@ lazy_static! {
     pub static ref TUPLE_NAMES: Vec<String> = create_tuple_names(16);
 }
 
-struct ClaritySnippet {
-    pre: Option<String>,
-    body: String,
-}
-
-impl ClaritySnippet {
-    pub fn new(pre: Option<String>, body: String) -> Self {
-        Self { pre, body }
-    }
-}
-
 fn create_tuple_names(len: u16) -> Vec<String> {
     let mut names = Vec::new();
     for _ in 0..len {
