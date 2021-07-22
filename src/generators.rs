@@ -1831,6 +1831,16 @@ pub fn gen_stx_transfer(scale: u16) -> (Option<String>, String) {
     (None, body)
 }
 
+pub fn gen_stx_get_balance(scale: u16) -> (Option<String>, String) {
+    let mut body = String::new();
+
+    for _ in 0..scale {
+        body.push_str("(stx-get-balance 'S0G0000000000000000000000000000015XM0F7) ");
+    }
+
+    (None, body)
+}
+
 pub fn gen_analysis_pass_read_only(input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
     for i in 0..input_size {
