@@ -257,37 +257,19 @@ pub fn helper_make_sized_clarity_value(input_size: u16) -> String {
     }
 }
 
-// generate arithmetic function call
-// pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) -> (Option<String>, String) {
-//     let mut body = String::new();
-//     // TODO: replace thread range with deterministic random
-//     let mut rng = rand::thread_rng();
-
-//     let distr = Normal::new(0.0, 1.0).unwrap();
-
-//     for _ in 0..scale {
-//         let args = (0..input_size)
-//             .map(|_| {
-//                 let z: f64 = distr.sample(&mut rng);
-//                 (z.clamp(-4.0, 4.0) * i128::MAX as f64 / 4.0)
-//             })
-//             .collect::<Vec<f64>>();
-        
-//         let result = args.iter().reduce(|a, b| a.checked_mul(b));
-
-//         body.push_str(&format!("({} {}) ", function_name, args));
-//     }
-
-//     (None, body)
-// }
 pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
+    let s = match function_name {
+        "/" => 1,
+        _   => 0,
+    };
+
     for _ in 0..scale {
         let args = (0..input_size)
-            .map(|_| {
-                rng.gen::<i16>().to_string()
+            .map(|i| {
+                rng.gen_range(s..i16::MAX).to_string()
             })
             .collect::<Vec<String>>()
             .join(" ");

@@ -2298,9 +2298,10 @@ fn bench_stx_transfer(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_add,
+    // bench_add,
     // bench_sub,
-    // bench_mul,
+    bench_mul,
+    bench_div,
     // bench_le,
     // bench_leq,
     // bench_ge,
@@ -2406,7 +2407,7 @@ criterion_group!(
     // bench_ast_parse,
     // bench_contract_storage,
     // bench_principal_of,
-    bench_stx_transfer,
+    // bench_stx_transfer,
 );
 
 criterion_main!(benches);
