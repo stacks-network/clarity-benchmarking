@@ -2588,7 +2588,9 @@ fn bench_poison_microblock(c: &mut Criterion) {
         &1,
         |b, &_| {
             b.iter(|| {
-                env.handle_poison_microblock(h1, h1).unwrap();
+                for _ in 0..SCALE {
+                    env.handle_poison_microblock(h1, h1).unwrap();
+                }
             })
         },
     );
