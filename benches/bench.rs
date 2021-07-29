@@ -57,6 +57,7 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
+const INPUT_SIZES_ARITHMETIC: [u16; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const SCALE: u16 = 100;
 const MARF_SCALE: u32 = 100000;
@@ -1546,7 +1547,7 @@ fn bench_add(c: &mut Criterion) {
         c,
         ClarityCostFunction::Add,
         SCALE,
-        INPUT_SIZES.into(),
+        INPUT_SIZES_ARITHMETIC.into(),
         false,
     )
 }
@@ -1556,8 +1557,28 @@ fn bench_sub(c: &mut Criterion) {
         c,
         ClarityCostFunction::Sub,
         SCALE,
-        INPUT_SIZES.into(),
+        INPUT_SIZES_ARITHMETIC.into(),
         false,
+    )
+}
+
+fn bench_mul(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Mul,
+        SCALE,
+        INPUT_SIZES_ARITHMETIC.into(),
+        false
+    )
+}
+
+fn bench_div(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Div,
+        SCALE,
+        INPUT_SIZES_ARITHMETIC.into(),
+        false
     )
 }
 
@@ -2279,6 +2300,8 @@ criterion_group!(
     benches,
     // bench_add,
     // bench_sub,
+    bench_mul,
+    bench_div,
     // bench_le,
     // bench_leq,
     // bench_ge,
@@ -2352,7 +2375,7 @@ criterion_group!(
     // bench_at_block,
     // bench_load_contract,
     // bench_map,
-    bench_block_info,
+    // bench_block_info,
     // bench_lookup_variable_depth,
     // bench_lookup_variable_size,
     // bench_lookup_function,
@@ -2384,7 +2407,7 @@ criterion_group!(
     // bench_ast_parse,
     // bench_contract_storage,
     // bench_principal_of,
-    bench_stx_transfer,
+    // bench_stx_transfer,
 );
 
 criterion_main!(benches);

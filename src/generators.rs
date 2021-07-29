@@ -18,7 +18,6 @@ use blockstack_lib::vm::types::signatures::TypeSignature::{
 use blockstack_lib::vm::types::{ASCIIData, CharType, ListData, SequenceData, TupleData, TupleTypeSignature, TypeSignature, OptionalData};
 use blockstack_lib::vm::{ClarityName, Value};
 use lazy_static::lazy_static;
-use rand::distributions::uniform::{UniformChar, UniformSampler};
 use rand::rngs::ThreadRng;
 use secp256k1::Message as LibSecp256k1Message;
 use std::cmp::min;
@@ -247,17 +246,19 @@ pub fn helper_make_sized_clarity_value(input_size: u16) -> String {
     }
 }
 
-// generate arithmetic function call
 pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
-    // TODO: replace thread range with deterministic random
     let mut rng = rand::thread_rng();
+
+    let s = match function_name {
+        "/" => 1,
+        _   => 0,
+    };
 
     for _ in 0..scale {
         let args = (0..input_size)
-            .map(|_| {
-                let max = i128::MAX / (i128::from(input_size) + 1);
-                format!("{}", rng.gen_range(1..max).to_string())
+            .map(|i| {
+                rng.gen_range(s..i16::MAX).to_string()
             })
             .collect::<Vec<String>>()
             .join(" ");
