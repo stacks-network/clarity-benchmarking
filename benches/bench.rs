@@ -3,14 +3,17 @@ use std::num::ParseIntError;
 
 use benchmarking_lib::generators::{gen, gen_read_only_func, helper_generate_rand_char_string, make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map, make_sized_values_map, helper_make_value_for_sized_type_sig, gen_analysis_pass};
 use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
+use blockstack_lib::address::AddressHashMode;
+use blockstack_lib::chainstate::stacks::db::StacksChainState;
+use blockstack_lib::chainstate::stacks::{C32_ADDRESS_VERSION_TESTNET_SINGLESIG, CoinbasePayload, StacksBlock, StacksMicroblock, StacksPrivateKey, StacksPublicKey, StacksTransaction, StacksTransactionSigner, TransactionAnchorMode, TransactionAuth, TransactionPayload, TransactionVersion};
 use blockstack_lib::clarity_vm::clarity::ClarityInstance;
 use blockstack_lib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
 use blockstack_lib::core::{BLOCK_LIMIT_MAINNET, FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
-use blockstack_lib::types::chainstate::{
-    BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockHeader, StacksBlockId, VRFSeed,
-};
-use blockstack_lib::types::proof::ClarityMarfTrieId;
-use blockstack_lib::util::hash::Hash160;
+use blockstack_lib::types::chainstate::{BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockHeader, StacksBlockId, StacksMicroblockHeader, StacksWorkScore, VRFSeed};
+use blockstack_lib::types::proof::{ClarityMarfTrieId, TrieHash};
+use blockstack_lib::util::hash::{Hash160, MerkleTree, Sha512Trunc256Sum, hex_bytes, to_hex};
+use blockstack_lib::util::secp256k1::MessageSignature;
+use blockstack_lib::util::vrf::VRFProof;
 use blockstack_lib::vm::analysis::type_checker::contexts::TypingContext;
 use blockstack_lib::vm::analysis::type_checker::natives::assets::bench_check_special_mint_asset;
 use blockstack_lib::vm::analysis::type_checker::natives::options::{
@@ -49,7 +52,7 @@ use criterion::{
 };
 use lazy_static::lazy_static;
 use rand::prelude::SliceRandom;
-use rand::Rng;
+use rand::{Rng, thread_rng};
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
@@ -2541,6 +2544,327 @@ fn bench_stx_get_balance(c: &mut Criterion) {
     )
 }
 
+fn bench_poison_microblock(c: &mut Criterion) {
+    let mut group = c.benchmark_group(ClarityCostFunction::PoisonMicroblock.to_string());
+
+    let headers_db = SimHeadersDB::new();
+    let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+    let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
+    let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+
+    let mut owned_env = OwnedEnvironment::new_free(true, clarity_db);
+    owned_env.begin();
+    let mut env = owned_env.get_exec_environment(None);
+
+    let privk_string = "eb05c83546fdd2c79f10f5ad5434a90dd28f7e3acb7c092157aa1bc3656b012c01";
+    // let privk = StacksPrivateKey::from_hex(privk_string).unwrap();
+
+    // let block = make_empty_coinbase_block(&privk);
+    // let microblocks = make_sample_microblock_stream_fork(&privk, &block.block_hash(), 0);
+
+    // let proof_bytes = hex_bytes("9275df67a68c8745c0ff97b48201ee6db447f7c93b23ae24cdc2400f52fdb08a1a6ac7ec71bf9c9c76e96ee4675ebff60625af28718501047bfd87b810c2d2139b73c23bd69de66360953a642c2a330a").unwrap();
+    // let proof = VRFProof::from_bytes(&proof_bytes[..].to_vec()).unwrap();
+    // let num_mblocks = microblocks.len();
+
+    // let child_block_header = StacksBlockHeader {
+    //     version: 0x01,
+    //     total_work: StacksWorkScore {
+    //         burn: 234,
+    //         work: 567,
+    //     },
+    //     proof: proof.clone(),
+    //     parent_block: block.block_hash(),
+    //     parent_microblock: microblocks[num_mblocks - 1].block_hash(),
+    //     parent_microblock_sequence: microblocks[num_mblocks - 1].header.sequence,
+    //     tx_merkle_root: Sha512Trunc256Sum([7u8; 32]),
+    //     state_index_root: TrieHash([8u8; 32]),
+    //     microblock_pubkey_hash: Hash160([9u8; 20]),
+    // };
+
+    // // construct forked microblock stream
+
+    // let mut broken_microblocks = microblocks.clone();
+    // let mut forked_microblocks = vec![];
+
+    // let mut conflicting_microblock: StacksMicroblock;
+
+    // for i in 0..broken_microblocks.len() {
+    //     broken_microblocks[i].header.signature = MessageSignature([0u8; 65]);
+    //     broken_microblocks[i].sign(&privk).unwrap();
+    //     if i + 1 < broken_microblocks.len() {
+    //         broken_microblocks[i + 1].header.prev_block =
+    //             broken_microblocks[i].block_hash();
+    //     }
+
+    //     forked_microblocks.push(broken_microblocks[i].clone());
+    //     if i == num_mblocks / 2 {
+    //         conflicting_microblock = broken_microblocks[i].clone();
+
+    //         let extra_tx = {
+    //             let auth = TransactionAuth::from_p2pkh(&privk).unwrap();
+    //             let tx_smart_contract = StacksTransaction::new(
+    //                 TransactionVersion::Testnet,
+    //                 auth.clone(),
+    //                 TransactionPayload::new_smart_contract(
+    //                     &"name-contract".to_string(),
+    //                     &format!("conflicting smart contract {}", i),
+    //                 )
+    //                 .unwrap(),
+    //             );
+    //             let mut tx_signer = StacksTransactionSigner::new(&tx_smart_contract);
+    //             tx_signer.sign_origin(&privk).unwrap();
+    //             tx_signer.get_tx().unwrap()
+    //         };
+
+    //         conflicting_microblock.txs.push(extra_tx);
+
+    //         let txid_vecs = conflicting_microblock
+    //             .txs
+    //             .iter()
+    //             .map(|tx| tx.txid().as_bytes().to_vec())
+    //             .collect();
+
+    //         let merkle_tree = MerkleTree::<Sha512Trunc256Sum>::new(&txid_vecs);
+
+    //         conflicting_microblock.header.tx_merkle_root = merkle_tree.root();
+
+    //         conflicting_microblock.sign(&privk).unwrap();
+    //         forked_microblocks.push(conflicting_microblock.clone());
+    //     }
+    // }
+
+    // let res = StacksChainState::validate_parent_microblock_stream(
+    //     &block.header,
+    //     &child_block_header,
+    //     &forked_microblocks,
+    //     true,
+    // );
+
+    // let (_, poison_opt) = res.unwrap();
+
+    // match poison_opt.unwrap() {
+    //     TransactionPayload::PoisonMicroblock(ref h1, ref h2) => {
+    //         let pubkh = h1.check_recover_pubkey().unwrap();
+
+    //         dbg!(h1);
+    //         dbg!(h2);
+
+    //         env.global_context.database.insert_microblock_pubkey_hash_height(
+    //             &pubkh, 60
+    //         ).unwrap();
+
+    //         let sk = StacksPrivateKey::from_hex(privk_string).unwrap();
+    //         let addr = StacksAddress::from_public_keys(
+    //             C32_ADDRESS_VERSION_TESTNET_SINGLESIG,
+    //             &AddressHashMode::SerializeP2PKH,
+    //             1,
+    //             &vec![StacksPublicKey::from_private(&sk)],
+    //         ).unwrap();
+
+    //         env.sender = Some(addr.into());
+
+    //         group.throughput(Throughput::Bytes(1u64));
+    //         group.bench_with_input(
+    //             BenchmarkId::from_parameter(1),
+    //             &1,
+    //             |b, &_| {
+    //                 b.iter(|| {
+    //                     env.handle_poison_microblock(h1, h2).unwrap();
+    //                 })
+    //             },
+    //         );
+
+    //     }
+    //     _ => {
+    //         panic!("Didn't detect microblock chain fork")
+    //     }
+    // }
+
+    let ref h1 = StacksMicroblockHeader {
+        version: 18,
+        sequence: 8,
+        prev_block: BlockHeaderHash::from_hex("06722a7d6537c3dd382a2cf1e56962ed36c26930e3b85faa4489caeb5097f724").unwrap(),
+        tx_merkle_root: Sha512Trunc256Sum::from_hex("ce7e657cb5af17c320b41a234efdd6f0d4e45272bfd3087efaf0a12eacb75eae").unwrap(),
+        signature: MessageSignature::from_hex("010eae2221e50cac44ef24fc35d691b02158c3697a4200e8573b13b14bf984526947318d6653216f6b73d490f44f2979ffb334e14706e01b350f18c946be1b0e2e").unwrap(),
+    };
+
+    let pubkh = h1.check_recover_pubkey().unwrap();
+
+    env.global_context.database.insert_microblock_pubkey_hash_height(
+        &pubkh, 60
+    ).unwrap();
+
+    let sk = StacksPrivateKey::from_hex(privk_string).unwrap();
+    let addr = StacksAddress::from_public_keys(
+        C32_ADDRESS_VERSION_TESTNET_SINGLESIG,
+        &AddressHashMode::SerializeP2PKH,
+        1,
+        &vec![StacksPublicKey::from_private(&sk)],
+    ).unwrap();
+
+    env.sender = Some(addr.into());
+
+    group.throughput(Throughput::Bytes(1u64));
+    group.bench_with_input(
+        BenchmarkId::from_parameter(1),
+        &1,
+        |b, &_| {
+            b.iter(|| {
+                env.handle_poison_microblock(h1, h1).unwrap();
+            })
+        },
+    );
+}
+
+// from src/chainstate/stacks/db/blocks.rs
+pub fn make_empty_coinbase_block(mblock_key: &StacksPrivateKey) -> StacksBlock {
+    let privk = StacksPrivateKey::from_hex(
+        "59e4d5e18351d6027a37920efe53c2f1cbadc50dca7d77169b7291dff936ed6d01",
+    )
+    .unwrap();
+    let auth = TransactionAuth::from_p2pkh(&privk).unwrap();
+    let proof_bytes = hex_bytes("9275df67a68c8745c0ff97b48201ee6db447f7c93b23ae24cdc2400f52fdb08a1a6ac7ec71bf9c9c76e96ee4675ebff60625af28718501047bfd87b810c2d2139b73c23bd69de66360953a642c2a330a").unwrap();
+    let proof = VRFProof::from_bytes(&proof_bytes[..].to_vec()).unwrap();
+
+    let mut tx_coinbase = StacksTransaction::new(
+        TransactionVersion::Testnet,
+        auth,
+        TransactionPayload::Coinbase(CoinbasePayload([0u8; 32])),
+    );
+    tx_coinbase.anchor_mode = TransactionAnchorMode::OnChainOnly;
+    let mut tx_signer = StacksTransactionSigner::new(&tx_coinbase);
+
+    tx_signer.sign_origin(&privk).unwrap();
+
+    let tx_coinbase_signed = tx_signer.get_tx().unwrap();
+    let txs = vec![tx_coinbase_signed];
+
+    let work_score = StacksWorkScore {
+        burn: 123,
+        work: 456,
+    };
+
+    let parent_header = StacksBlockHeader {
+        version: 0x01,
+        total_work: StacksWorkScore {
+            burn: 234,
+            work: 567,
+        },
+        proof: proof.clone(),
+        parent_block: BlockHeaderHash([5u8; 32]),
+        parent_microblock: BlockHeaderHash([6u8; 32]),
+        parent_microblock_sequence: 4,
+        tx_merkle_root: Sha512Trunc256Sum([7u8; 32]),
+        state_index_root: TrieHash([8u8; 32]),
+        microblock_pubkey_hash: Hash160([9u8; 20]),
+    };
+
+    let parent_microblock_header = StacksMicroblockHeader {
+        version: 0x12,
+        sequence: 0x34,
+        prev_block: BlockHeaderHash([0x0au8; 32]),
+        tx_merkle_root: Sha512Trunc256Sum([0x0bu8; 32]),
+        signature: MessageSignature([0x0cu8; 65]),
+    };
+
+    let mblock_pubkey_hash =
+        Hash160::from_node_public_key(&StacksPublicKey::from_private(mblock_key));
+    let mut block = StacksBlock::from_parent(
+        &parent_header,
+        &parent_microblock_header,
+        txs.clone(),
+        &work_score,
+        &proof,
+        &TrieHash([2u8; 32]),
+        &mblock_pubkey_hash,
+    );
+    block.header.version = 0x24;
+    block
+}
+
+
+// from src/chainstate/stacks/db/blocks.rs
+pub fn make_sample_microblock_stream_fork(
+    privk: &StacksPrivateKey,
+    base: &BlockHeaderHash,
+    initial_seq: u16,
+) -> Vec<StacksMicroblock> {
+    let mut all_txs = vec![];
+    let mut microblocks: Vec<StacksMicroblock> = vec![];
+
+    for _ in 0..49 {
+        let auth = TransactionAuth::from_p2pkh(&privk).unwrap();
+
+        // 16k + 8 contract
+        let contract_16k = {
+            let mut parts = vec![];
+            parts.push("(begin ".to_string());
+            for i in 0..1024 {
+                parts.push("(print \"abcdef\")".to_string()); // 16 bytes
+            }
+            parts.push(")".to_string());
+            parts.join("")
+        };
+
+        let mut tx_big_contract = StacksTransaction::new(
+            TransactionVersion::Testnet,
+            auth.clone(),
+            TransactionPayload::new_smart_contract(
+                &format!("hello-world-{}", &thread_rng().gen::<u32>()),
+                &contract_16k.to_string(),
+            )
+            .unwrap(),
+        );
+
+        tx_big_contract.anchor_mode = TransactionAnchorMode::OffChainOnly;
+        let mut tx_signer = StacksTransactionSigner::new(&tx_big_contract);
+        tx_signer.sign_origin(&privk).unwrap();
+
+        let tx_big_contract_signed = tx_signer.get_tx().unwrap();
+        all_txs.push(tx_big_contract_signed);
+    }
+
+    // make microblocks with 3 transactions each (or fewer)
+    for i in 0..(all_txs.len() / 3) {
+        let txs = vec![
+            all_txs[3 * i].clone(),
+            all_txs[3 * i + 1].clone(),
+            all_txs[3 * i + 2].clone(),
+        ];
+
+        let txid_vecs = txs.iter().map(|tx| tx.txid().as_bytes().to_vec()).collect();
+
+        let merkle_tree = MerkleTree::<Sha512Trunc256Sum>::new(&txid_vecs);
+        let tx_merkle_root = merkle_tree.root();
+
+        let prev_block = if i == 0 {
+            base.clone()
+        } else {
+            let l = microblocks.len();
+            microblocks[l - 1].block_hash()
+        };
+
+        let header = StacksMicroblockHeader {
+            version: 0x12,
+            sequence: initial_seq + (i as u16),
+            prev_block: prev_block,
+            tx_merkle_root: tx_merkle_root,
+            signature: MessageSignature([0u8; 65]),
+        };
+
+        let mut mblock = StacksMicroblock {
+            header: header,
+            txs: txs,
+        };
+
+        mblock.sign(privk).unwrap();
+        microblocks.push(mblock);
+    }
+
+    microblocks
+}
+
+
 criterion_group!(
     benches,
     // bench_add,
@@ -2657,7 +2981,8 @@ criterion_group!(
     bench_analysis_pass_read_only, // g
     bench_analysis_pass_arithmetic_only_checker, // g
     bench_analysis_pass_trait_checker, // g
-    bench_analysis_pass_type_checker // g
+    bench_analysis_pass_type_checker, // g
+    bench_poison_microblock,
 );
 
 criterion_main!(benches);
