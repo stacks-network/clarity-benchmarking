@@ -350,6 +350,7 @@ fn bench_analysis_pass<F>(
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
 
         let (_, contract) = gen_analysis_pass(function, 1, *input_size);
+        let contract_size = contract.len();
 
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
             Ok(res) => res,
@@ -368,11 +369,11 @@ fn bench_analysis_pass<F>(
 
         let mut analysis_db = marf_store.as_analysis_db();
 
-        analysis_db.execute(|db| {
-            group.throughput(Throughput::Bytes(*input_size as u64));
+        analysis_db.execute::<_, _, ()>(|db| {
+            group.throughput(Throughput::Bytes(contract_size as u64));
             group.bench_with_input(
-                BenchmarkId::from_parameter(input_size),
-                &input_size,
+                BenchmarkId::from_parameter(contract_size),
+                &contract_size,
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
@@ -382,11 +383,7 @@ fn bench_analysis_pass<F>(
                 },
             );
 
-            if false {
-                Err(())
-            } else {
-                Ok(())
-            }
+            Ok(())
         });
     }
     ()
@@ -435,6 +432,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             let impl_trait = format!("(impl-trait '{}.{}.dummy-trait-{}) ", principal_data, pre_contract_identifier.name, i);
             contract.push_str(&impl_trait);
         }
+        let contract_size = contract.len();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
@@ -471,13 +469,13 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
         }
         type_checker.contract_context.into_contract_analysis(&mut contract_analysis);
 
-        analysis_db.execute(|db| {
+        analysis_db.execute::<_, _, ()>(|db| {
             db.insert_contract(&pre_contract_identifier, &pre_contract_analysis);
 
-            group.throughput(Throughput::Bytes(*input_size as u64));
+            group.throughput(Throughput::Bytes(contract_size as u64));
             group.bench_with_input(
-                BenchmarkId::from_parameter(input_size),
-                &input_size,
+                BenchmarkId::from_parameter(contract_size),
+                &contract_size,
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
@@ -487,11 +485,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
                 },
             );
 
-            if false {
-                Err(())
-            } else {
-                Ok(())
-            }
+            Ok(())
         });
     }
     ()
@@ -526,6 +520,7 @@ fn bench_analysis_pass_type_checker(
             let impl_trait = format!("(use-trait dummy-trait-{}-alias '{}.{}.dummy-trait-{}) ", i, principal_data, pre_contract_identifier.name, i);
             contract.push_str(&impl_trait);
         }
+        let contract_size = contract.len();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
@@ -553,13 +548,13 @@ fn bench_analysis_pass_type_checker(
         }
         type_checker.contract_context.into_contract_analysis(&mut pre_contract_analysis);
 
-        analysis_db.execute(|db| {
+        analysis_db.execute::<_, _, ()>(|db| {
             db.insert_contract(&pre_contract_identifier, &pre_contract_analysis);
 
-            group.throughput(Throughput::Bytes(*input_size as u64));
+            group.throughput(Throughput::Bytes(contract_size as u64));
             group.bench_with_input(
-                BenchmarkId::from_parameter(input_size),
-                &input_size,
+                BenchmarkId::from_parameter(contract_size),
+                &contract_size,
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
@@ -569,11 +564,7 @@ fn bench_analysis_pass_type_checker(
                 },
             );
 
-            if false {
-                Err(())
-            } else {
-                Ok(())
-            }
+            Ok(())
         });
     }
     ()
@@ -2630,8 +2621,8 @@ criterion_group!(
     // bench_stx_transfer,
     bench_analysis_pass_read_only, // g
     bench_analysis_pass_arithmetic_only_checker, // g
-    // bench_analysis_pass_trait_checker, // g
-    // bench_analysis_pass_type_checker // g
+    bench_analysis_pass_trait_checker, // g
+    bench_analysis_pass_type_checker // g
 );
 
 criterion_main!(benches);
