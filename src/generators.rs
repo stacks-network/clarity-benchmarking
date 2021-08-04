@@ -1,6 +1,6 @@
 use blockstack_lib::burnchains::PrivateKey;
 use blockstack_lib::util::secp256k1::{Secp256k1PrivateKey, Secp256k1PublicKey};
-use blockstack_lib::vm::costs::cost_functions::ClarityCostFunction;
+use blockstack_lib::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
 use rand::distributions::Uniform;
 use rand::prelude::SliceRandom;
 use rand::{Rng, RngCore};
@@ -1831,6 +1831,77 @@ pub fn gen_stx_transfer(scale: u16) -> (Option<String>, String) {
     (None, body)
 }
 
+pub fn gen_analysis_pass_read_only(input_size: u16) -> (Option<String>, String) {
+    let mut body = String::new();
+    for i in 0..input_size {
+        let fn_body = if i == 0 {
+            "(let ((a 2) (b (+ 5 6 7))) (+ a b))".to_string()
+        } else {
+            format!("(let ((a (dummy-fn-{})) (b (+ 5 6 7))) (+ a b))", i-1)
+        };
+        let fn_def = format!("(define-read-only (dummy-fn-{}) (begin {})) ", i, fn_body);
+        body.push_str(&fn_def);
+    }
+    println!("{}", body);
+    (None, body)
+}
+
+pub fn gen_analysis_pass_arithmetic_only(input_size: u16) -> (Option<String>, String) {
+    let mut body = String::new();
+    for i in 0..input_size {
+        let fn_body = if i == 0 {
+            "(let ((a 2) (b (+ 5 6 7))) (+ a b))".to_string()
+        } else {
+            format!("(let ((a (dummy-fn-{})) (b (+ 5 6 7))) (+ a b))", i-1)
+        };
+        let fn_def = format!("(define-read-only (dummy-fn-{}) (begin (no-op none) {})) ", i, fn_body);
+        body.push_str(&fn_def);
+    }
+    println!("{}", body);
+    (None, body)
+}
+
+pub fn define_dummy_trait(i: u16, clarity_type: &str) -> String {
+    let dummy_fn = format!("(dummy-fn-{} ({}) (response uint uint))", i, clarity_type);
+    format!("(define-trait dummy-trait-{} ({})) ", i, dummy_fn)
+}
+
+pub fn gen_analysis_pass_trait_checker(input_size: u16) -> (Option<String>, String) {
+    let mut setup_body = String::new();
+    let mut body = String::new();
+    for i in 0..input_size {
+        let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
+        let final_clarity_type = match length {
+            Some(l) => format!("({} {})", clarity_type, l),
+            None => clarity_type
+        };
+
+        let curr_trait = define_dummy_trait(i, &final_clarity_type);
+        setup_body.push_str(&curr_trait);
+
+        let impl_fn = format!("(define-public (dummy-fn-{} (arg1 {})) (ok u0)) ", i, final_clarity_type);
+        body.push_str(&impl_fn);
+    }
+
+    (Some(setup_body), body)
+}
+
+pub fn gen_analysis_pass_type_checker(input_size: u16) -> (Option<String>, String) {
+    let mut setup_body = String::new();
+    let mut body = String::new();
+    for i in 0..input_size {
+        let curr_trait = define_dummy_trait(i, "uint");
+        setup_body.push_str(&curr_trait);
+
+        let inner_let = "(let ((c 7)) (- c 0))";
+        let fn_body = format!("(let ((a {}) (b (+ 5 6 7))) (+ a b))", inner_let);
+        let fn_def = format!("(define-read-only (dummy-fn-{}) (begin {})) ", i, fn_body);
+        body.push_str(&fn_def);
+    }
+    println!("{}", body);
+    (Some(setup_body), body)
+}
+
 /// Returns tuple of optional setup clarity code, and "main" clarity code
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Option<String>, String) {
     match function {
@@ -1981,5 +2052,16 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         ClarityCostFunction::PrincipalOf => gen_principal_of(scale),
         ClarityCostFunction::AtBlock => gen_at_block(scale),
         ClarityCostFunction::LoadContract => unimplemented!(), // called at start of execute_contract
+    }
+}
+
+
+/// Returns tuple of optional setup clarity code, and "main" clarity code
+pub fn gen_analysis_pass(function: AnalysisCostFunction, _scale: u16, input_size: u16) -> (Option<String>, String) {
+    match function {
+        AnalysisCostFunction::ReadOnly => gen_analysis_pass_read_only(input_size),
+        AnalysisCostFunction::TypeChecker => gen_analysis_pass_type_checker(input_size),
+        AnalysisCostFunction::TraitChecker => gen_analysis_pass_trait_checker(input_size),
+        AnalysisCostFunction::ArithmeticOnlyChecker => gen_analysis_pass_arithmetic_only(input_size),
     }
 }
