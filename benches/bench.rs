@@ -3,14 +3,17 @@ use std::num::ParseIntError;
 
 use benchmarking_lib::generators::{gen, gen_read_only_func, helper_generate_rand_char_string, make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map, make_sized_values_map, helper_make_value_for_sized_type_sig, gen_analysis_pass};
 use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
+use blockstack_lib::address::AddressHashMode;
+use blockstack_lib::chainstate::stacks::db::StacksChainState;
+use blockstack_lib::chainstate::stacks::{C32_ADDRESS_VERSION_TESTNET_SINGLESIG, CoinbasePayload, StacksBlock, StacksMicroblock, StacksPrivateKey, StacksPublicKey, StacksTransaction, StacksTransactionSigner, TransactionAnchorMode, TransactionAuth, TransactionPayload, TransactionVersion};
 use blockstack_lib::clarity_vm::clarity::ClarityInstance;
 use blockstack_lib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
 use blockstack_lib::core::{BLOCK_LIMIT_MAINNET, FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
-use blockstack_lib::types::chainstate::{
-    BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockHeader, StacksBlockId, VRFSeed,
-};
-use blockstack_lib::types::proof::ClarityMarfTrieId;
-use blockstack_lib::util::hash::Hash160;
+use blockstack_lib::types::chainstate::{BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockHeader, StacksBlockId, StacksMicroblockHeader, StacksWorkScore, VRFSeed};
+use blockstack_lib::types::proof::{ClarityMarfTrieId, TrieHash};
+use blockstack_lib::util::hash::{Hash160, MerkleTree, Sha512Trunc256Sum, hex_bytes, to_hex};
+use blockstack_lib::util::secp256k1::MessageSignature;
+use blockstack_lib::util::vrf::VRFProof;
 use blockstack_lib::vm::analysis::type_checker::contexts::TypingContext;
 use blockstack_lib::vm::analysis::type_checker::natives::assets::bench_check_special_mint_asset;
 use blockstack_lib::vm::analysis::type_checker::natives::options::{
@@ -49,7 +52,7 @@ use criterion::{
 };
 use lazy_static::lazy_static;
 use rand::prelude::SliceRandom;
-use rand::Rng;
+use rand::{Rng, thread_rng};
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
@@ -2531,6 +2534,68 @@ fn bench_stx_transfer(c: &mut Criterion) {
     )
 }
 
+fn bench_stx_get_balance(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::StxBalance,
+        SCALE.into(),
+        vec![1],
+        true
+    )
+}
+
+fn bench_poison_microblock(c: &mut Criterion) {
+    let mut group = c.benchmark_group(ClarityCostFunction::PoisonMicroblock.to_string());
+
+    let headers_db = SimHeadersDB::new();
+    let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+    let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
+    let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+
+    let mut owned_env = OwnedEnvironment::new_free(true, clarity_db);
+    owned_env.begin();
+    let mut env = owned_env.get_exec_environment(None);
+
+    let privk_string = "eb05c83546fdd2c79f10f5ad5434a90dd28f7e3acb7c092157aa1bc3656b012c01";
+
+    let ref h1 = StacksMicroblockHeader {
+        version: 18,
+        sequence: 8,
+        prev_block: BlockHeaderHash::from_hex("06722a7d6537c3dd382a2cf1e56962ed36c26930e3b85faa4489caeb5097f724").unwrap(),
+        tx_merkle_root: Sha512Trunc256Sum::from_hex("ce7e657cb5af17c320b41a234efdd6f0d4e45272bfd3087efaf0a12eacb75eae").unwrap(),
+        signature: MessageSignature::from_hex("010eae2221e50cac44ef24fc35d691b02158c3697a4200e8573b13b14bf984526947318d6653216f6b73d490f44f2979ffb334e14706e01b350f18c946be1b0e2e").unwrap(),
+    };
+
+    let pubkh = h1.check_recover_pubkey().unwrap();
+
+    env.global_context.database.insert_microblock_pubkey_hash_height(
+        &pubkh, 60
+    ).unwrap();
+
+    let sk = StacksPrivateKey::from_hex(privk_string).unwrap();
+    let addr = StacksAddress::from_public_keys(
+        C32_ADDRESS_VERSION_TESTNET_SINGLESIG,
+        &AddressHashMode::SerializeP2PKH,
+        1,
+        &vec![StacksPublicKey::from_private(&sk)],
+    ).unwrap();
+
+    env.sender = Some(addr.into());
+
+    group.throughput(Throughput::Bytes(1u64));
+    group.bench_with_input(
+        BenchmarkId::from_parameter(1),
+        &1,
+        |b, &_| {
+            b.iter(|| {
+                for _ in 0..SCALE {
+                    env.handle_poison_microblock(h1, h1).unwrap();
+                }
+            })
+        },
+    );
+}
+
 criterion_group!(
     benches,
     // bench_add,
@@ -2643,10 +2708,12 @@ criterion_group!(
     // bench_contract_storage,
     // bench_principal_of,
     // bench_stx_transfer,
+    bench_stx_get_balance,
     bench_analysis_pass_read_only, // g
     bench_analysis_pass_arithmetic_only_checker, // g
     bench_analysis_pass_trait_checker, // g
-    bench_analysis_pass_type_checker // g
+    bench_analysis_pass_type_checker, // g
+    bench_poison_microblock,
 );
 
 criterion_main!(benches);
