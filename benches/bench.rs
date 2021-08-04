@@ -58,6 +58,7 @@ use blockstack_lib::vm::analysis::trait_checker::TraitChecker;
 use blockstack_lib::vm::analysis::arithmetic_checker::ArithmeticOnlyChecker;
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
+const INPUT_SIZES_ANALYSIS_PASS: [u16; 6] = [1, 2, 8, 16, 32, 64];
 const INPUT_SIZES_ARITHMETIC: [u16; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const SCALE: u16 = 100;
@@ -305,7 +306,7 @@ fn bench_analysis<F, G>(
         // use warmed up marf
         let headers_db = SimHeadersDB::new();
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
 
         let mut local_context = TypingContext::new();
         let mut cost_tracker = LimitedCostTracker::new_free();
@@ -347,7 +348,7 @@ fn bench_analysis_pass<F>(
 {
     let mut group = c.benchmark_group(function.to_string());
 
-    for input_size in INPUT_SIZES.iter() {
+    for input_size in INPUT_SIZES_ANALYSIS_PASS.iter() {
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
 
         let (_, contract) = gen_analysis_pass(function, 1, *input_size);
@@ -366,7 +367,7 @@ fn bench_analysis_pass<F>(
         // use warmed up marf
         let headers_db = SimHeadersDB::new();
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
 
         let mut analysis_db = marf_store.as_analysis_db();
 
@@ -411,7 +412,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
     let function = AnalysisCostFunction::TraitChecker;
     let mut group = c.benchmark_group(function.to_string());
 
-    for input_size in INPUT_SIZES.iter() {
+    for input_size in INPUT_SIZES_ANALYSIS_PASS.iter() {
         // Parse the setup contract
         let (setup_opt, mut contract) = gen_analysis_pass(function, 1, *input_size);
         let setup_contract = setup_opt.unwrap();
@@ -449,7 +450,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
         // use warmed up marf
         let headers_db = SimHeadersDB::new();
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
         let mut analysis_db = marf_store.as_analysis_db();
 
         // add defined traits to pre contract analysis
@@ -499,7 +500,7 @@ fn bench_analysis_pass_type_checker(
     let function = AnalysisCostFunction::TypeChecker;
     let mut group = c.benchmark_group(function.to_string());
 
-    for input_size in INPUT_SIZES.iter() {
+    for input_size in INPUT_SIZES_ANALYSIS_PASS.iter() {
         // Parse the setup contract
         let (setup_opt, mut contract) = gen_analysis_pass(function, 1, *input_size);
         let setup_contract = setup_opt.unwrap();
@@ -537,7 +538,7 @@ fn bench_analysis_pass_type_checker(
         // use warmed up marf
         let headers_db = SimHeadersDB::new();
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
         let mut analysis_db = marf_store.as_analysis_db();
 
         // add defined traits to pre contract analysis
@@ -2534,8 +2535,8 @@ criterion_group!(
     benches,
     // bench_add,
     // bench_sub,
-    bench_mul,
-    bench_div,
+    // bench_mul,
+    // bench_div,
     // bench_le,
     // bench_leq,
     // bench_ge,
