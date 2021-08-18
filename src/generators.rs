@@ -1913,6 +1913,28 @@ pub fn gen_analysis_pass_type_checker(input_size: u16) -> (Option<String>, Strin
 }
 
 /// Returns tuple of optional setup clarity code, and "main" clarity code
+pub fn gen_analysis_pass(function: AnalysisCostFunction, _scale: u16, input_size: u16) -> (Option<String>, String) {
+    match function {
+        AnalysisCostFunction::ReadOnly => gen_analysis_pass_read_only(input_size),
+        AnalysisCostFunction::TypeChecker => gen_analysis_pass_type_checker(input_size),
+        AnalysisCostFunction::TraitChecker => gen_analysis_pass_trait_checker(input_size),
+        AnalysisCostFunction::ArithmeticOnlyChecker => gen_analysis_pass_arithmetic_only(input_size),
+    }
+}
+
+// contract-call-bench? does everything contract-call? does, except load and execute the contract code
+pub fn gen_contract_call(scale: u16) -> (Option<String>, String) {
+    // let mut setup_body = String::new();
+    let mut body = String::new();
+
+    for _ in 0..scale {
+        body.push_str("(contract-call-bench? 'SP000000000000000000002Q6VF78.cost-voting get-counter) ");
+    }
+
+    (None, body)
+}
+
+/// Returns tuple of optional setup clarity code, and "main" clarity code
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Option<String>, String) {
     match function {
         // arithmetic
@@ -2007,7 +2029,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         ClarityCostFunction::NftOwner => gen_nft_owner("nft-get-owner?", scale),
         ClarityCostFunction::NftBurn => gen_nft_burn("nft-burn?", scale),
         // Stacks
-        ClarityCostFunction::PoisonMicroblock => unimplemented!(),
+        ClarityCostFunction::PoisonMicroblock => unimplemented!(), // don't need a gen for this
         ClarityCostFunction::BlockInfo => gen_get_block_info(scale),
         ClarityCostFunction::StxBalance => gen_stx_get_balance(scale),
         ClarityCostFunction::StxTransfer => gen_stx_transfer(scale),
@@ -2057,21 +2079,11 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         ClarityCostFunction::TypeParseStep => gen_type_parse_step(scale), // called by `parse_type_repr` in `signatures.rs` (takes in symbolic expression)
         // Uncategorized
         ClarityCostFunction::UserFunctionApplication => gen_analysis_get_function_entry(input_size),
-        ClarityCostFunction::ContractCall => unimplemented!(),
+        ClarityCostFunction::ContractCall => gen_contract_call(scale),
+        // ClarityCostFunction::ContractCallBench => gen_contract_call(scale),
         ClarityCostFunction::ContractOf => unimplemented!(),
         ClarityCostFunction::PrincipalOf => gen_principal_of(scale),
         ClarityCostFunction::AtBlock => gen_at_block(scale),
         ClarityCostFunction::LoadContract => unimplemented!(), // called at start of execute_contract
-    }
-}
-
-
-/// Returns tuple of optional setup clarity code, and "main" clarity code
-pub fn gen_analysis_pass(function: AnalysisCostFunction, _scale: u16, input_size: u16) -> (Option<String>, String) {
-    match function {
-        AnalysisCostFunction::ReadOnly => gen_analysis_pass_read_only(input_size),
-        AnalysisCostFunction::TypeChecker => gen_analysis_pass_type_checker(input_size),
-        AnalysisCostFunction::TraitChecker => gen_analysis_pass_trait_checker(input_size),
-        AnalysisCostFunction::ArithmeticOnlyChecker => gen_analysis_pass_arithmetic_only(input_size),
     }
 }
