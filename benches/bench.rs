@@ -1,7 +1,7 @@
 use std::fs;
 use std::num::ParseIntError;
 
-use benchmarking_lib::generators::{gen, gen_read_only_func, helper_generate_rand_char_string, make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map, make_sized_values_map, helper_make_value_for_sized_type_sig, gen_analysis_pass};
+use benchmarking_lib::generators::{define_dummy_trait, gen, gen_analysis_pass, gen_read_only_func, helper_generate_rand_char_string, helper_make_value_for_sized_type_sig, make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map, make_sized_values_map};
 use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
 use blockstack_lib::address::AddressHashMode;
 use blockstack_lib::chainstate::stacks::db::StacksChainState;
@@ -29,6 +29,7 @@ use blockstack_lib::vm::ast::definition_sorter::DefinitionSorter;
 use blockstack_lib::vm::ast::expression_identifier::ExpressionIdentifier;
 use blockstack_lib::vm::ast::{build_ast, parser, ContractAST};
 use blockstack_lib::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
+use blockstack_lib::vm::contracts::Contract;
 use blockstack_lib::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
 use blockstack_lib::vm::costs::{CostTracker, ExecutionCost, LimitedCostTracker};
 use blockstack_lib::vm::database::clarity_store::NullBackingStore;
@@ -154,13 +155,46 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
             );
 
             conn.as_transaction(|tx| {
-                tx.with_clarity_db(|db| {
-                    (0..100).for_each(|j| {
-                        db.put(format!("key{}", j).as_str(), &Value::none());
-                    });
-                    Ok(())
-                })
-                .unwrap();
+                if ix == 1 {
+                    let define_identifier = dbg!(QualifiedContractIdentifier::local("define").unwrap());
+                    let define_contract = "(define-trait trait-1 ((get-1 (uint) (response uint uint))))";
+
+                    let (define_ast, _analysis) = tx.analyze_smart_contract(
+                        &define_identifier,
+                        define_contract
+                    ).unwrap();
+
+                    tx.initialize_smart_contract(
+                        &define_identifier,
+                        &define_ast,
+                        &define_contract,
+                        |_, _| false
+                    ).unwrap();
+                } else if ix == 2 {
+                    let impl_identifier = dbg!(QualifiedContractIdentifier::local("impl").unwrap());
+                    let impl_contract = "(impl-trait .define.trait-1)
+                        (define-public (get-1 (x uint)) (ok u99))";
+
+                    let (impl_ast, _analysis) = tx.analyze_smart_contract(
+                        &impl_identifier,
+                        impl_contract
+                    ).unwrap();
+
+                    tx.initialize_smart_contract(
+                        &impl_identifier,
+                        &impl_ast,
+                        &impl_contract,
+                        |_, _| false
+                    ).unwrap();
+                } else {
+                    tx.with_clarity_db(|db| {
+                        (0..100).for_each(|j| {
+                            db.put(format!("key{}", j).as_str(), &Value::none());
+                        });
+                        Ok(())
+                    })
+                    .unwrap();
+                }
             });
 
             conn.commit_to_block(current_block);
@@ -808,7 +842,7 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
         let headers_db = SimHeadersDB::new();
 
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
 
         let mut analysis_db = marf_store.as_analysis_db();
         let mut cost_tracker = LimitedCostTracker::new_free();
@@ -877,7 +911,7 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
         let headers_db = SimHeadersDB::new();
 
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
 
         let mut analysis_db = marf_store.as_analysis_db();
         let mut cost_tracker = LimitedCostTracker::new_free();
@@ -1094,7 +1128,7 @@ fn bench_lookup_function(c: &mut Criterion) {
     // use warmed up marf
     let headers_db = SimHeadersDB::new();
     let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-    let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+    let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
     let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
     let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
@@ -1620,7 +1654,7 @@ fn bench_analysis_storage(c: &mut Criterion) {
         let mut cost_tracker = LimitedCostTracker::new_free();
         let headers_db = SimHeadersDB::new();
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
         let mut analysis_db = marf_store.as_analysis_db();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
@@ -1970,7 +2004,7 @@ fn bench_create_ft(c: &mut Criterion) {
     let headers_db = SimHeadersDB::new();
 
     let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-    let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+    let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
 
     let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
@@ -2043,7 +2077,7 @@ fn bench_create_nft(c: &mut Criterion) {
         let headers_db = SimHeadersDB::new();
 
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
 
         let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
@@ -2171,7 +2205,7 @@ fn bench_create_map(c: &mut Criterion) {
         let headers_db = SimHeadersDB::new();
 
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
 
         let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
@@ -2221,7 +2255,7 @@ fn bench_create_var(c: &mut Criterion) {
         let headers_db = SimHeadersDB::new();
 
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
 
         let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
@@ -2470,7 +2504,7 @@ fn bench_load_contract(
     let headers_db = SimHeadersDB::new();
 
     let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-    let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+    let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
 
     let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
@@ -2606,6 +2640,66 @@ fn bench_contract_call(c: &mut Criterion) {
     )
 }
 
+fn bench_contract_of(c: &mut Criterion) {
+    // let mut group = c.benchmark_group(ClarityCostFunction::ContractOf.to_string());
+
+    // let headers_db = SimHeadersDB::new();
+
+    // let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+    // let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
+
+    // let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+
+    // let mut owned_env = OwnedEnvironment::new_free(true, clarity_db);
+    // owned_env.begin();
+
+    // let mut env = owned_env.get_exec_environment(None);
+
+    // let contract_defining_trait = "(define-trait trait-1 ((get-1 (uint) (response uint uint))))";
+
+    // let dispatching_contract = "(use-trait trait-1 .define.trait-1)
+    //     (define-public (wrapped-get-1 (contract <trait-1>))
+    //         (ok (contract-of contract)))";
+
+    // let impl_contract = "(impl-trait .defun.trait-1)
+    //     (define-public (get-1 (x uint)) (ok u99))";
+    
+
+    // let contract = "
+    //     (define-trait token-trait
+    //         ((transfer? (principal principal uint) (response uint uint))
+    //          (get-balance (principal) (response uint uint))))
+         
+    //     (impl-trait .trait.token-trait)
+
+    //     (define-public (get-balance (account principal))
+    //         (ok u0))
+
+    //     (define-public (transfer? (from principal) (to principal) (amount uint))
+    //         (ok u0))";
+
+    // env.initialize_contract(
+    //     QualifiedContractIdentifier::local("define").unwrap(),
+    //     &contract_defining_trait
+    // ).unwrap();
+
+    // env.initialize_contract(
+    //     QualifiedContractIdentifier::local("impl").unwrap(),
+    //     &impl_contract
+    // ).unwrap();
+
+    // let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+    // run_bench(&mut group, ClarityCostFunction::ContractOf, SCALE, 1, clarity_db, eval)
+
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::ContractOf,
+        SCALE.into(),
+        vec![1],
+        true
+    )
+}
+
 criterion_group!(
     benches,
     // bench_add,
@@ -2724,7 +2818,8 @@ criterion_group!(
     // bench_analysis_pass_trait_checker, // g
     // bench_analysis_pass_type_checker, // g
     // bench_poison_microblock,
-    bench_contract_call,
+    // bench_contract_call,
+    bench_contract_of,
 );
 
 criterion_main!(benches);

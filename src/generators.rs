@@ -1923,11 +1923,30 @@ pub fn gen_analysis_pass(function: AnalysisCostFunction, _scale: u16, input_size
 }
 
 // contract-call-bench? does everything contract-call? does, except load and execute the contract code
-pub fn gen_contract_call(scale: u16) -> (Option<String>, String) {
+fn gen_contract_call(scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
 
     for _ in 0..scale {
         body.push_str("(contract-call-bench? 'SP000000000000000000002Q6VF78.cost-voting get-counter) ");
+    }
+
+    (None, body)
+}
+
+fn gen_contract_of(scale: u16) -> (Option<String>, String) {
+    // let mut body = String::from("
+    //     (use-trait token-trait .trait.token-trait)
+    //     (define-private (test (contract <token-trait>))
+    //         (contract-of contract)) 
+    // ");
+
+    let mut body =
+    String::from("(use-trait trait-1 'S1G2081040G2081040G2081040G208105NK8PE5.define.trait-1)
+        (define-private (test (contract <trait-1>))
+            (contract-of contract)) ");
+
+    for _ in 0..scale {
+        body.push_str("(test 'SP000000000000000000002Q6VF78.impl) ");
     }
 
     (None, body)
@@ -2079,7 +2098,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         // Uncategorized
         ClarityCostFunction::UserFunctionApplication => gen_analysis_get_function_entry(input_size),
         ClarityCostFunction::ContractCall => gen_contract_call(scale),
-        ClarityCostFunction::ContractOf => unimplemented!(),
+        ClarityCostFunction::ContractOf => gen_contract_of(scale),
         ClarityCostFunction::PrincipalOf => gen_principal_of(scale),
         ClarityCostFunction::AtBlock => gen_at_block(scale),
         ClarityCostFunction::LoadContract => unimplemented!(), // called at start of execute_contract
