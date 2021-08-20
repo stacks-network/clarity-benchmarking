@@ -1924,7 +1924,6 @@ pub fn gen_analysis_pass(function: AnalysisCostFunction, _scale: u16, input_size
 
 // contract-call-bench? does everything contract-call? does, except load and execute the contract code
 pub fn gen_contract_call(scale: u16) -> (Option<String>, String) {
-    // let mut setup_body = String::new();
     let mut body = String::new();
 
     for _ in 0..scale {
@@ -2080,7 +2079,6 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         // Uncategorized
         ClarityCostFunction::UserFunctionApplication => gen_analysis_get_function_entry(input_size),
         ClarityCostFunction::ContractCall => gen_contract_call(scale),
-        // ClarityCostFunction::ContractCallBench => gen_contract_call(scale),
         ClarityCostFunction::ContractOf => unimplemented!(),
         ClarityCostFunction::PrincipalOf => gen_principal_of(scale),
         ClarityCostFunction::AtBlock => gen_at_block(scale),
