@@ -70,7 +70,7 @@ dependencies = [
 [[package]]
 name = "blockstack-core"
 version = "0.0.1"
-source = "git+https://github.com/blockstack/stacks-blockchain?branch=exp/clarity-bench-no-op#e672a37e5ac19a4a3a895cbc6009f0117e39a12b"
+source = "git+https://github.com/blockstack/stacks-blockchain?branch=dev/clarity-benchmarking#d219261ba07f5a96e91cae29a96aa0203279f283"
 dependencies = [
  "chrono",
  "curve25519-dalek",

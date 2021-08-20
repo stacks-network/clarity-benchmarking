@@ -587,7 +587,7 @@ fn helper_deepen_typing_context(
         let mut cost_tracker = LimitedCostTracker::new_free();
         let headers_db = SimHeadersDB::new();
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
         let mut analysis_db = marf_store.as_analysis_db();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
@@ -710,7 +710,7 @@ fn bench_contract_storage(c: &mut Criterion) {
         let headers_db = SimHeadersDB::new();
 
         let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(0)), &StacksBlockId(as_hash(1)));
+        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
 
         let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
@@ -2596,6 +2596,16 @@ fn bench_poison_microblock(c: &mut Criterion) {
     );
 }
 
+fn bench_contract_call(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::ContractCall,
+        SCALE.into(),
+        vec![1],
+        true
+    )
+}
+
 criterion_group!(
     benches,
     // bench_add,
@@ -2708,12 +2718,13 @@ criterion_group!(
     // bench_contract_storage,
     // bench_principal_of,
     // bench_stx_transfer,
-    bench_stx_get_balance,
-    bench_analysis_pass_read_only, // g
-    bench_analysis_pass_arithmetic_only_checker, // g
-    bench_analysis_pass_trait_checker, // g
-    bench_analysis_pass_type_checker, // g
-    bench_poison_microblock,
+    // bench_stx_get_balance,
+    // bench_analysis_pass_read_only, // g
+    // bench_analysis_pass_arithmetic_only_checker, // g
+    // bench_analysis_pass_trait_checker, // g
+    // bench_analysis_pass_type_checker, // g
+    // bench_poison_microblock,
+    bench_contract_call,
 );
 
 criterion_main!(benches);
