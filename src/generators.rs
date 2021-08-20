@@ -1934,19 +1934,10 @@ fn gen_contract_call(scale: u16) -> (Option<String>, String) {
 }
 
 fn gen_contract_of(scale: u16) -> (Option<String>, String) {
-    // let mut body = String::from("
-    //     (use-trait token-trait .trait.token-trait)
-    //     (define-private (test (contract <token-trait>))
-    //         (contract-of contract)) 
-    // ");
-
-    let mut body =
-    String::from("(use-trait trait-1 'S1G2081040G2081040G2081040G208105NK8PE5.define.trait-1)
-        (define-private (test (contract <trait-1>))
-            (contract-of contract)) ");
+    let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str("(test 'SP000000000000000000002Q6VF78.impl) ");
+        body.push_str("(contract-call? .use-trait bench-contract-of .impl-trait) ");
     }
 
     (None, body)

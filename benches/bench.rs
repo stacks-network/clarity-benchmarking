@@ -156,14 +156,15 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
 
             conn.as_transaction(|tx| {
                 if ix == 1 {
-                    let define_identifier = dbg!(QualifiedContractIdentifier::local("define").unwrap());
+                    let define_identifier = QualifiedContractIdentifier::local("define-trait").unwrap();
                     let define_contract = "(define-trait trait-1 ((get-1 (uint) (response uint uint))))";
 
-                    let (define_ast, _analysis) = tx.analyze_smart_contract(
+                    let (define_ast, analysis) = tx.analyze_smart_contract(
                         &define_identifier,
                         define_contract
                     ).unwrap();
 
+                    tx.save_analysis(&define_identifier, &analysis).unwrap();
                     tx.initialize_smart_contract(
                         &define_identifier,
                         &define_ast,
@@ -171,30 +172,49 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
                         |_, _| false
                     ).unwrap();
                 } else if ix == 2 {
-                    let impl_identifier = dbg!(QualifiedContractIdentifier::local("impl").unwrap());
-                    let impl_contract = "(impl-trait .define.trait-1)
+                    let impl_identifier = QualifiedContractIdentifier::local("impl-trait").unwrap();
+                    let impl_contract = "(impl-trait .define-trait.trait-1)
                         (define-public (get-1 (x uint)) (ok u99))";
 
-                    let (impl_ast, _analysis) = tx.analyze_smart_contract(
+                    let (impl_ast, analysis) = tx.analyze_smart_contract(
                         &impl_identifier,
                         impl_contract
                     ).unwrap();
 
+                    tx.save_analysis(&impl_identifier, &analysis).unwrap();
                     tx.initialize_smart_contract(
                         &impl_identifier,
                         &impl_ast,
                         &impl_contract,
                         |_, _| false
                     ).unwrap();
-                } else {
-                    tx.with_clarity_db(|db| {
-                        (0..100).for_each(|j| {
-                            db.put(format!("key{}", j).as_str(), &Value::none());
-                        });
-                        Ok(())
-                    })
-                    .unwrap();
+                } else if ix == 3 {
+                    let use_identifier = QualifiedContractIdentifier::local("use-trait").unwrap();
+                    let use_contract = "(use-trait trait-1 .define-trait.trait-1)
+                        (define-public (bench-contract-of (contract <trait-1>))
+                            (ok (contract-of contract)))";
+
+                    let (use_ast, analysis) = tx.analyze_smart_contract(
+                        &use_identifier,
+                        use_contract
+                    ).unwrap();
+
+                    tx.save_analysis(&use_identifier, &analysis).unwrap();
+                    tx.initialize_smart_contract(
+                        &use_identifier,
+                        &use_ast,
+                        &use_contract,
+                        |_, _| false
+                    ).unwrap();
                 }
+
+                tx.with_clarity_db(|db| {
+                    (0..100).for_each(|j| {
+                        db.put(format!("key{}", j).as_str(), &Value::none());
+                    });
+                    Ok(())
+                })
+                .unwrap();
             });
 
             conn.commit_to_block(current_block);
@@ -2641,56 +2661,6 @@ fn bench_contract_call(c: &mut Criterion) {
 }
 
 fn bench_contract_of(c: &mut Criterion) {
-    // let mut group = c.benchmark_group(ClarityCostFunction::ContractOf.to_string());
-
-    // let headers_db = SimHeadersDB::new();
-
-    // let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-    // let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-
-    // let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
-
-    // let mut owned_env = OwnedEnvironment::new_free(true, clarity_db);
-    // owned_env.begin();
-
-    // let mut env = owned_env.get_exec_environment(None);
-
-    // let contract_defining_trait = "(define-trait trait-1 ((get-1 (uint) (response uint uint))))";
-
-    // let dispatching_contract = "(use-trait trait-1 .define.trait-1)
-    //     (define-public (wrapped-get-1 (contract <trait-1>))
-    //         (ok (contract-of contract)))";
-
-    // let impl_contract = "(impl-trait .defun.trait-1)
-    //     (define-public (get-1 (x uint)) (ok u99))";
-    
-
-    // let contract = "
-    //     (define-trait token-trait
-    //         ((transfer? (principal principal uint) (response uint uint))
-    //          (get-balance (principal) (response uint uint))))
-         
-    //     (impl-trait .trait.token-trait)
-
-    //     (define-public (get-balance (account principal))
-    //         (ok u0))
-
-    //     (define-public (transfer? (from principal) (to principal) (amount uint))
-    //         (ok u0))";
-
-    // env.initialize_contract(
-    //     QualifiedContractIdentifier::local("define").unwrap(),
-    //     &contract_defining_trait
-    // ).unwrap();
-
-    // env.initialize_contract(
-    //     QualifiedContractIdentifier::local("impl").unwrap(),
-    //     &impl_contract
-    // ).unwrap();
-
-    // let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
-    // run_bench(&mut group, ClarityCostFunction::ContractOf, SCALE, 1, clarity_db, eval)
-
     bench_with_input_sizes(
         c,
         ClarityCostFunction::ContractOf,
