@@ -156,7 +156,7 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
 
             conn.as_transaction(|tx| {
                 if ix == 1 {
-                    let define_identifier = QualifiedContractIdentifier::local("define-trait").unwrap();
+                    let define_identifier = QualifiedContractIdentifier::local("define-trait-contract").unwrap();
                     let define_contract = "(define-trait trait-1 ((get-1 (uint) (response uint uint))))";
 
                     let (define_ast, analysis) = tx.analyze_smart_contract(
@@ -172,8 +172,8 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
                         |_, _| false
                     ).unwrap();
                 } else if ix == 2 {
-                    let impl_identifier = QualifiedContractIdentifier::local("impl-trait").unwrap();
-                    let impl_contract = "(impl-trait .define-trait.trait-1)
+                    let impl_identifier = QualifiedContractIdentifier::local("impl-trait-contract").unwrap();
+                    let impl_contract = "(impl-trait .define-trait-contract.trait-1)
                         (define-public (get-1 (x uint)) (ok u99))";
 
                     let (impl_ast, analysis) = tx.analyze_smart_contract(
@@ -189,8 +189,8 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
                         |_, _| false
                     ).unwrap();
                 } else if ix == 3 {
-                    let use_identifier = QualifiedContractIdentifier::local("use-trait").unwrap();
-                    let use_contract = "(use-trait trait-1 .define-trait.trait-1)
+                    let use_identifier = QualifiedContractIdentifier::local("use-trait-contract").unwrap();
+                    let use_contract = "(use-trait trait-1 .define-trait-contract.trait-1)
                         (define-public (bench-contract-of (contract <trait-1>))
                             (ok (contract-of contract)))";
 

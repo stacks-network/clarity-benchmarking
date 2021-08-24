@@ -1937,7 +1937,7 @@ fn gen_contract_of(scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str("(contract-call? .use-trait bench-contract-of .impl-trait) ");
+        body.push_str("(contract-call? .use-trait-contract bench-contract-of .impl-trait-contract) ");
     }
 
     (None, body)
