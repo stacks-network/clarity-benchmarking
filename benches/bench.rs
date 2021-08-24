@@ -1283,7 +1283,7 @@ fn bench_analysis_bind_name(c: &mut Criterion) {
     ) {
         type_checker.type_map.delete_all();
         for exp in &contract_ast.expressions {
-            type_checker.try_type_check_define(&exp, local_context);
+            type_checker.bench_try_type_check_define(&exp, local_context);
         }
     }
 
@@ -1291,7 +1291,7 @@ fn bench_analysis_bind_name(c: &mut Criterion) {
         c,
         ClarityCostFunction::AnalysisBindName,
         SCALE,
-        vec![1],
+        INPUT_SIZES.into(),
         dummy_setup_code,
         eval_type_check_define,
     )

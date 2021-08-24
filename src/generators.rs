@@ -147,6 +147,24 @@ pub fn make_sized_tuple_sigs_map(input_sizes: Vec<u16>) -> HashMap<u16, TupleTyp
     ret_map
 }
 
+fn helper_make_clarity_type_for_sized_type_sig(input_size: u16) -> String {
+    match input_size {
+        1 => "uint".to_string(),
+        2 => "(optional bool)".to_string(),
+        n => {
+            let mult = n / 8;
+            // (tuple (key-name-0 key-type-0) (key-name-1 key-type-1) ...)
+            let mut key_pairs = String::new();
+            for i in 0..mult {
+                let id_name = if i < 10 { "id--" } else { "id-" };
+                let name = format!("{}{}", id_name, i);
+                key_pairs.push_str(&*format!("({} uint) ", name));
+            }
+            format!("(tuple {})", key_pairs)
+        }
+    }
+}
+
 fn helper_make_clarity_value_for_sized_type_sig(input_size: u16) -> String {
     let mut rng = rand::thread_rng();
     match input_size {
@@ -1585,28 +1603,30 @@ fn gen_analysis_option_check(scale: u16) -> (Option<String>, String) {
     (None, body)
 }
 
-fn gen_analysis_bind_name(scale: u16) -> (Option<String>, String) {
+fn gen_analysis_bind_name(scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
-    for i in 0..scale {
-        let mut args = match rng.gen_range(0..3) {
+    for _ in 0..scale {
+        let var_name = "dummy-name";
+        let clar_type = helper_make_clarity_type_for_sized_type_sig(input_size);
+        let clar_val = helper_make_clarity_value_for_sized_type_sig(input_size);
+
+         match rng.gen_range(0..3) {
             0 => {
-                let (statement, _) = helper_define_fungible_token_statement();
-                statement
+                let args = format!("{} {} {}", var_name, clar_type, clar_val);
+                body.push_str(&*format!("(define-data-var {}) ", args));
             }
             1 => {
-                let (statement, _, _, _, _, _, _, _) = helper_create_map();
-                statement
+                let args = format!("{} {}", var_name, clar_val);
+                body.push_str(&*format!("(define-constant {}) ", args));
             }
             2 => {
-                let (_, statement) = gen_create_var(1);
-                statement
+                let args = format!("{} {}", var_name, clar_type);
+                body.push_str(&*format!("(define-non-fungible-token {}) ", args));
             }
             _ => unreachable!("Numbers out of range should not be generated."),
         };
-
-        body.push_str(&*format!("{} ", args));
     }
     println!("{}", body);
     (None, body)
@@ -1968,7 +1988,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         ClarityCostFunction::AnalysisIterableFunc => gen_analysis_iterable_func(scale, input_size),
         ClarityCostFunction::AnalysisOptionCons => gen_analysis_option_cons(scale),
         ClarityCostFunction::AnalysisOptionCheck => gen_analysis_option_check(scale),
-        ClarityCostFunction::AnalysisBindName => gen_analysis_bind_name(scale),
+        ClarityCostFunction::AnalysisBindName => gen_analysis_bind_name(scale, input_size),
         ClarityCostFunction::AnalysisListItemsCheck => {
             gen_analysis_list_items_check(scale, input_size)
         }
