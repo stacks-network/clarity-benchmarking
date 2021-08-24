@@ -820,7 +820,7 @@ fn gen_tuple_merge(scale: u16, input_size: u16) -> (Option<String>, String) {
     let tuple_b = format!("(tuple {})", tuple_b_vals);
 
     for _ in 0..scale {
-        body.push_str(&*format!("(merge tuple-a tuple-b)"));
+        body.push_str(&*format!("(merge tuple-a tuple-b) "));
     }
 
     (None, format!(
@@ -837,7 +837,7 @@ fn gen_tuple_cons(scale: u16, input_size: u16) -> (Option<String>, String) {
         .collect::<Vec<String>>()
         .join(" ");
 
-    let tuple = format!("(tuple {})", tuple_vals);
+    let tuple = format!("(tuple {}) ", tuple_vals);
 
     for _ in 0..scale {
         body.push_str(&tuple);

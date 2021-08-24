@@ -2690,7 +2690,7 @@ criterion_group!(
     // bench_sqrti,
     // bench_log2,
     // bench_tuple_get,
-    // bench_tuple_merge,
+    bench_tuple_merge,
     // bench_tuple_cons,
     // bench_hash160,
     // bench_sha256,
@@ -2789,7 +2789,7 @@ criterion_group!(
     // bench_analysis_pass_type_checker, // g
     // bench_poison_microblock,
     // bench_contract_call,
-    bench_contract_of,
+    // bench_contract_of,
 );
 
 criterion_main!(benches);
