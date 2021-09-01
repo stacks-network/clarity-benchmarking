@@ -156,7 +156,8 @@ fn helper_make_clarity_type_for_sized_type_sig(input_size: u16) -> String {
             // (tuple (key-name-0 key-type-0) (key-name-1 key-type-1) ...)
             let mut key_pairs = String::new();
             for i in 0..mult {
-                let id_name = if i < 10 { "id--" } else { "id-" };
+                // the id name is constructed like this to ensure key names all have equal length
+                let id_name = if i < 10 { "id--" } else if i < 100 { "id-" } else { "id" };
                 let name = format!("{}{}", id_name, i);
                 key_pairs.push_str(&*format!("({} uint) ", name));
             }
@@ -175,7 +176,8 @@ fn helper_make_clarity_value_for_sized_type_sig(input_size: u16) -> String {
             // assume n is a multiple of 8
             let tuple_vals = (0..mult)
                 .map(|i| {
-                    let id_name = if i < 10 { "id--" } else { "id-" };
+                    // the id name is constructed like this to ensure key names all have equal length
+                    let id_name = if i < 10 { "id--" } else if i < 100 { "id-" } else { "id" };
                     format!("({}{} {})", id_name, i, rng.gen::<u32>())
                 })
                 .collect::<Vec<String>>()
@@ -226,7 +228,8 @@ fn make_sized_type_sig(input_size: u16) -> TypeSignature {
             let mut type_map = Vec::new();
             let mult = n / 8;
             for i in 0..mult {
-                let id_name = if i < 10 { "id--" } else { "id-" };
+                // the id name is constructed like this to ensure key names all have equal length
+                let id_name = if i < 10 { "id--" } else if i < 100 { "id-" } else {"id"};
                 let name = ClarityName::try_from(format!("{}{}", id_name, i)).unwrap();
                 let type_sig = type_list.choose(&mut rng).unwrap().clone();
                 type_map.push((name, type_sig));
