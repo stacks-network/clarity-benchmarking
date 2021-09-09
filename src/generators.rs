@@ -2085,7 +2085,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         ClarityCostFunction::CreateVar => gen_create_var(scale),
         ClarityCostFunction::FetchVar => gen_var_set_get("var-get", scale, false),
         ClarityCostFunction::SetVar => gen_var_set_get("var-set", scale, true),
-        ClarityCostFunction::BindName => gen_define_constant("define-constant", scale), // used for define var and define function
+        ClarityCostFunction::BindName => gen_define_constant("define-constant-bench", scale), // used for define var and define function
         // Functions with single clarity value input
         ClarityCostFunction::Print => gen_single_clar_value("print", scale),
         ClarityCostFunction::SomeCons => gen_single_clar_value("some", scale),
