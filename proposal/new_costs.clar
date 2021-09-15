@@ -1,17 +1,11 @@
 (define-read-only (cost_analysis_type_annotate (n uint))
     (runtime (linear n u3 u13)))
 
-(define-read-only (cost_analysis_type_check (n uint))
-    (runtime (linear n u128 u0)))
-
 (define-read-only (cost_analysis_type_lookup (n uint))
     (runtime (linear n u1 u6)))
 
 (define-read-only (cost_analysis_visit (n uint))
     (runtime u16))
-
-(define-read-only (cost_analysis_iterable_func (n uint))
-    (runtime (linear n u263 u0)))
 
 (define-read-only (cost_analysis_option_cons (n uint))
     (runtime u60))
@@ -94,14 +88,8 @@
 (define-read-only (cost_element_at (n uint))
     (runtime u489))
 
-(define-read-only (cost_index_of (n uint))
-    (runtime (linear n u0 u543)))
-
 (define-read-only (cost_fold (n uint))
     (runtime u521))
-
-(define-read-only (cost_list_cons (n uint))
-    (runtime (linear n u0 u269)))
 
 (define-read-only (cost_type_parse_step (n uint))
     (runtime u5))
@@ -166,29 +154,11 @@
 (define-read-only (cost_begin (n uint))
     (runtime u212))
 
-(define-read-only (cost_hash160 (n uint))
-    (runtime (linear n u0 u294)))
-
-(define-read-only (cost_sha256 (n uint))
-    (runtime (linear n u0 u255)))
-
-(define-read-only (cost_sha512 (n uint))
-    (runtime (linear n u0 u251)))
-
-(define-read-only (cost_sha512t256 (n uint))
-    (runtime (linear n u0 u252)))
-
-(define-read-only (cost_keccak256 (n uint))
-    (runtime (linear n u0 u270)))
-
 (define-read-only (cost_secp256k1recover (n uint))
     (runtime u14346))
 
 (define-read-only (cost_secp256k1verify (n uint))
     (runtime u13544))
-
-(define-read-only (cost_print (n uint))
-    (runtime (linear n u0 u1734)))
 
 (define-read-only (cost_some_cons (n uint))
     (runtime u232))
