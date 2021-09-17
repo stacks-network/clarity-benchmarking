@@ -1461,16 +1461,16 @@ fn gen_append(scale: u16) -> (Option<String>, String) {
     (None, body)
 }
 
-fn gen_list_cons(scale: u16) -> (Option<String>, String) {
+fn gen_list_cons(scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
         let (list_type, _) = helper_gen_clarity_type(true, false, true);
-        let list_len = rng.gen_range(1..10);
+        let list_len = input_size;
+        let item_val = "true";
         let mut args = String::new();
         for _ in 0..list_len {
-            let new_item_val = helper_gen_clarity_value(&list_type, rng.gen_range(2..50), 1, None);
-            args.push_str(&*format!("{} ", new_item_val));
+            args.push_str(&*format!("{} ", item_val));
         }
         let statement = format!("(list {}) ", args);
         body.push_str(&statement);
@@ -2037,7 +2037,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         ClarityCostFunction::Len => gen_len(scale),
         ClarityCostFunction::ElementAt => gen_element_at(scale),
         ClarityCostFunction::IndexOf => gen_index_of(scale),
-        ClarityCostFunction::ListCons => gen_list_cons(scale),
+        ClarityCostFunction::ListCons => gen_list_cons(scale, input_size),
         ClarityCostFunction::Append => gen_append(scale),
         // Hash
         ClarityCostFunction::Hash160 => gen_hash("hash160", scale),

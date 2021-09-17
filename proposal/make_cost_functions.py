@@ -331,19 +331,19 @@ def make_clarity_cost_function(function_name, a_const, b_const):
     (runtime u%s))
 """ % (function_name, b_int)
         elif func_type == "linear":
-            a_int = int(a_float * SCALE)
+            a_int = max(int(a_float * SCALE), 1)
             b_int = int(b_float * SCALE)
             return """(define-read-only (%s (n uint))
     (runtime (linear n u%s u%s)))
 """ % (function_name, a_int, b_int)
         elif func_type == "logn":
-            a_int = int(a_float * SCALE)
+            a_int = max(int(a_float * SCALE), 1)
             b_int = int(b_float * SCALE)
             return """(define-read-only (%s (n uint))
     (runtime (logn n u%s u%s)))
 """ % (function_name, a_int, b_int)
         elif func_type == "nlogn":
-            a_int = int(a_float * SCALE)
+            a_int = max(int(a_float * SCALE), 1)
             b_int = int(b_float * SCALE)
             return """(define-read-only (%s (n uint))
     (runtime (nlogn n u%s u%s)))
@@ -353,7 +353,7 @@ def make_clarity_cost_function(function_name, a_const, b_const):
             return None
     else:
         if function_name in special_functions_lin_scale_2:
-            a_int = int(a_float * SCALE)
+            a_int = max(int(a_float * SCALE), 1)
             b_int = int(b_float * SCALE)
             return special_functions_lin_scale_2[function_name].format(a_int, b_int)
         elif function_name in special_functions_lin_scale_1:
@@ -362,6 +362,57 @@ def make_clarity_cost_function(function_name, a_const, b_const):
         else:
             print("Unhandled special case: %s" % function_name)
             return None
+
+def make_clarity_cost_table_row(function_name, a_const, b_const):
+    a_float = float(a_const)
+    b_float = float(b_const)
+    a_int = max(int(a_float * SCALE), 1)
+    b_int = int(b_float * SCALE)
+
+    # only apply `SCALE` to the constants once we know the
+    # type of function we have. we do not have any function
+    # types currently that require non-linear scaling, but
+    # we may eventually
+    if function_name in to_skip:
+        print("SKIP: %s" % function_name)
+        return None
+
+    func_format = ""
+    arg_count = 2
+    if function_name in function_name_to_type:
+        func_type = function_name_to_type[function_name]
+        if func_type == "constant":
+            arg_count = 1
+            func_format = "f(x) := {}"
+        elif func_type == "linear":
+            func_format = "f(x) := {}*x + {}"
+        elif func_type == "logn":
+            func_format = "f(x) := {}*log(x) + {}"
+        elif func_type == "nlogn":
+            func_format = "f(x) := {}*x*log(x) + {}"
+        else:
+            print("ERROR: unknown type %s for %s" % (func_type, function_name))
+            return None
+    else:
+        if function_name in special_functions_lin_scale_2:
+            func_format = "f(x) := {}*x + {}"
+        elif function_name in special_functions_lin_scale_1:
+            arg_count = 1
+            func_format = "f(x) := {}"
+        else:
+            print("Unhandled special case: %s" % function_name)
+            return None
+
+    old_entry = ""
+    new_entry = ""
+    if arg_count == 1:
+        old_entry = func_format.format(1000)
+        new_entry = func_format.format(b_int)
+    else:
+        old_entry = func_format.format(1000, 1000)
+        new_entry = func_format.format(a_int, b_int)
+
+    return "| {} | {} | {} |".format(function_name, new_entry, old_entry)
 
 def load_function_name_types(filename):
     with open(filename, 'r') as raw_file:
@@ -373,6 +424,7 @@ def main():
     load_function_name_types('./function_name_to_type.csv')
 
     clarity_functions = []
+    table_rows = []
 
     with open('./estimated_constants.csv', 'r') as raw_file:
         csv_reader = csv.DictReader(raw_file, delimiter=',')
@@ -383,12 +435,29 @@ def main():
                 row["b"].strip()
             )
 
+            row_result = make_clarity_cost_table_row(
+                row["function"].strip(),
+                row["a"].strip(),
+                row["b"].strip()
+            )
+
             if result != None:
                 clarity_functions.append(result)
+            if row_result != None:
+                table_rows.append(row_result)
 
     with open('new_costs.clar', 'w') as out_file:
         for clarity_function in clarity_functions:
             out_file.write(clarity_function)
             out_file.write('\n')
+
+    with open('updates_table.md', 'w') as out_file:
+        out_file.write("| Runtime cost | New function | Old function |")
+        out_file.write("\n")
+        out_file.write("| ----------- | ----------- | ----------- |")
+        out_file.write("\n")
+        for row in table_rows:
+            out_file.write(row)
+            out_file.write("\n")
 
 main()
