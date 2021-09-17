@@ -2417,7 +2417,7 @@ fn bench_set_entry(c: &mut Criterion) {
         ClarityCostFunction::SetEntry,
         SCALE.into(),
         vec![1],
-        true,
+        false,
     )
 }
 
@@ -2427,7 +2427,7 @@ fn bench_fetch_entry(c: &mut Criterion) {
         ClarityCostFunction::FetchEntry,
         SCALE.into(),
         vec![1],
-        true,
+        false,
     )
 }
 
@@ -2468,7 +2468,7 @@ fn bench_list_cons(c: &mut Criterion) {
         c,
         ClarityCostFunction::ListCons,
         SCALE.into(),
-        vec![1],
+        INPUT_SIZES.into(),
         false,
     )
 }
@@ -2584,7 +2584,7 @@ fn bench_stx_transfer(c: &mut Criterion) {
         ClarityCostFunction::StxTransfer,
         SCALE.into(),
         vec![1],
-        true
+        false
     )
 }
 
@@ -2594,7 +2594,7 @@ fn bench_stx_get_balance(c: &mut Criterion) {
         ClarityCostFunction::StxBalance,
         SCALE.into(),
         vec![1],
-        true
+        false
     )
 }
 

@@ -20,7 +20,7 @@
     (runtime (linear n u25 u5)))
 
 (define-read-only (cost_analysis_check_tuple_get (n uint))
-    (runtime (logn n u0 u2)))
+    (runtime (logn n u1 u2)))
 
 (define-read-only (cost_analysis_check_tuple_cons (n uint))
     (runtime (nlogn n u11 u155)))
@@ -41,7 +41,7 @@
     (runtime u15))
 
 (define-read-only (cost_analysis_lookup_variable_depth (n uint))
-    (runtime (nlogn n u0 u65)))
+    (runtime (nlogn n u1 u65)))
 
 (define-read-only (cost_ast_parse (n uint))
     (runtime (linear n u173 u285411)))
@@ -68,7 +68,7 @@
     (runtime (linear n u26 u0)))
 
 (define-read-only (cost_let (n uint))
-    (runtime (linear n u0 u290)))
+    (runtime (linear n u1 u290)))
 
 (define-read-only (cost_if (n uint))
     (runtime u199))
@@ -209,10 +209,10 @@
     (runtime (linear n u3 u153)))
 
 (define-read-only (cost_append (n uint))
-    (runtime (linear n u0 u1026)))
+    (runtime (linear n u1 u1026)))
 
 (define-read-only (cost_concat (n uint))
-    (runtime (linear n u0 u867)))
+    (runtime (linear n u1 u867)))
 
 (define-read-only (cost_as_max_len (n uint))
     (runtime u508))
