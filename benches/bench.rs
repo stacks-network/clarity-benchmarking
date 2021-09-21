@@ -1,19 +1,36 @@
 use std::fs;
 use std::num::ParseIntError;
 
-use benchmarking_lib::generators::{define_dummy_trait, gen, gen_analysis_pass, gen_read_only_func, helper_generate_rand_char_string, helper_make_value_for_sized_type_sig, make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map, make_sized_values_map};
+use benchmarking_lib::generators::{
+    define_dummy_trait, gen, gen_analysis_pass, gen_read_only_func,
+    helper_generate_rand_char_string, helper_make_value_for_sized_type_sig,
+    make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map,
+    make_sized_values_map,
+};
 use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
 use blockstack_lib::address::AddressHashMode;
 use blockstack_lib::chainstate::stacks::db::StacksChainState;
-use blockstack_lib::chainstate::stacks::{C32_ADDRESS_VERSION_TESTNET_SINGLESIG, CoinbasePayload, StacksBlock, StacksMicroblock, StacksPrivateKey, StacksPublicKey, StacksTransaction, StacksTransactionSigner, TransactionAnchorMode, TransactionAuth, TransactionPayload, TransactionVersion};
+use blockstack_lib::chainstate::stacks::{
+    CoinbasePayload, StacksBlock, StacksMicroblock, StacksPrivateKey, StacksPublicKey,
+    StacksTransaction, StacksTransactionSigner, TransactionAnchorMode, TransactionAuth,
+    TransactionPayload, TransactionVersion, C32_ADDRESS_VERSION_TESTNET_SINGLESIG,
+};
 use blockstack_lib::clarity_vm::clarity::ClarityInstance;
 use blockstack_lib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
-use blockstack_lib::core::{BLOCK_LIMIT_MAINNET, FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
-use blockstack_lib::types::chainstate::{BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockHeader, StacksBlockId, StacksMicroblockHeader, StacksWorkScore, VRFSeed};
+use blockstack_lib::core::{
+    BLOCK_LIMIT_MAINNET, FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH,
+};
+use blockstack_lib::types::chainstate::{
+    BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockHeader, StacksBlockId,
+    StacksMicroblockHeader, StacksWorkScore, VRFSeed,
+};
 use blockstack_lib::types::proof::{ClarityMarfTrieId, TrieHash};
-use blockstack_lib::util::hash::{Hash160, MerkleTree, Sha512Trunc256Sum, hex_bytes, to_hex};
+use blockstack_lib::util::hash::{hex_bytes, to_hex, Hash160, MerkleTree, Sha512Trunc256Sum};
 use blockstack_lib::util::secp256k1::MessageSignature;
 use blockstack_lib::util::vrf::VRFProof;
+use blockstack_lib::vm::analysis::arithmetic_checker::ArithmeticOnlyChecker;
+use blockstack_lib::vm::analysis::read_only_checker::ReadOnlyChecker;
+use blockstack_lib::vm::analysis::trait_checker::TraitChecker;
 use blockstack_lib::vm::analysis::type_checker::contexts::TypingContext;
 use blockstack_lib::vm::analysis::type_checker::natives::assets::bench_check_special_mint_asset;
 use blockstack_lib::vm::analysis::type_checker::natives::options::{
@@ -22,9 +39,13 @@ use blockstack_lib::vm::analysis::type_checker::natives::options::{
 use blockstack_lib::vm::analysis::type_checker::natives::sequences::{
     check_special_map, get_simple_native_or_user_define,
 };
-use blockstack_lib::vm::analysis::type_checker::natives::{check_special_get, check_special_let, check_special_list_cons, check_special_merge, check_special_tuple_cons, inner_handle_tuple_get, bench_check_contract_call, bench_analysis_get_function_entry_in_context};
-use blockstack_lib::vm::analysis::type_checker::{TypeChecker, trait_type_size};
-use blockstack_lib::vm::analysis::{ContractAnalysis, AnalysisPass, AnalysisDatabase, CheckResult};
+use blockstack_lib::vm::analysis::type_checker::natives::{
+    bench_analysis_get_function_entry_in_context, bench_check_contract_call, check_special_get,
+    check_special_let, check_special_list_cons, check_special_merge, check_special_tuple_cons,
+    inner_handle_tuple_get,
+};
+use blockstack_lib::vm::analysis::type_checker::{trait_type_size, TypeChecker};
+use blockstack_lib::vm::analysis::{AnalysisDatabase, AnalysisPass, CheckResult, ContractAnalysis};
 use blockstack_lib::vm::ast::definition_sorter::DefinitionSorter;
 use blockstack_lib::vm::ast::expression_identifier::ExpressionIdentifier;
 use blockstack_lib::vm::ast::{build_ast, parser, ContractAST};
@@ -42,24 +63,25 @@ use blockstack_lib::vm::types::signatures::TypeSignature::{
     BoolType, IntType, NoType, PrincipalType, TupleType, UIntType,
 };
 use blockstack_lib::vm::types::signatures::{TupleTypeSignature, TypeSignature};
-use blockstack_lib::vm::types::{FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier, StandardPrincipalData, TraitIdentifier};
-use blockstack_lib::vm::{ast, eval_all, lookup_variable, CallStack, ClarityName, Environment,
-                         LocalContext, SymbolicExpression, Value, lookup_function,
-                         bench_create_nft_in_context, bench_create_ft_in_context,
-                         bench_create_map_in_context, bench_create_var_in_context};
+use blockstack_lib::vm::types::{
+    FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier,
+    StandardPrincipalData, TraitIdentifier,
+};
+use blockstack_lib::vm::{
+    ast, bench_create_ft_in_context, bench_create_map_in_context, bench_create_nft_in_context,
+    bench_create_var_in_context, eval_all, lookup_function, lookup_variable, CallStack,
+    ClarityName, Environment, LocalContext, SymbolicExpression, Value,
+};
 use criterion::measurement::WallTime;
 use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
 };
 use lazy_static::lazy_static;
 use rand::prelude::SliceRandom;
-use rand::{Rng, thread_rng};
+use rand::{thread_rng, Rng};
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
-use blockstack_lib::vm::analysis::read_only_checker::ReadOnlyChecker;
-use blockstack_lib::vm::analysis::trait_checker::TraitChecker;
-use blockstack_lib::vm::analysis::arithmetic_checker::ArithmeticOnlyChecker;
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const INPUT_SIZES_ANALYSIS_PASS: [u16; 6] = [1, 2, 8, 16, 32, 64];
@@ -101,10 +123,11 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
         let marf = MarfedKV::open(&pre_initialized_path, None).unwrap();
         let mut clarity_instance = ClarityInstance::new(false, marf, ExecutionCost::max_value());
 
-        let p1 = QualifiedContractIdentifier::parse("S1G2081040G2081040G2081040G208105NK8PE5.c1").unwrap().issuer;
-        let principals: [PrincipalData; 2] = [
-            p1.into(), StandardPrincipalData(0, as_hash160(2)).into(),
-        ];
+        let p1 = QualifiedContractIdentifier::parse("S1G2081040G2081040G2081040G208105NK8PE5.c1")
+            .unwrap()
+            .issuer;
+        let principals: [PrincipalData; 2] =
+            [p1.into(), StandardPrincipalData(0, as_hash160(2)).into()];
 
         let mut conn = clarity_instance.begin_test_genesis_block(
             &StacksBlockId::sentinel(),
@@ -123,7 +146,8 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
                     stx_account.save();
                 });
                 Ok(())
-            }).unwrap();
+            })
+            .unwrap();
 
             // scaling
             tx.with_clarity_db(|db| {
@@ -156,56 +180,60 @@ fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedK
 
             conn.as_transaction(|tx| {
                 if ix == 1 {
-                    let define_identifier = QualifiedContractIdentifier::local("define-trait-contract").unwrap();
-                    let define_contract = "(define-trait trait-1 ((get-1 (uint) (response uint uint))))";
+                    let define_identifier =
+                        QualifiedContractIdentifier::local("define-trait-contract").unwrap();
+                    let define_contract =
+                        "(define-trait trait-1 ((get-1 (uint) (response uint uint))))";
 
-                    let (define_ast, analysis) = tx.analyze_smart_contract(
-                        &define_identifier,
-                        define_contract
-                    ).unwrap();
+                    let (define_ast, analysis) = tx
+                        .analyze_smart_contract(&define_identifier, define_contract)
+                        .unwrap();
 
                     tx.save_analysis(&define_identifier, &analysis).unwrap();
                     tx.initialize_smart_contract(
                         &define_identifier,
                         &define_ast,
                         &define_contract,
-                        |_, _| false
-                    ).unwrap();
+                        |_, _| false,
+                    )
+                    .unwrap();
                 } else if ix == 2 {
-                    let impl_identifier = QualifiedContractIdentifier::local("impl-trait-contract").unwrap();
+                    let impl_identifier =
+                        QualifiedContractIdentifier::local("impl-trait-contract").unwrap();
                     let impl_contract = "(impl-trait .define-trait-contract.trait-1)
                         (define-public (get-1 (x uint)) (ok u99))";
 
-                    let (impl_ast, analysis) = tx.analyze_smart_contract(
-                        &impl_identifier,
-                        impl_contract
-                    ).unwrap();
+                    let (impl_ast, analysis) = tx
+                        .analyze_smart_contract(&impl_identifier, impl_contract)
+                        .unwrap();
 
                     tx.save_analysis(&impl_identifier, &analysis).unwrap();
                     tx.initialize_smart_contract(
                         &impl_identifier,
                         &impl_ast,
                         &impl_contract,
-                        |_, _| false
-                    ).unwrap();
+                        |_, _| false,
+                    )
+                    .unwrap();
                 } else if ix == 3 {
-                    let use_identifier = QualifiedContractIdentifier::local("use-trait-contract").unwrap();
+                    let use_identifier =
+                        QualifiedContractIdentifier::local("use-trait-contract").unwrap();
                     let use_contract = "(use-trait trait-1 .define-trait-contract.trait-1)
                         (define-public (bench-contract-of (contract <trait-1>))
                             (ok (contract-of contract)))";
 
-                    let (use_ast, analysis) = tx.analyze_smart_contract(
-                        &use_identifier,
-                        use_contract
-                    ).unwrap();
+                    let (use_ast, analysis) = tx
+                        .analyze_smart_contract(&use_identifier, use_contract)
+                        .unwrap();
 
                     tx.save_analysis(&use_identifier, &analysis).unwrap();
                     tx.initialize_smart_contract(
                         &use_identifier,
                         &use_ast,
                         &use_contract,
-                        |_, _| false
-                    ).unwrap();
+                        |_, _| false,
+                    )
+                    .unwrap();
                 }
 
                 tx.with_clarity_db(|db| {
@@ -258,7 +286,8 @@ fn bench_with_input_sizes(
             let headers_db = SimHeadersDB::new();
             let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
 
-            let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
+            let mut marf_store =
+                marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
             let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
             run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
@@ -301,16 +330,17 @@ fn run_bench<F>(
         Some(pre_contract) => {
             let pre_contract_identifier =
                 QualifiedContractIdentifier::local(&*format!("pre{}", input_size)).unwrap();
-            let pre_contract_ast = match ast::build_ast(&pre_contract_identifier, &pre_contract, &mut ()) {
-                Ok(res) => res,
-                Err(error) => {
-                    panic!("Parsing error: {}", error.diagnostic.message);
-                }
-            };
+            let pre_contract_ast =
+                match ast::build_ast(&pre_contract_identifier, &pre_contract, &mut ()) {
+                    Ok(res) => res,
+                    Err(error) => {
+                        panic!("Parsing error: {}", error.diagnostic.message);
+                    }
+                };
             global_context
                 .execute(|g| eval_all(&pre_contract_ast.expressions, &mut contract_context, g))
                 .unwrap();
-        },
+        }
         _ => {}
     }
 
@@ -396,12 +426,9 @@ fn bench_analysis<F, G>(
     }
 }
 
-fn bench_analysis_pass<F>(
-    c: &mut Criterion,
-    function: AnalysisCostFunction,
-    code_to_bench: F,
-) -> () where
-    F: Fn(&mut ContractAnalysis,  &mut AnalysisDatabase) -> CheckResult<()>,
+fn bench_analysis_pass<F>(c: &mut Criterion, function: AnalysisCostFunction, code_to_bench: F) -> ()
+where
+    F: Fn(&mut ContractAnalysis, &mut AnalysisDatabase) -> CheckResult<()>,
 {
     let mut group = c.benchmark_group(function.to_string());
 
@@ -418,8 +445,11 @@ fn bench_analysis_pass<F>(
             }
         };
         let cost_tracker = LimitedCostTracker::new_free();
-        let mut contract_analysis =
-            ContractAnalysis::new(contract_identifier.clone(), contract_ast.expressions.clone(), cost_tracker);
+        let mut contract_analysis = ContractAnalysis::new(
+            contract_identifier.clone(),
+            contract_ast.expressions.clone(),
+            cost_tracker,
+        );
 
         // use warmed up marf
         let headers_db = SimHeadersDB::new();
@@ -448,22 +478,24 @@ fn bench_analysis_pass<F>(
     ()
 }
 
-fn bench_analysis_pass_read_only(
-    c: &mut Criterion
-) {
+fn bench_analysis_pass_read_only(c: &mut Criterion) {
     bench_analysis_pass(c, AnalysisCostFunction::ReadOnly, ReadOnlyChecker::run_pass)
 }
 
-fn bench_analysis_pass_arithmetic_only_checker(
-    c: &mut Criterion
-) {
-    fn wrapper_arithmetic_checker(contract_analysis: &mut ContractAnalysis, _db: &mut AnalysisDatabase) -> CheckResult<()> {
+fn bench_analysis_pass_arithmetic_only_checker(c: &mut Criterion) {
+    fn wrapper_arithmetic_checker(
+        contract_analysis: &mut ContractAnalysis,
+        _db: &mut AnalysisDatabase,
+    ) -> CheckResult<()> {
         ArithmeticOnlyChecker::run(contract_analysis);
         Ok(())
     }
-    bench_analysis_pass(c, AnalysisCostFunction::ArithmeticOnlyChecker, wrapper_arithmetic_checker)
+    bench_analysis_pass(
+        c,
+        AnalysisCostFunction::ArithmeticOnlyChecker,
+        wrapper_arithmetic_checker,
+    )
 }
-
 
 fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
     let function = AnalysisCostFunction::TraitChecker;
@@ -475,20 +507,27 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
         let setup_contract = setup_opt.unwrap();
         let pre_contract_identifier =
             QualifiedContractIdentifier::local(&*format!("pre{}", input_size)).unwrap();
-        let pre_contract_ast = match ast::build_ast(&pre_contract_identifier, &setup_contract, &mut ()) {
-            Ok(res) => res,
-            Err(error) => {
-                panic!("Parsing error: {}", error.diagnostic.message);
-            }
-        };
+        let pre_contract_ast =
+            match ast::build_ast(&pre_contract_identifier, &setup_contract, &mut ()) {
+                Ok(res) => res,
+                Err(error) => {
+                    panic!("Parsing error: {}", error.diagnostic.message);
+                }
+            };
         let cost_tracker = LimitedCostTracker::new_free();
-        let mut pre_contract_analysis =
-            ContractAnalysis::new(pre_contract_identifier.clone(), pre_contract_ast.expressions.clone(), cost_tracker);
+        let mut pre_contract_analysis = ContractAnalysis::new(
+            pre_contract_identifier.clone(),
+            pre_contract_ast.expressions.clone(),
+            cost_tracker,
+        );
 
         // add impl-trait statements
         let principal_data = PrincipalData::Standard(pre_contract_identifier.issuer.clone());
         for i in 0..*input_size {
-            let impl_trait = format!("(impl-trait '{}.{}.dummy-trait-{}) ", principal_data, pre_contract_identifier.name, i);
+            let impl_trait = format!(
+                "(impl-trait '{}.{}.dummy-trait-{}) ",
+                principal_data, pre_contract_identifier.name, i
+            );
             contract.push_str(&impl_trait);
         }
         let contract_size = contract.len();
@@ -501,8 +540,11 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             }
         };
         let cost_tracker = LimitedCostTracker::new_free();
-        let mut contract_analysis =
-            ContractAnalysis::new(contract_identifier.clone(), contract_ast.expressions.clone(), cost_tracker);
+        let mut contract_analysis = ContractAnalysis::new(
+            contract_identifier.clone(),
+            contract_ast.expressions.clone(),
+            cost_tracker,
+        );
 
         // use warmed up marf
         let headers_db = SimHeadersDB::new();
@@ -517,7 +559,9 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
         for exp in &pre_contract_ast.expressions {
             type_checker.try_type_check_define(exp, &mut typing_context);
         }
-        type_checker.contract_context.into_contract_analysis(&mut pre_contract_analysis);
+        type_checker
+            .contract_context
+            .into_contract_analysis(&mut pre_contract_analysis);
 
         // add implemented traits to contract analysis
         let mut cost_tracker = LimitedCostTracker::new_free();
@@ -526,7 +570,9 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
         for exp in &contract_ast.expressions {
             type_checker.try_type_check_define(exp, &mut typing_context);
         }
-        type_checker.contract_context.into_contract_analysis(&mut contract_analysis);
+        type_checker
+            .contract_context
+            .into_contract_analysis(&mut contract_analysis);
 
         analysis_db.execute::<_, _, ()>(|db| {
             db.insert_contract(&pre_contract_identifier, &pre_contract_analysis);
@@ -550,10 +596,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
     ()
 }
 
-fn bench_analysis_pass_type_checker(
-    c: &mut Criterion,
-)
-{
+fn bench_analysis_pass_type_checker(c: &mut Criterion) {
     let function = AnalysisCostFunction::TypeChecker;
     let mut group = c.benchmark_group(function.to_string());
 
@@ -563,20 +606,27 @@ fn bench_analysis_pass_type_checker(
         let setup_contract = setup_opt.unwrap();
         let pre_contract_identifier =
             QualifiedContractIdentifier::local(&*format!("pre{}", input_size)).unwrap();
-        let pre_contract_ast = match ast::build_ast(&pre_contract_identifier, &setup_contract, &mut ()) {
-            Ok(res) => res,
-            Err(error) => {
-                panic!("Parsing error: {}", error.diagnostic.message);
-            }
-        };
+        let pre_contract_ast =
+            match ast::build_ast(&pre_contract_identifier, &setup_contract, &mut ()) {
+                Ok(res) => res,
+                Err(error) => {
+                    panic!("Parsing error: {}", error.diagnostic.message);
+                }
+            };
         let cost_tracker = LimitedCostTracker::new_free();
-        let mut pre_contract_analysis =
-            ContractAnalysis::new(pre_contract_identifier.clone(), pre_contract_ast.expressions.clone(), cost_tracker);
+        let mut pre_contract_analysis = ContractAnalysis::new(
+            pre_contract_identifier.clone(),
+            pre_contract_ast.expressions.clone(),
+            cost_tracker,
+        );
 
         // add use-trait statements
         let principal_data = PrincipalData::Standard(pre_contract_identifier.issuer.clone());
         for i in 0..*input_size {
-            let impl_trait = format!("(use-trait dummy-trait-{}-alias '{}.{}.dummy-trait-{}) ", i, principal_data, pre_contract_identifier.name, i);
+            let impl_trait = format!(
+                "(use-trait dummy-trait-{}-alias '{}.{}.dummy-trait-{}) ",
+                i, principal_data, pre_contract_identifier.name, i
+            );
             contract.push_str(&impl_trait);
         }
         let contract_size = contract.len();
@@ -589,8 +639,11 @@ fn bench_analysis_pass_type_checker(
             }
         };
         let cost_tracker = LimitedCostTracker::new_free();
-        let mut contract_analysis =
-            ContractAnalysis::new(contract_identifier.clone(), contract_ast.expressions.clone(), cost_tracker);
+        let mut contract_analysis = ContractAnalysis::new(
+            contract_identifier.clone(),
+            contract_ast.expressions.clone(),
+            cost_tracker,
+        );
 
         // use warmed up marf
         let headers_db = SimHeadersDB::new();
@@ -605,7 +658,9 @@ fn bench_analysis_pass_type_checker(
         for exp in &pre_contract_ast.expressions {
             type_checker.try_type_check_define(exp, &mut typing_context);
         }
-        type_checker.contract_context.into_contract_analysis(&mut pre_contract_analysis);
+        type_checker
+            .contract_context
+            .into_contract_analysis(&mut pre_contract_analysis);
 
         analysis_db.execute::<_, _, ()>(|db| {
             db.insert_contract(&pre_contract_identifier, &pre_contract_analysis);
@@ -868,9 +923,9 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
-
         let (_, contract) = gen(function, 1, *input_size);
-        let mut contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
+        let mut contract_identifier =
+            QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
             Ok(res) => res,
             Err(error) => {
@@ -879,26 +934,31 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
         };
 
         let cost_tracker = LimitedCostTracker::new_free();
-        let mut contract_analysis =
-            ContractAnalysis::new(contract_identifier.clone(), contract_ast.expressions.clone(), cost_tracker);
+        let mut contract_analysis = ContractAnalysis::new(
+            contract_identifier.clone(),
+            contract_ast.expressions.clone(),
+            cost_tracker,
+        );
 
         let mut typing_context = TypingContext::new();
         type_checker.try_type_check_define(&contract_ast.expressions[0], &mut typing_context);
-        type_checker.contract_context.into_contract_analysis(&mut contract_analysis);
+        type_checker
+            .contract_context
+            .into_contract_analysis(&mut contract_analysis);
 
         type_checker.db.execute(|db| {
             db.insert_contract(&contract_identifier, &contract_analysis);
             let trait_name = ClarityName::try_from("dummy-trait".to_string()).unwrap();
-            let trait_id = TraitIdentifier{
+            let trait_id = TraitIdentifier {
                 name: trait_name.clone(),
-                contract_identifier: contract_identifier.clone()
+                contract_identifier: contract_identifier.clone(),
             };
 
             // get the size of the trait
-            let trait_sig = db.get_defined_trait(
-                &contract_identifier,
-                &trait_name,
-            ).unwrap().unwrap();
+            let trait_sig = db
+                .get_defined_trait(&contract_identifier, &trait_name)
+                .unwrap()
+                .unwrap();
             let type_size = trait_type_size(&trait_sig).unwrap();
 
             group.throughput(Throughput::Bytes(type_size));
@@ -915,7 +975,7 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             );
             // this snippet is here since the "execute" context needs to determine the return type
             if false {
-                return Err(())
+                return Err(());
             }
 
             Ok(())
@@ -937,9 +997,9 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
-
         let (_, contract) = gen(function, 1, *input_size);
-        let mut contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
+        let mut contract_identifier =
+            QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
             Ok(res) => res,
             Err(error) => {
@@ -948,24 +1008,30 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
         };
 
         let cost_tracker = LimitedCostTracker::new_free();
-        let mut contract_analysis =
-            ContractAnalysis::new(contract_identifier.clone(), contract_ast.expressions.clone(), cost_tracker);
+        let mut contract_analysis = ContractAnalysis::new(
+            contract_identifier.clone(),
+            contract_ast.expressions.clone(),
+            cost_tracker,
+        );
 
         let mut typing_context = TypingContext::new();
         type_checker.try_type_check_define(&contract_ast.expressions[0], &mut typing_context);
-        type_checker.contract_context.into_contract_analysis(&mut contract_analysis);
+        type_checker
+            .contract_context
+            .into_contract_analysis(&mut contract_analysis);
 
         type_checker.db.execute(|db| {
             db.insert_contract(&contract_identifier, &contract_analysis);
             let fn_name = ClarityName::try_from("dummy-fn".to_string()).unwrap();
             let type_size = match db
                 .get_read_only_function_type(&contract_identifier, "dummy-fn")
-                .unwrap() {
+                .unwrap()
+            {
                 Some(FunctionType::Fixed(function)) => {
                     let func_sig = FunctionSignature::from(function);
                     func_sig.total_type_size().unwrap()
                 }
-                _ => panic!("unexpected")
+                _ => panic!("unexpected"),
             };
 
             group.throughput(Throughput::Bytes(type_size));
@@ -975,14 +1041,18 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
-                            bench_analysis_get_function_entry_in_context(db, &contract_identifier, &fn_name);
+                            bench_analysis_get_function_entry_in_context(
+                                db,
+                                &contract_identifier,
+                                &fn_name,
+                            );
                         }
                     })
                 },
             );
             // this snippet is here since the "execute" context needs to determine the return type
             if false {
-                return Err(())
+                return Err(());
             }
 
             Ok(())
@@ -1110,21 +1180,25 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
             .execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g))
             .unwrap();
 
-        let trait_obj = contract_context.lookup_trait_definition("dummy-trait").unwrap();
+        let trait_obj = contract_context
+            .lookup_trait_definition("dummy-trait")
+            .unwrap();
         // get size of function signature
         let fn_name = ClarityName::from("dummy-fn");
-        let func_signature =
-            trait_obj
-                .get(&*fn_name)
-                .unwrap();
+        let func_signature = trait_obj.get(&*fn_name).unwrap();
         let curr_size = func_signature.total_type_size().unwrap();
 
         // add trait to the contract context of the type checker
         let trait_clarity_name = ClarityName::from("dummy-trait");
-        type_checker.contract_context.add_trait(trait_clarity_name.clone(), trait_obj);
+        type_checker
+            .contract_context
+            .add_trait(trait_clarity_name.clone(), trait_obj);
 
         // construct trait id
-        let trait_id = TraitIdentifier{contract_identifier: contract_identifier, name: trait_clarity_name};
+        let trait_id = TraitIdentifier {
+            contract_identifier: contract_identifier,
+            name: trait_clarity_name,
+        };
 
         group.throughput(Throughput::Bytes(curr_size as u64));
         group.bench_with_input(
@@ -1132,9 +1206,9 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
             &curr_size,
             |b, &_| {
                 b.iter(|| {
-                   for _ in 0..SCALE {
-                       bench_check_contract_call(&mut type_checker, &trait_id, &fn_name);
-                   }
+                    for _ in 0..SCALE {
+                        bench_check_contract_call(&mut type_checker, &trait_id, &fn_name);
+                    }
                 })
             },
         );
@@ -1156,7 +1230,7 @@ fn bench_lookup_function(c: &mut Criterion) {
 
     let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
     let mut contract_context = ContractContext::new(contract_identifier.clone());
-    let (_, contract) = gen(function, SCALE, SCALE*2);
+    let (_, contract) = gen(function, SCALE, SCALE * 2);
     let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
         Ok(res) => res,
         Err(error) => {
@@ -1183,7 +1257,7 @@ fn bench_lookup_function(c: &mut Criterion) {
             0 => fn_names.push("nonsense".to_string()),
             1 => fn_names.push(format!("fn-{}", i)),
             2 => fn_names.push("no-op".to_string()),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 
@@ -1860,7 +1934,7 @@ fn bench_mul(c: &mut Criterion) {
         ClarityCostFunction::Mul,
         SCALE,
         INPUT_SIZES_ARITHMETIC.into(),
-        false
+        false,
     )
 }
 
@@ -1870,7 +1944,7 @@ fn bench_div(c: &mut Criterion) {
         ClarityCostFunction::Div,
         SCALE,
         INPUT_SIZES_ARITHMETIC.into(),
-        false
+        false,
     )
 }
 
@@ -2028,25 +2102,20 @@ fn bench_create_ft(c: &mut Criterion) {
 
     let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
 
-    let mut global_context =
-        GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
+    let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
     global_context.begin();
 
     let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
     let mut contract_context = ContractContext::new(contract_identifier.clone());
 
     group.throughput(Throughput::Bytes(0));
-    group.bench_with_input(
-        BenchmarkId::from_parameter(0),
-        &0,
-        |b, &_| {
-            b.iter(|| {
-                for _ in 0..SCALE {
-                    bench_create_ft_in_context(&mut global_context, &mut contract_context);
-                }
-            })
-        },
-    );
+    group.bench_with_input(BenchmarkId::from_parameter(0), &0, |b, &_| {
+        b.iter(|| {
+            for _ in 0..SCALE {
+                bench_create_ft_in_context(&mut global_context, &mut contract_context);
+            }
+        })
+    });
 }
 
 fn bench_mint_ft(c: &mut Criterion) {
@@ -2116,7 +2185,11 @@ fn bench_create_nft(c: &mut Criterion) {
             |b, &_| {
                 b.iter(|| {
                     for _ in 0..SCALE {
-                        bench_create_nft_in_context(&mut global_context, &mut contract_context, &asset_type);
+                        bench_create_nft_in_context(
+                            &mut global_context,
+                            &mut contract_context,
+                            &asset_type,
+                        );
                     }
                 })
             },
@@ -2246,7 +2319,12 @@ fn bench_create_map(c: &mut Criterion) {
             |b, &_| {
                 b.iter(|| {
                     for _ in 0..SCALE {
-                        bench_create_map_in_context(&mut global_context, &mut contract_context, key_type.clone(), value_type.clone());
+                        bench_create_map_in_context(
+                            &mut global_context,
+                            &mut contract_context,
+                            key_type.clone(),
+                            value_type.clone(),
+                        );
                     }
                 })
             },
@@ -2295,7 +2373,12 @@ fn bench_create_var(c: &mut Criterion) {
             |b, &_| {
                 b.iter(|| {
                     for _ in 0..SCALE {
-                        bench_create_var_in_context(&mut global_context, &mut contract_context, value_type.clone(), value.clone());
+                        bench_create_var_in_context(
+                            &mut global_context,
+                            &mut contract_context,
+                            value_type.clone(),
+                            value.clone(),
+                        );
                     }
                 })
             },
@@ -2507,18 +2590,10 @@ fn bench_block_info(c: &mut Criterion) {
 }
 
 fn bench_at_block(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::AtBlock,
-        SCALE.into(),
-        vec![1],
-        true,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::AtBlock, SCALE.into(), vec![1], true)
 }
 
-fn bench_load_contract(
-    c: &mut Criterion,
-) {
+fn bench_load_contract(c: &mut Criterion) {
     let mut group = c.benchmark_group(ClarityCostFunction::LoadContract.to_string());
 
     let headers_db = SimHeadersDB::new();
@@ -2534,13 +2609,12 @@ fn bench_load_contract(
     let mut env = owned_env.get_exec_environment(None);
 
     for size in INPUT_SIZES.iter() {
-        let contract_identifier = QualifiedContractIdentifier::local(format!("contract{}", size).as_str()).unwrap();
+        let contract_identifier =
+            QualifiedContractIdentifier::local(format!("contract{}", size).as_str()).unwrap();
         let (_, contract) = gen_read_only_func(*size);
 
-        env.initialize_contract(
-            contract_identifier.clone(),
-            &contract
-        ).unwrap();
+        env.initialize_contract(contract_identifier.clone(), &contract)
+            .unwrap();
 
         group.throughput(Throughput::Bytes(contract.len() as u64));
         group.bench_with_input(
@@ -2584,7 +2658,7 @@ fn bench_stx_transfer(c: &mut Criterion) {
         ClarityCostFunction::StxTransfer,
         SCALE.into(),
         vec![1],
-        false
+        false,
     )
 }
 
@@ -2594,7 +2668,7 @@ fn bench_stx_get_balance(c: &mut Criterion) {
         ClarityCostFunction::StxBalance,
         SCALE.into(),
         vec![1],
-        false
+        false,
     )
 }
 
@@ -2622,9 +2696,10 @@ fn bench_poison_microblock(c: &mut Criterion) {
 
     let pubkh = h1.check_recover_pubkey().unwrap();
 
-    env.global_context.database.insert_microblock_pubkey_hash_height(
-        &pubkh, 60
-    ).unwrap();
+    env.global_context
+        .database
+        .insert_microblock_pubkey_hash_height(&pubkh, 60)
+        .unwrap();
 
     let sk = StacksPrivateKey::from_hex(privk_string).unwrap();
     let addr = StacksAddress::from_public_keys(
@@ -2632,22 +2707,19 @@ fn bench_poison_microblock(c: &mut Criterion) {
         &AddressHashMode::SerializeP2PKH,
         1,
         &vec![StacksPublicKey::from_private(&sk)],
-    ).unwrap();
+    )
+    .unwrap();
 
     env.sender = Some(addr.into());
 
     group.throughput(Throughput::Bytes(1u64));
-    group.bench_with_input(
-        BenchmarkId::from_parameter(1),
-        &1,
-        |b, &_| {
-            b.iter(|| {
-                for _ in 0..SCALE {
-                    env.handle_poison_microblock(h1, h1).unwrap();
-                }
-            })
-        },
-    );
+    group.bench_with_input(BenchmarkId::from_parameter(1), &1, |b, &_| {
+        b.iter(|| {
+            for _ in 0..SCALE {
+                env.handle_poison_microblock(h1, h1).unwrap();
+            }
+        })
+    });
 }
 
 fn bench_contract_call(c: &mut Criterion) {
@@ -2656,7 +2728,7 @@ fn bench_contract_call(c: &mut Criterion) {
         ClarityCostFunction::ContractCall,
         SCALE.into(),
         vec![1],
-        true
+        true,
     )
 }
 
@@ -2666,7 +2738,7 @@ fn bench_contract_of(c: &mut Criterion) {
         ClarityCostFunction::ContractOf,
         SCALE.into(),
         vec![1],
-        true
+        true,
     )
 }
 
