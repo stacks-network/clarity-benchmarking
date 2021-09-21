@@ -1052,6 +1052,7 @@ fn gen_create_map(_function_name: &'static str, scale: u16) -> (Option<String>, 
 fn gen_set_entry(scale: u16, _input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
+    // TODO: make this dependent on input_size
     let (
         statement,
         map_name,
@@ -1098,12 +1099,14 @@ fn gen_set_entry(scale: u16, _input_size: u16) -> (Option<String>, String) {
         };
         body.push_str(&statement);
     }
-    println!("{}", body);
+    println!("gen_set_entry:statement:{}", statement);
+    println!("gen_set_entry:body:{}", body);
     (Some(statement), body)
 }
 
 fn gen_fetch_entry(scale: u16, _input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
+    // TODO: make this dependent on input_size
     let (
         mut statement,
         map_name,
@@ -1151,7 +1154,8 @@ fn gen_fetch_entry(scale: u16, _input_size: u16) -> (Option<String>, String) {
         );
         body.push_str(&statement);
     }
-    println!("{}", body);
+    println!("gen_fetch_entry:statement:{}", statement);
+    println!("gen_fetch_entry:body:{}", body);
     (Some(statement), body)
 }
 
@@ -1177,39 +1181,44 @@ fn gen_var_set_get(
     function_name: &'static str,
     scale: u16,
     set: bool,
-    _input_size: u16,
+    input_size: u16,
 ) -> (Option<String>, String) {
+    let mut setup = String::new();
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
-    let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-    let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
-    let clarity_value = helper_gen_clarity_value(
-        &clarity_type,
-        rng.gen_range(10..200),
-        length.map_or(0, |len| len as usize),
-        None,
-    );
-    let args = match length {
-        Some(l) => format!("{} ({} {}) {}", var_name, clarity_type, l, clarity_value),
-        None => format!("{} {} {}", var_name, clarity_type, clarity_value),
-    };
-    let setup = format!("({} {}) ", "define-data-var", args);
+    // DO NOT SUBMIT: Does it make sense to nest `scale` and `input_size` like this?
     for i in 0..scale {
-        let args = if set {
-            let new_val = helper_gen_clarity_value(
+        for i in 0..input_size {
+            let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+            let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
+            let clarity_value = helper_gen_clarity_value(
                 &clarity_type,
-                i,
+                rng.gen_range(10..200),
                 length.map_or(0, |len| len as usize),
                 None,
             );
-            format!("{} {}", var_name, new_val)
-        } else {
-            format!("{}", var_name)
-        };
-        body.push_str(&*format!("({} {}) ", function_name, args));
+            let args = match length {
+                Some(l) => format!("{} ({} {}) {}", var_name, clarity_type, l, clarity_value),
+                None => format!("{} {} {}", var_name, clarity_type, clarity_value),
+            };
+            setup.push_str(&*format!("({} {}) ", "define-data-var", args));
+            let args = if set {
+                let new_val = helper_gen_clarity_value(
+                    &clarity_type,
+                    i,
+                    length.map_or(0, |len| len as usize),
+                    None,
+                );
+                format!("{} {}", var_name, new_val)
+            } else {
+                format!("{}", var_name)
+            };
+            body.push_str(&*format!("({} {}) ", function_name, args));
+        }
     }
-    println!("{}", body);
+    println!("gen_var_set_get:setup:{}", setup);
+    println!("gen_var_set_get:body:{}", body);
     (Some(setup), body)
 }
 
