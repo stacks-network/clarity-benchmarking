@@ -15,15 +15,18 @@ use blockstack_lib::vm::analysis::contract_interface_builder::ContractInterfaceA
 use blockstack_lib::vm::types::signatures::TypeSignature::{
     BoolType, IntType, PrincipalType, TupleType, UIntType,
 };
-use blockstack_lib::vm::types::{ASCIIData, CharType, ListData, SequenceData, TupleData, TupleTypeSignature, TypeSignature, OptionalData};
+use blockstack_lib::vm::types::{
+    ASCIIData, CharType, ListData, OptionalData, SequenceData, TupleData, TupleTypeSignature,
+    TypeSignature,
+};
 use blockstack_lib::vm::{ClarityName, Value};
 use lazy_static::lazy_static;
 use rand::rngs::ThreadRng;
 use secp256k1::Message as LibSecp256k1Message;
 use std::cmp::min;
-use std::fmt::format;
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
+use std::fmt::format;
 
 lazy_static! {
     pub static ref TUPLE_NAMES: Vec<String> = create_tuple_names(16);
@@ -86,7 +89,6 @@ pub fn make_clarity_type_for_sized_value(input_size: u16) -> String {
             format!("(tuple {})", key_pairs)
         }
     }
-
 }
 
 // make contract for ast parse
@@ -157,7 +159,13 @@ fn helper_make_clarity_type_for_sized_type_sig(input_size: u16) -> String {
             let mut key_pairs = String::new();
             for i in 0..mult {
                 // the id name is constructed like this to ensure key names all have equal length
-                let id_name = if i < 10 { "id--" } else if i < 100 { "id-" } else { "id" };
+                let id_name = if i < 10 {
+                    "id--"
+                } else if i < 100 {
+                    "id-"
+                } else {
+                    "id"
+                };
                 let name = format!("{}{}", id_name, i);
                 key_pairs.push_str(&*format!("({} uint) ", name));
             }
@@ -177,7 +185,13 @@ fn helper_make_clarity_value_for_sized_type_sig(input_size: u16) -> String {
             let tuple_vals = (0..mult)
                 .map(|i| {
                     // the id name is constructed like this to ensure key names all have equal length
-                    let id_name = if i < 10 { "id--" } else if i < 100 { "id-" } else { "id" };
+                    let id_name = if i < 10 {
+                        "id--"
+                    } else if i < 100 {
+                        "id-"
+                    } else {
+                        "id"
+                    };
                     format!("({}{} {})", id_name, i, rng.gen::<u32>())
                 })
                 .collect::<Vec<String>>()
@@ -192,7 +206,9 @@ pub fn helper_make_value_for_sized_type_sig(input_size: u16) -> Value {
     let mut rng = rand::thread_rng();
     match input_size {
         1 => Value::Int(rng.gen()),
-        2 => Value::Optional(OptionalData{ data: Some(Box::new(Value::Bool(rng.gen_bool(0.5))))}),
+        2 => Value::Optional(OptionalData {
+            data: Some(Box::new(Value::Bool(rng.gen_bool(0.5)))),
+        }),
         n => {
             let mult = n / 8;
             // assume n is a multiple of 8
@@ -200,18 +216,22 @@ pub fn helper_make_value_for_sized_type_sig(input_size: u16) -> Value {
             let mut data_map = BTreeMap::new();
             let value_type_sig = TypeSignature::IntType;
             for i in 0..mult {
-                let id_name = if i < 10 { format!("id--{}", i) } else { format!("id-{}", i) };
+                let id_name = if i < 10 {
+                    format!("id--{}", i)
+                } else {
+                    format!("id-{}", i)
+                };
                 let clarity_name = ClarityName::try_from(id_name).unwrap();
                 let value = Value::Int(rng.gen());
                 type_map.insert(clarity_name.clone(), value_type_sig.clone());
                 data_map.insert(clarity_name, value);
             }
-            let tuple_data = TupleData{
+            let tuple_data = TupleData {
                 type_signature: TupleTypeSignature::try_from(type_map).unwrap(),
                 data_map,
             };
 
-           Value::Tuple(tuple_data)
+            Value::Tuple(tuple_data)
         }
     }
 }
@@ -229,7 +249,13 @@ fn make_sized_type_sig(input_size: u16) -> TypeSignature {
             let mult = n / 8;
             for i in 0..mult {
                 // the id name is constructed like this to ensure key names all have equal length
-                let id_name = if i < 10 { "id--" } else if i < 100 { "id-" } else {"id"};
+                let id_name = if i < 10 {
+                    "id--"
+                } else if i < 100 {
+                    "id-"
+                } else {
+                    "id"
+                };
                 let name = ClarityName::try_from(format!("{}{}", id_name, i)).unwrap();
                 let type_sig = type_list.choose(&mut rng).unwrap().clone();
                 type_map.push((name, type_sig));
@@ -267,20 +293,22 @@ pub fn helper_make_sized_clarity_value(input_size: u16) -> String {
     }
 }
 
-pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) -> (Option<String>, String) {
+pub fn gen_arithmetic(
+    function_name: &'static str,
+    scale: u16,
+    input_size: u16,
+) -> (Option<String>, String) {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
     let s = match function_name {
         "/" => 1,
-        _   => 0,
+        _ => 0,
     };
 
     for _ in 0..scale {
         let args = (0..input_size)
-            .map(|i| {
-                rng.gen_range(s..i16::MAX).to_string()
-            })
+            .map(|i| rng.gen_range(s..i16::MAX).to_string())
             .collect::<Vec<String>>()
             .join(" ");
         body.push_str(&format!("({} {}) ", function_name, args));
@@ -416,7 +444,11 @@ fn gen_hash(function_name: &'static str, scale: u16) -> (Option<String>, String)
     (None, body)
 }
 
-fn gen_secp256k1(function_name: &'static str, scale: u16, verify: bool) -> (Option<String>, String) {
+fn gen_secp256k1(
+    function_name: &'static str,
+    scale: u16,
+    verify: bool,
+) -> (Option<String>, String) {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -500,7 +532,7 @@ fn helper_create_principal() -> String {
         1,
         &vec![StacksPublicKey::from_private(&privk)],
     )
-        .unwrap();
+    .unwrap();
     let principal_data = addr.to_account_principal();
     format!("'{}", principal_data)
 }
@@ -713,7 +745,10 @@ fn gen_nft_mint(scale: u16) -> (Option<String>, String) {
         let principal_data = helper_create_principal();
         let nft_value = helper_gen_clarity_value(&nft_type, i, nft_len, None);
 
-        let statement = format!("(nft-mint? {} {} {}) ", token_name, nft_value, principal_data);
+        let statement = format!(
+            "(nft-mint? {} {} {}) ",
+            token_name, nft_value, principal_data
+        );
         body.push_str(&statement);
     }
     println!("{}", body);
@@ -844,10 +879,13 @@ fn gen_tuple_merge(scale: u16, input_size: u16) -> (Option<String>, String) {
         body.push_str(&*format!("(merge tuple-a tuple-b) "));
     }
 
-    (None, format!(
-        "(let ((tuple-a {}) (tuple-b {})) {})",
-        tuple_a, tuple_b, body
-    ))
+    (
+        None,
+        format!(
+            "(let ((tuple-a {}) (tuple-b {})) {})",
+            tuple_a, tuple_b, body
+        ),
+    )
 }
 
 fn gen_tuple_cons(scale: u16, input_size: u16) -> (Option<String>, String) {
@@ -921,7 +959,11 @@ fn gen_response(function_name: &'static str, scale: u16) -> (Option<String>, Str
     (None, body)
 }
 
-fn gen_unwrap(function_name: &'static str, scale: u16, ret_value: bool) -> (Option<String>, String) {
+fn gen_unwrap(
+    function_name: &'static str,
+    scale: u16,
+    ret_value: bool,
+) -> (Option<String>, String) {
     let mut rng = rand::thread_rng();
     let mut body = String::new();
     for i in 0..scale {
@@ -949,7 +991,11 @@ fn gen_unwrap(function_name: &'static str, scale: u16, ret_value: bool) -> (Opti
     (None, body)
 }
 
-fn gen_unwrap_err(function_name: &'static str, scale: u16, ret_value: bool) -> (Option<String>, String) {
+fn gen_unwrap_err(
+    function_name: &'static str,
+    scale: u16,
+    ret_value: bool,
+) -> (Option<String>, String) {
     let mut body = String::new();
     for i in 0..scale {
         let mut args = helper_gen_random_response_value(i, false, true);
@@ -1082,7 +1128,7 @@ fn gen_fetch_entry(scale: u16) -> (Option<String>, String) {
         key_type_len,
         value_name,
         value_type,
-        value_type_len
+        value_type_len,
     ) = helper_create_map();
 
     // insert a value into map
@@ -1102,8 +1148,7 @@ fn gen_fetch_entry(scale: u16) -> (Option<String>, String) {
     statement.push_str(&format!(
         "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
         map_name, key_name, curr_key, value_name, curr_value
-    ))
-;
+    ));
     for i in 0..scale {
         let curr_key_value = if i % 2 == 0 {
             helper_gen_clarity_value(
@@ -1116,7 +1161,10 @@ fn gen_fetch_entry(scale: u16) -> (Option<String>, String) {
             curr_key.clone()
         };
 
-        let statement = format!("(map-get? {} {{ {}: {} }}) ", map_name, key_name, curr_key_value);
+        let statement = format!(
+            "(map-get? {} {{ {}: {} }}) ",
+            map_name, key_name, curr_key_value
+        );
         body.push_str(&statement);
     }
     println!("{}", body);
@@ -1556,13 +1604,7 @@ fn gen_get_block_info(scale: u16) -> (Option<String>, String) {
     // must use block 5 here b/c it has a hardcoded id_bhh
     // TODO: consider hardcoding more id_bhhs and making this random
     for _ in 0..scale {
-        body.push_str(
-            format!(
-                "(get-block-info? {} u5) ",
-                props.choose(&mut rng).unwrap()
-            )
-            .as_str(),
-        )
+        body.push_str(format!("(get-block-info? {} u5) ", props.choose(&mut rng).unwrap()).as_str())
     }
 
     (None, body)
@@ -1583,7 +1625,13 @@ pub fn gen_read_only_func(scale: u16) -> (Option<String>, String) {
     let (_, arith_string) = gen_arithmetic("+", scale, 2);
     body.push_str(arith_string.as_str());
 
-    (None, dbg!(format!("(define-read-only (benchmark-load-contract) (begin {}))", body)))
+    (
+        None,
+        dbg!(format!(
+            "(define-read-only (benchmark-load-contract) (begin {}))",
+            body
+        )),
+    )
 }
 
 fn gen_analysis_option_cons(scale: u16) -> (Option<String>, String) {
@@ -1615,7 +1663,7 @@ fn gen_analysis_bind_name(scale: u16, input_size: u16) -> (Option<String>, Strin
         let clar_type = helper_make_clarity_type_for_sized_type_sig(input_size);
         let clar_val = helper_make_clarity_value_for_sized_type_sig(input_size);
 
-         match rng.gen_range(0..3) {
+        match rng.gen_range(0..3) {
             0 => {
                 let args = format!("{} {} {}", var_name, clar_type, clar_val);
                 body.push_str(&*format!("(define-data-var {}) ", args));
@@ -1752,7 +1800,7 @@ fn gen_ast_cycle_detection(input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
     body.push_str(&*format!("(define-read-only (fn-0) (no-op)) "));
     for i in 1..(input_size + 1) {
-        body.push_str(&*format!("(define-read-only (fn-{}) (fn-{})) ", i, i-1));
+        body.push_str(&*format!("(define-read-only (fn-{}) (fn-{})) ", i, i - 1));
     }
     println!("{}", body);
     (None, body)
@@ -1828,7 +1876,9 @@ fn gen_analysis_lookup_function_types(input_size: u16) -> (Option<String>, Strin
 
 fn gen_analysis_get_function_entry(input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
-    let args = (0..input_size).map(|i| format!(" (f{} uint) ", i)).collect::<String>();
+    let args = (0..input_size)
+        .map(|i| format!(" (f{} uint) ", i))
+        .collect::<String>();
     body.push_str(&*format!("(define-read-only (dummy-fn {}) (no-op)) ", args));
 
     println!("{}", body);
@@ -1838,7 +1888,10 @@ fn gen_analysis_get_function_entry(input_size: u16) -> (Option<String>, String) 
 fn gen_inner_type_check_cost(input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let clar_type = make_clarity_type_for_sized_value(input_size);
-    body.push_str(&*format!("(define-read-only (dummy-fn (f0 {})) (no-op)) ", clar_type));
+    body.push_str(&*format!(
+        "(define-read-only (dummy-fn (f0 {})) (no-op)) ",
+        clar_type
+    ));
 
     println!("{}", body);
     (None, body)
@@ -1870,7 +1923,7 @@ pub fn gen_analysis_pass_read_only(input_size: u16) -> (Option<String>, String) 
         let fn_body = if i == 0 {
             "(let ((a 2) (b (+ 5 6 7))) (+ a b))".to_string()
         } else {
-            format!("(let ((a (dummy-fn-{})) (b (+ 5 6 7))) (+ a b))", i-1)
+            format!("(let ((a (dummy-fn-{})) (b (+ 5 6 7))) (+ a b))", i - 1)
         };
         let fn_def = format!("(define-read-only (dummy-fn-{}) (begin {})) ", i, fn_body);
         body.push_str(&fn_def);
@@ -1885,9 +1938,12 @@ pub fn gen_analysis_pass_arithmetic_only(input_size: u16) -> (Option<String>, St
         let fn_body = if i == 0 {
             "(let ((a 2) (b (+ 5 6 7))) (+ a b))".to_string()
         } else {
-            format!("(let ((a (dummy-fn-{})) (b (+ 5 6 7))) (+ a b))", i-1)
+            format!("(let ((a (dummy-fn-{})) (b (+ 5 6 7))) (+ a b))", i - 1)
         };
-        let fn_def = format!("(define-read-only (dummy-fn-{}) (begin (no-op none) {})) ", i, fn_body);
+        let fn_def = format!(
+            "(define-read-only (dummy-fn-{}) (begin (no-op none) {})) ",
+            i, fn_body
+        );
         body.push_str(&fn_def);
     }
     println!("{}", body);
@@ -1906,13 +1962,16 @@ pub fn gen_analysis_pass_trait_checker(input_size: u16) -> (Option<String>, Stri
         let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
         let final_clarity_type = match length {
             Some(l) => format!("({} {})", clarity_type, l),
-            None => clarity_type
+            None => clarity_type,
         };
 
         let curr_trait = define_dummy_trait(i, &final_clarity_type);
         setup_body.push_str(&curr_trait);
 
-        let impl_fn = format!("(define-public (dummy-fn-{} (arg1 {})) (ok u0)) ", i, final_clarity_type);
+        let impl_fn = format!(
+            "(define-public (dummy-fn-{} (arg1 {})) (ok u0)) ",
+            i, final_clarity_type
+        );
         body.push_str(&impl_fn);
     }
 
@@ -1936,12 +1995,18 @@ pub fn gen_analysis_pass_type_checker(input_size: u16) -> (Option<String>, Strin
 }
 
 /// Returns tuple of optional setup clarity code, and "main" clarity code
-pub fn gen_analysis_pass(function: AnalysisCostFunction, _scale: u16, input_size: u16) -> (Option<String>, String) {
+pub fn gen_analysis_pass(
+    function: AnalysisCostFunction,
+    _scale: u16,
+    input_size: u16,
+) -> (Option<String>, String) {
     match function {
         AnalysisCostFunction::ReadOnly => gen_analysis_pass_read_only(input_size),
         AnalysisCostFunction::TypeChecker => gen_analysis_pass_type_checker(input_size),
         AnalysisCostFunction::TraitChecker => gen_analysis_pass_trait_checker(input_size),
-        AnalysisCostFunction::ArithmeticOnlyChecker => gen_analysis_pass_arithmetic_only(input_size),
+        AnalysisCostFunction::ArithmeticOnlyChecker => {
+            gen_analysis_pass_arithmetic_only(input_size)
+        }
     }
 }
 
@@ -1950,7 +2015,9 @@ fn gen_contract_call(scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str("(contract-call-bench? 'SP000000000000000000002Q6VF78.cost-voting get-counter) ");
+        body.push_str(
+            "(contract-call-bench? 'SP000000000000000000002Q6VF78.cost-voting get-counter) ",
+        );
     }
 
     (None, body)
@@ -1960,7 +2027,9 @@ fn gen_contract_of(scale: u16) -> (Option<String>, String) {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str("(contract-call? .use-trait-contract bench-contract-of .impl-trait-contract) ");
+        body.push_str(
+            "(contract-call? .use-trait-contract bench-contract-of .impl-trait-contract) ",
+        );
     }
 
     (None, body)
@@ -2013,14 +2082,20 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         }
         ClarityCostFunction::AnalysisCheckLet => gen_analysis_check_let(scale, input_size),
         ClarityCostFunction::AnalysisLookupFunction => gen_no_op_with_scale_repetitions(scale),
-        ClarityCostFunction::AnalysisLookupFunctionTypes => gen_analysis_lookup_function_types(input_size),
+        ClarityCostFunction::AnalysisLookupFunctionTypes => {
+            gen_analysis_lookup_function_types(input_size)
+        }
         ClarityCostFunction::AnalysisLookupVariableConst => {
             gen_analysis_lookup_variable_const(scale)
         }
         ClarityCostFunction::AnalysisLookupVariableDepth => unimplemented!(), // no gen function needed
         ClarityCostFunction::AnalysisStorage => gen_analysis_storage(scale, input_size),
-        ClarityCostFunction::AnalysisUseTraitEntry => gen_analysis_lookup_function_types(input_size),
-        ClarityCostFunction::AnalysisGetFunctionEntry => gen_analysis_get_function_entry(input_size),
+        ClarityCostFunction::AnalysisUseTraitEntry => {
+            gen_analysis_lookup_function_types(input_size)
+        }
+        ClarityCostFunction::AnalysisGetFunctionEntry => {
+            gen_analysis_get_function_entry(input_size)
+        }
         ClarityCostFunction::AnalysisFetchContractEntry => unimplemented!(), // not used anywhere
         // Ast
         ClarityCostFunction::AstParse => gen_empty(),
@@ -2028,7 +2103,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         ClarityCostFunction::ContractStorage => gen_contract_storage(input_size),
         // Lookup
         ClarityCostFunction::LookupVariableDepth => unimplemented!(), // no gen function needed
-        ClarityCostFunction::LookupVariableSize => unimplemented!(), // no gen function needed
+        ClarityCostFunction::LookupVariableSize => unimplemented!(),  // no gen function needed
         ClarityCostFunction::LookupFunction => gen_ast_cycle_detection(input_size),
         // List
         ClarityCostFunction::Map => gen_map(scale, input_size), // includes LookupFunction cost
