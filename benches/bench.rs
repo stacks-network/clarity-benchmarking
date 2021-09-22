@@ -2395,7 +2395,7 @@ fn bench_fetch_var(c: &mut Criterion) {
         c,
         ClarityCostFunction::FetchVar,
         SCALE.into(),
-        vec![1],
+        INPUT_SIZES.into(),
         false,
     )
 }
@@ -2792,23 +2792,23 @@ criterion_group!(
     // bench_unwrap_err_or_ret,
     // bench_create_map, // g
     // bench_create_var, // g
-    //    bench_set_var, // g
-    //    bench_fetch_var, // g
-    // bench_print,
-    // bench_if,
-    // bench_asserts,
-    // bench_ok_cons,
-    // bench_some_cons,
-    // bench_err_cons,
-    // bench_concat,
-    // bench_as_max_len,
-    // bench_begin,
-    // bench_bind_name,
-    // bench_default_to,
-    // bench_try,
-    // bench_int_cast,
-    // bench_set_entry, // g
-    bench_fetch_entry, // g
+    //bench_set_var, // g
+    bench_fetch_var, // g
+                     // bench_print,
+                     // bench_if,
+                     // bench_asserts,
+                     // bench_ok_cons,
+                     // bench_some_cons,
+                     // bench_err_cons,
+                     // bench_concat,
+                     // bench_as_max_len,
+                     // bench_begin,
+                     // bench_bind_name,
+                     // bench_default_to,
+                     // bench_try,
+                     // bench_int_cast,
+                     // bench_set_entry, // g
+                     // bench_fetch_entry, // g
                      // bench_match,
                      // bench_let,
                      // bench_index_of,

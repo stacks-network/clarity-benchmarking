@@ -1225,16 +1225,34 @@ fn gen_var_set_get(
     set: bool,
     input_size: u16,
 ) -> (Option<String>, String) {
+    println!("input_size {}", input_size);
     let mut setup = String::new();
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
-    // DO NOT SUBMIT: Does it make sense to nest `scale` and `input_size` like this?
+    let mut tuple_vector = vec![];
+    for i in 0..input_size {
+        let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+        let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
+        let clarity_value = helper_gen_clarity_value(
+            &clarity_type,
+            rng.gen_range(10..200),
+            length.map_or(0, |len| len as usize),
+            None,
+        );
+        let args = match length {
+            Some(l) => format!("{} ({} {}) {}", var_name, clarity_type, l, clarity_value),
+            None => format!("{} {} {}", var_name, clarity_type, clarity_value),
+        };
+        setup.push_str(&*format!("({} {}) ", "define-data-var", args));
+
+        tuple_vector.push((var_name, clarity_type, length, clarity_value));
+    }
     for i in 0..scale {
-        for i in 0..input_size {
-            let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-            let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
-            let clarity_value = helper_gen_clarity_value(
+        let (var_name, clarity_type, length, clarity_value) =
+            &tuple_vector[rng.gen_range(0..input_size) as usize];
+        let args = if set {
+            let new_val = helper_gen_clarity_value(
                 &clarity_type,
                 rng.gen_range(10..200),
                 length.map_or(0, |len| len as usize),
@@ -1257,7 +1275,7 @@ fn gen_var_set_get(
                 format!("{}", var_name)
             };
             body.push_str(&*format!("({} {}) ", function_name, args));
-        }
+        };
     }
     println!("gen_var_set_get:setup:{}", setup);
     println!("gen_var_set_get:body:{}", body);
