@@ -994,6 +994,14 @@ fn gen_unwrap_err(
     (None, body)
 }
 
+///        statement: the statement to run
+///        map_name: name of the map created
+///        key_name: name of the key in the map tuple
+///        key_type: type of the key in the map tuple
+///        key_type_len: length of the key in the map tuple
+///        value_name: name of the value in the map tuple
+///        value_type: type of the value in the map tuple
+///        value_type_len: length of the value in the map tuple
 fn helper_create_map() -> (
     String,
     String,
@@ -1049,12 +1057,13 @@ fn gen_create_map(_function_name: &'static str, scale: u16) -> (Option<String>, 
 
 // setEntry is the cost for map-delete, map-insert, & map-set
 // q: only ever deleting non-existent key; should we change that?
-fn gen_set_entry(scale: u16, _input_size: u16) -> (Option<String>, String) {
+fn gen_set_entry(scale: u16, input_size: u16) -> (Option<String>, String) {
+    println!("input_size: {}", input_size);
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     // TODO: make this dependent on input_size
     let (
-        statement,
+        mut statement,
         map_name,
         key_name,
         key_type,
@@ -1063,6 +1072,29 @@ fn gen_set_entry(scale: u16, _input_size: u16) -> (Option<String>, String) {
         value_type,
         value_type_len,
     ) = helper_create_map();
+
+    for i in 0..input_size {
+        // insert a value into map
+        let curr_key = helper_gen_clarity_value(
+            &key_type,
+            23,
+            key_type_len.map_or(0, |len| len as usize),
+            None,
+        );
+        let curr_value = helper_gen_clarity_value(
+            &value_type,
+            89,
+            value_type_len.map_or(0, |len| len as usize),
+            None,
+        );
+        println!("curr_key, curr_value {:?} {:?}", curr_key, curr_value);
+
+        statement.push_str(&format!(
+            "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
+            map_name, key_name, curr_key, value_name, curr_value
+        ));
+    }
+
     for i in 0..scale {
         let curr_key = helper_gen_clarity_value(
             &key_type,
@@ -1104,7 +1136,7 @@ fn gen_set_entry(scale: u16, _input_size: u16) -> (Option<String>, String) {
     (Some(statement), body)
 }
 
-fn gen_fetch_entry(scale: u16, _input_size: u16) -> (Option<String>, String) {
+fn gen_fetch_entry(scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
     // TODO: make this dependent on input_size
     let (
@@ -1118,24 +1150,34 @@ fn gen_fetch_entry(scale: u16, _input_size: u16) -> (Option<String>, String) {
         value_type_len,
     ) = helper_create_map();
 
-    // insert a value into map
-    let curr_key = helper_gen_clarity_value(
-        &key_type,
-        23,
-        key_type_len.map_or(0, |len| len as usize),
-        None,
-    );
-    let curr_value = helper_gen_clarity_value(
-        &value_type,
-        89,
-        value_type_len.map_or(0, |len| len as usize),
-        None,
-    );
+    let mut keep_key = String::new();
+    let mut keep_value = String::new();
+    for i in 0..input_size {
+        // insert a value into map
+        let curr_key = helper_gen_clarity_value(
+            &key_type,
+            23,
+            key_type_len.map_or(0, |len| len as usize),
+            None,
+        );
+        let curr_value = helper_gen_clarity_value(
+            &value_type,
+            89,
+            value_type_len.map_or(0, |len| len as usize),
+            None,
+        );
+        println!("curr_key, curr_value {:?} {:?}", curr_key, curr_value);
 
-    statement.push_str(&format!(
-        "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
-        map_name, key_name, curr_key, value_name, curr_value
-    ));
+        statement.push_str(&format!(
+            "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
+            map_name, key_name, curr_key, value_name, curr_value
+        ));
+
+        keep_key = curr_key;
+        keep_value = curr_value;
+    }
+
+    println!("statement: {:?}", statement);
     for i in 0..scale {
         let curr_key_value = if i % 2 == 0 {
             helper_gen_clarity_value(
@@ -1145,7 +1187,7 @@ fn gen_fetch_entry(scale: u16, _input_size: u16) -> (Option<String>, String) {
                 None,
             )
         } else {
-            curr_key.clone()
+            keep_key.clone()
         };
 
         let statement = format!(
