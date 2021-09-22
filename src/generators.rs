@@ -1189,24 +1189,38 @@ fn gen_create_var(scale: u16) -> (Option<String>, String) {
     (None, body)
 }
 
-fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool) -> (Option<String>, String) {
+fn gen_var_set_get(
+    function_name: &'static str,
+    scale: u16,
+    set: bool,
+    input_size: u16,
+) -> (Option<String>, String) {
+    println!("input_size {}", input_size);
+    let mut setup = String::new();
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
-    let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-    let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
-    let clarity_value = helper_gen_clarity_value(
-        &clarity_type,
-        rng.gen_range(10..200),
-        length.map_or(0, |len| len as usize),
-        None,
-    );
-    let args = match length {
-        Some(l) => format!("{} ({} {}) {}", var_name, clarity_type, l, clarity_value),
-        None => format!("{} {} {}", var_name, clarity_type, clarity_value),
-    };
-    let setup = format!("({} {}) ", "define-data-var", args);
+    let mut tuple_vector = vec![];
+    for i in 0..input_size {
+        let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+        let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
+        let clarity_value = helper_gen_clarity_value(
+            &clarity_type,
+            rng.gen_range(10..200),
+            length.map_or(0, |len| len as usize),
+            None,
+        );
+        let args = match length {
+            Some(l) => format!("{} ({} {}) {}", var_name, clarity_type, l, clarity_value),
+            None => format!("{} {} {}", var_name, clarity_type, clarity_value),
+        };
+        setup.push_str(&*format!("({} {}) ", "define-data-var", args));
+
+        tuple_vector.push((var_name, clarity_type, length, clarity_value));
+    }
     for i in 0..scale {
+        let (var_name, clarity_type, length, clarity_value) =
+            &tuple_vector[rng.gen_range(0..input_size) as usize];
         let args = if set {
             let new_val = helper_gen_clarity_value(
                 &clarity_type,
@@ -1220,7 +1234,8 @@ fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool) -> (Optio
         };
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    println!("{}", body);
+    println!("setup:{}", setup);
+    println!("body:{}", body);
     (Some(setup), body)
 }
 
@@ -2158,8 +2173,8 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Optio
         ClarityCostFunction::SetEntry => gen_set_entry(scale),     // map-set
         // Var
         ClarityCostFunction::CreateVar => gen_create_var(scale),
-        ClarityCostFunction::FetchVar => gen_var_set_get("var-get", scale, false),
-        ClarityCostFunction::SetVar => gen_var_set_get("var-set", scale, true),
+        ClarityCostFunction::FetchVar => gen_var_set_get("var-get", scale, false, input_size),
+        ClarityCostFunction::SetVar => gen_var_set_get("var-set", scale, true, input_size),
         ClarityCostFunction::BindName => gen_define_constant("define-constant-bench", scale), // used for define var and define function
         // Functions with single clarity value input
         ClarityCostFunction::Print => gen_single_clar_value("print", scale),
