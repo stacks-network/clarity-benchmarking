@@ -411,7 +411,7 @@ pub fn helper_generate_rand_char_string(n: usize) -> String {
         .collect::<String>()
 }
 
-/// This function generates a single value that either has type uint, int, or buff (randomly chosen)
+/// This function generates `scale` objects of type `buff`, each of size `input_size`.
 /// This value is set as the argument to a hash function ultimately
 fn gen_hash(function_name: &'static str, scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
@@ -995,6 +995,7 @@ fn gen_unwrap_err(
     (None, body)
 }
 
+/// Creates the statement to create a map, and returns details about the type name:
 ///        statement: the statement to run
 ///        map_name: name of the map created
 ///        key_name: name of the key in the map tuple
@@ -1056,13 +1057,14 @@ fn gen_create_map(_function_name: &'static str, scale: u16) -> (Option<String>, 
     (None, body)
 }
 
-// setEntry is the cost for map-delete, map-insert, & map-set
-// q: only ever deleting non-existent key; should we change that?
+/// setEntry is the cost for map-delete, map-insert, & map-set
+/// q: only ever deleting non-existent key; should we change that?
+/// The resulting code has `input_size` elements in the map, and `scale` calls to
+/// update the map.
 fn gen_set_entry(scale: u16, input_size: u16) -> (Option<String>, String) {
     println!("input_size: {}", input_size);
     let mut body = String::new();
     let mut rng = rand::thread_rng();
-    // TODO: make this dependent on input_size
     let (
         mut statement,
         map_name,
@@ -1088,7 +1090,6 @@ fn gen_set_entry(scale: u16, input_size: u16) -> (Option<String>, String) {
             value_type_len.map_or(0, |len| len as usize),
             None,
         );
-        println!("curr_key, curr_value {:?} {:?}", curr_key, curr_value);
 
         statement.push_str(&format!(
             "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
@@ -1137,9 +1138,10 @@ fn gen_set_entry(scale: u16, input_size: u16) -> (Option<String>, String) {
     (Some(statement), body)
 }
 
+/// The resulting code has `input_size` elements in the map, and `scale` calls to
+/// get from the map.
 fn gen_fetch_entry(scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
-    // TODO: make this dependent on input_size
     let (
         mut statement,
         map_name,
@@ -1178,7 +1180,6 @@ fn gen_fetch_entry(scale: u16, input_size: u16) -> (Option<String>, String) {
         keep_value = curr_value;
     }
 
-    println!("statement: {:?}", statement);
     statement.push_str(&format!(
         "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
         map_name, key_name, keep_key, value_name, keep_value
@@ -1300,7 +1301,7 @@ fn gen_single_clar_value(function_name: &'static str, scale: u16) -> (Option<Str
         let args = helper_gen_random_clarity_value(i);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    println!("gen_single_clar_value: {}", body);
+    println!("gen_single_clar_value:body:{}", body);
     (None, body)
 }
 
@@ -1511,6 +1512,7 @@ fn gen_let(scale: u16) -> (Option<String>, String) {
     (None, body)
 }
 
+/// Generates a random string of size up to `max_size` * 2.
 fn helper_generate_random_sequence_up_to(max_size: u16) -> (String, usize, String) {
     let mut rng = rand::thread_rng();
     let value_len = rng.gen_range(2..max_size) * 2;
@@ -1539,10 +1541,13 @@ fn helper_generate_random_sequence_up_to(max_size: u16) -> (String, usize, Strin
         }
     }
 }
+
+/// Calls `helper_generate_random_sequence_up_to(50)`.
 fn helper_generate_random_sequence() -> (String, usize, String) {
     helper_generate_random_sequence_up_to(50)
 }
 
+/// Creates an `index-of` statement with a list that scales linearly with `input_size`.
 fn gen_index_of(scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
