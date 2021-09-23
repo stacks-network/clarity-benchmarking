@@ -2792,7 +2792,7 @@ criterion_group!(
     // bench_unwrap_err_or_ret,
     // bench_create_map, // g
     // bench_create_var, // g
-    // bench_set_var, // g
+    bench_set_var, // g
     bench_fetch_var, // g
                      bench_print,
                      // bench_if,
