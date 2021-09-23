@@ -403,6 +403,7 @@ fn helper_generate_rand_hex_string(n: usize) -> String {
         .collect::<String>()
 }
 
+/// Generates a random string of size `n`.
 pub fn helper_generate_rand_char_string(n: usize) -> String {
     let mut rng = rand::thread_rng();
     (0..n)
@@ -1223,6 +1224,10 @@ fn gen_create_var(scale: u16) -> (Option<String>, String) {
     (None, body)
 }
 
+/// Creates a command that is either "get-var" or "set-var", according to `function_name`.
+///
+/// This function adds `input_size instances of "define-data-var", and does `scale` calls to
+/// `function_name`.
 fn gen_var_set_get(
     function_name: &'static str,
     scale: u16,
@@ -1235,8 +1240,10 @@ fn gen_var_set_get(
     let mut rng = rand::thread_rng();
 
     let mut tuple_vector = vec![];
+    let base_var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
     for i in 0..input_size {
-        let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+        let var_name = format!("{}{}", base_var_name, i);
+        println!("var_name {}", var_name);
         let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
         let clarity_value = helper_gen_clarity_value(
             &clarity_type,
@@ -1258,28 +1265,15 @@ fn gen_var_set_get(
         let args = if set {
             let new_val = helper_gen_clarity_value(
                 &clarity_type,
-                rng.gen_range(10..200),
+                i,
                 length.map_or(0, |len| len as usize),
                 None,
             );
-            let args = match length {
-                Some(l) => format!("{} ({} {}) {}", var_name, clarity_type, l, clarity_value),
-                None => format!("{} {} {}", var_name, clarity_type, clarity_value),
-            };
-            setup.push_str(&*format!("({} {}) ", "define-data-var", args));
-            let args = if set {
-                let new_val = helper_gen_clarity_value(
-                    &clarity_type,
-                    i,
-                    length.map_or(0, |len| len as usize),
-                    None,
-                );
-                format!("{} {}", var_name, new_val)
-            } else {
-                format!("{}", var_name)
-            };
-            body.push_str(&*format!("({} {}) ", function_name, args));
+            format!("{} {}", var_name, new_val)
+        } else {
+            format!("{}", var_name)
         };
+        body.push_str(&*format!("({} {}) ", function_name, args));
     }
     println!("gen_var_set_get:setup:{}", setup);
     println!("gen_var_set_get:body:{}", body);
