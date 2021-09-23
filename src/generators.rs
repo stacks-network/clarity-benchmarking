@@ -1180,7 +1180,7 @@ fn gen_fetch_entry(scale: u16, input_size: u16) -> (Option<String>, String) {
     println!("statement: {:?}", statement);
     statement.push_str(&format!(
         "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
-        map_name, key_name, curr_key, value_name, curr_value
+        map_name, key_name, keep_key, value_name, keep_value
     ));
     for i in 0..scale {
         let curr_key_value = if i % 2 == 0 {

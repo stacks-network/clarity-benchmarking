@@ -2764,7 +2764,7 @@ criterion_group!(
     // bench_tuple_get,
     // bench_tuple_merge,
     // bench_tuple_cons,
-    // bench_hash160,
+    bench_hash160,
     // bench_sha256,
     // bench_sha512,
     // bench_sha512t256,
@@ -2792,9 +2792,9 @@ criterion_group!(
     // bench_unwrap_err_or_ret,
     // bench_create_map, // g
     // bench_create_var, // g
-    //bench_set_var, // g
+    // bench_set_var, // g
     bench_fetch_var, // g
-                     // bench_print,
+                     bench_print,
                      // bench_if,
                      // bench_asserts,
                      // bench_ok_cons,
@@ -2807,11 +2807,11 @@ criterion_group!(
                      // bench_default_to,
                      // bench_try,
                      // bench_int_cast,
-                     // bench_set_entry, // g
-                     // bench_fetch_entry, // g
+                     bench_set_entry, // g
+                     bench_fetch_entry, // g
                      // bench_match,
                      // bench_let,
-                     // bench_index_of,
+                      bench_index_of,
                      // bench_element_at,
                      // bench_len,
                      // bench_list_cons,
