@@ -2041,23 +2041,23 @@ fn bench_tuple_cons(c: &mut Criterion) {
 
 // hash functions
 fn bench_hash160(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, INPUT_SIZES.into(), false)
 }
 
 fn bench_sha256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, INPUT_SIZES.into(), false)
 }
 
 fn bench_sha512(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, INPUT_SIZES.into(), false)
 }
 
 fn bench_sha512t256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, INPUT_SIZES.into(), false)
 }
 
 fn bench_keccak256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, INPUT_SIZES.into(), false)
 }
 
 fn bench_secp256k1recover(c: &mut Criterion) {
@@ -2402,7 +2402,7 @@ fn bench_fetch_var(c: &mut Criterion) {
 }
 
 fn bench_print(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Print, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Print, SCALE.into(), INPUT_SIZES.into(), false)
 }
 
 fn bench_if(c: &mut Criterion) {
@@ -2500,7 +2500,7 @@ fn bench_set_entry(c: &mut Criterion) {
         c,
         ClarityCostFunction::SetEntry,
         SCALE.into(),
-        vec![1],
+        INPUT_SIZES.into(),
         false,
     )
 }
@@ -2510,7 +2510,7 @@ fn bench_fetch_entry(c: &mut Criterion) {
         c,
         ClarityCostFunction::FetchEntry,
         SCALE.into(),
-        vec![1],
+        INPUT_SIZES.into(),
         false,
     )
 }
@@ -2528,7 +2528,7 @@ fn bench_index_of(c: &mut Criterion) {
         c,
         ClarityCostFunction::IndexOf,
         SCALE.into(),
-        vec![1],
+        INPUT_SIZES.into(),
         false,
     )
 }
@@ -2746,16 +2746,16 @@ fn bench_contract_of(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_set_var,
-//    bench_hash160,
-//    bench_fetch_var, 
-//    bench_print,
-//    bench_set_entry,  
-//    bench_fetch_entry,
-//    bench_index_of,
-    // bench_sha256,
-    // bench_sha512,
-    // bench_sha512t256,
-    // bench_keccak256,
+    bench_hash160,
+    bench_fetch_var, 
+    bench_print,
+    bench_set_entry,  
+    bench_fetch_entry,
+    bench_index_of,
+     bench_sha256,
+     bench_sha512,
+     bench_sha512t256,
+     bench_keccak256,
     // bench_secp256k1recover,
     // bench_secp256k1verify,
 );

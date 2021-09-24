@@ -390,6 +390,7 @@ fn gen_xor(function_name: &'static str, scale: u16) -> (Option<String>, String) 
     (None, body)
 }
 
+/// Generates a random hex string of size `n`.
 fn helper_generate_rand_hex_string(n: usize) -> String {
     let hex_chars = [
         "a", "b", "c", "d", "e", "f", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
@@ -411,11 +412,10 @@ pub fn helper_generate_rand_char_string(n: usize) -> String {
         .collect::<String>()
 }
 
-/// This function generates `scale` objects of type `buff`, each of size `input_size`.
-/// This value is set as the argument to a hash function ultimately
+/// This function generates `scale` statements to hash a `buff` of size `input_size`,
+/// using the function `function_name`.
 fn gen_hash(function_name: &'static str, scale: u16, input_size: u16) -> (Option<String>, String) {
     let mut body = String::new();
-    let mut rng = rand::thread_rng();
 
     for _ in 0..scale {
         let arg = {
@@ -429,6 +429,7 @@ fn gen_hash(function_name: &'static str, scale: u16, input_size: u16) -> (Option
     (None, body)
 }
 
+// TODO: Should this be a function of input size?
 fn gen_secp256k1(
     function_name: &'static str,
     scale: u16,
