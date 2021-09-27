@@ -4,3 +4,4 @@
 *.sqlite-shm
 *.sqlite-wal
 analysis_output
+.DS_Store
