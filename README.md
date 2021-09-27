@@ -13,9 +13,6 @@ Benchmarking results can be found in `target/criterion/`
 
 ## Compiling Python Notebook
 
-Start by going here
+Follow instructions like these to set up Jupyter:
 
-
-Installed Anaconda from here:
-
-https://www.anaconda.com/products/individual#Downloads
+https://towardsdatascience.com/how-to-set-up-anaconda-and-jupyter-notebook-the-right-way-de3b7623ea4a
