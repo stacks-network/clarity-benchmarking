@@ -429,7 +429,6 @@ fn gen_hash(function_name: &'static str, scale: u16, input_size: u16) -> (Option
     (None, body)
 }
 
-// TODO: Should this be a function of input size?
 fn gen_secp256k1(
     function_name: &'static str,
     scale: u16,
