@@ -83,7 +83,6 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 
-// const INPUT_SIZES: [u16; 8] = [32, 64, 96, 128, 160, 196, 234, 256];
 const INPUT_SIZES: [u16; 16] = [36, 72, 108, 144, 180, 216, 252, 288, 324, 360, 396, 432, 468, 504, 540, 576];
 const INPUT_SIZES_ANALYSIS_PASS: [u16; 6] = [1, 2, 8, 16, 32, 64];
 const INPUT_SIZES_ARITHMETIC: [u16; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
