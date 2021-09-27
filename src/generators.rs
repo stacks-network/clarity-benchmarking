@@ -996,7 +996,7 @@ fn gen_unwrap_err(
     (None, body)
 }
 
-/// Creates the statement to create a map, and returns details about the type name:
+/// Creates the `define-map` statements to create a map, and returns details about the type name:
 ///        statement: the statement to run
 ///        map_name: name of the map created
 ///        key_name: name of the key in the map tuple
@@ -1280,20 +1280,6 @@ fn gen_var_set_get(
     println!("gen_var_set_get:setup:{}", setup);
     println!("gen_var_set_get:body:{}", body);
     (Some(setup), body)
-}
-
-fn gen_single_sized_clar_value(
-    function_name: &'static str,
-    scale: u16,
-    _input_size: u16,
-) -> (Option<String>, String) {
-    let mut body = String::new();
-    for i in 0..scale {
-        let args = helper_gen_random_clarity_value(i);
-        body.push_str(&*format!("({} {}) ", function_name, args));
-    }
-    println!("gen_single_clar_value: {}", body);
-    (None, body)
 }
 
 fn gen_single_clar_value(function_name: &'static str, scale: u16) -> (Option<String>, String) {
