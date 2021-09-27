@@ -995,15 +995,6 @@ fn gen_unwrap_err(
     (None, body)
 }
 
-/// Creates the `define-map` statements to create a map, and returns details about the type name:
-///        statement: the statement to run
-///        map_name: name of the map created
-///        key_name: name of the key in the map tuple
-///        key_type: type of the key in the map tuple
-///        key_type_len: length of the key in the map tuple
-///        value_name: name of the value in the map tuple
-///        value_type: type of the value in the map tuple
-///        value_type_len: length of the value in the map tuple
 fn helper_create_map() -> (
     String,
     String,
