@@ -38,60 +38,33 @@ def load_reports():
                     report[function_name] = {}
                 report[function_name][size] = data['median']['point_estimate']
 
-def estimate_params(df, name, transform):
+def estimate_params(df, name):
+    Y = df.values.reshape(-1, 1)
     X = df.index.values.reshape(-1, 1)
-    Y = df[name].values.reshape(-1, 1)
     X = X[np.logical_not(np.isnan(Y))].reshape(-1, 1)
-    Y = Y[np.logical_not(np.isnan(Y))]
-    X = transform(X)
-#     Y = transform(Y)
+    Y = Y[np.logical_not(np.isnan(Y))].reshape(-1, 1)
 
     linear_regressor = LinearRegression()
     linear_regressor.fit(X, Y)
-    Y_pred = linear_regressor.predict(X)
+    return linear_regressor
 
-    b = linear_regressor.intercept_
-    if b < 0:
-        b = max(Y[0] - linear_regressor.coef_, 0)
-    a = linear_regressor.coef_
-
-    return (a, b)
-
-def logn(n):
-    return np.log2(n)
-
-def nlogn(n):
-    return n * np.log2(n)
-
-def plot(df, name, a, b, transform):
-    Y = df[name].values.reshape(-1, 1)
+def plot(df, plot_name, linear_model):
+    Y = df.values.reshape(-1, 1)
     X = df.index.values.reshape(-1, 1)
-    X = X[np.logical_not(np.isnan(Y))]
-    X = transform(X)
-    Y = Y[np.logical_not(np.isnan(Y))]
+    X = X[np.logical_not(np.isnan(Y))].reshape(-1, 1)
+    Y = Y[np.logical_not(np.isnan(Y))].reshape(-1, 1)
 
-    y_pred = a*X + b
+    y_pred = linear_model.predict(X)
 
     plt.scatter(X, Y, color='orange')
-    plt.suptitle(name)
+    plt.suptitle(plot_name)
     plt.plot(X, y_pred, color='blue')
     os.makedirs("analysis_output/graphs", exist_ok=True)
-    plt.savefig("analysis_output/graphs/{}.svg".format(name))
+    plt.savefig("analysis_output/graphs/{}.svg".format(plot_name))
 
-def estimate_plot(df, fun_name, output, transform = lambda x: x):
-    if fun_name not in df:
-        print("Function not found in criterion result set: {}".format(fun_name))
-        return
-
-    a, b = estimate_params(df, fun_name, transform)
-    print(a, b)
-#     output.loc[fun_name] = [a.squeeze(), b.squeeze()]
-    if not isinstance(a, int):
-        a = a.squeeze()
-    if not isinstance(b, int):
-        b = b.squeeze()
-    output.loc[fun_name] = [a, b]
-    plot(df, fun_name, a, b, transform)
+def estimate_plot(df, function_name):
+    linear_model = estimate_params(df, function_name)
+    plot(df, function_name, linear_model)
 
 
 def main(PLOT_NAME):
@@ -100,14 +73,9 @@ def main(PLOT_NAME):
     pd.set_option('display.max_rows', 500)
     pd.set_option('display.max_columns', 500)
     df = pd.DataFrame(report)
+    df.dropna()
 
-
-    output = pd.DataFrame(columns=["a", "b"])
-
-    estimate_plot(df, PLOT_NAME, output)
-
-    os.makedirs("analysis_output", exist_ok=True)
-    output.to_csv("analysis_output/cost_constants.csv")
+    estimate_plot(df[PLOT_NAME], PLOT_NAME)
 
 
 main(PLOT_NAME = sys.argv[1])
