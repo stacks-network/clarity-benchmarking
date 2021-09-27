@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
 
 sns.set_theme()
 
@@ -48,6 +49,11 @@ def estimate_params(df, name):
     linear_regressor.fit(X, Y)
     return linear_regressor
 
+
+def print_metrics(Y, y_pred, plot_name):
+    r2 = r2_score(Y, y_pred)
+    print(','.join([plot_name, str(r2)]))
+
 def plot(df, plot_name, linear_model):
     Y = df.values.reshape(-1, 1)
     X = df.index.values.reshape(-1, 1)
@@ -61,6 +67,8 @@ def plot(df, plot_name, linear_model):
     plt.plot(X, y_pred, color='blue')
     os.makedirs("analysis_output/graphs", exist_ok=True)
     plt.savefig("analysis_output/graphs/{}.svg".format(plot_name))
+
+    print_metrics(Y, y_pred, plot_name)
 
 def estimate_plot(df, function_name):
     linear_model = estimate_params(df, function_name)
