@@ -10,12 +10,3 @@ cargo bench
 ```
 
 Benchmarking results can be found in `target/criterion/`
-
-## Compiling Python Notebook
-
-Start by going here
-
-
-Installed Anaconda from here:
-
-https://www.anaconda.com/products/individual#Downloads
