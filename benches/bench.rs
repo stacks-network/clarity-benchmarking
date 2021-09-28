@@ -300,6 +300,7 @@ fn bench_with_input_sizes(
     }
 }
 
+/// Runs `input_size` iterations of `code_to_bench`.
 fn run_bench<F>(
     group: &mut BenchmarkGroup<WallTime>,
     function: ClarityCostFunction,
@@ -318,6 +319,8 @@ fn run_bench<F>(
     let mut contract_context = ContractContext::new(contract_identifier.clone());
 
     let (pre_contract_opt, contract) = gen(function, scale, input_size);
+    warn!("pre_contract_opt {:?}", pre_contract_opt);
+    warn!("contract {:?}", contract);
 
     let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
         Ok(res) => res,
