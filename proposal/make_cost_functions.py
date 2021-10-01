@@ -5,14 +5,14 @@ import csv
 to_skip = [
     # these were measured with MARF operations, but they shouldn't get penalized
     # for MARF performance in runtime
-    'cost_at_block', 'cost_create_ft', 'cost_block_info', 'cost_stx_balance',
-    'cost_stx_transfer', 'cost_ft_mint', 'cost_ft_transfer', 'cost_ft_balance',
-    'cost_ft_get_supply', 'cost_ft_burn', 'poison_microblock', 'cost_analysis_storage',
-    'cost_analysis_use_trait_entry', 'cost_analysis_get_function_entry',
-    'cost_load_contract', 'cost_create_map', 'cost_create_var', 'cost_create_nft',
-    'cost_fetch_entry', 'cost_set_entry', 'cost_fetch_var', 'cost_set_var',
-    'cost_contract_storage', 'cost_nft_mint', 'cost_nft_transfer', 'cost_nft_owner',
-    'cost_nft_burn',
+    # 'cost_at_block', 'cost_create_ft', 'cost_block_info', 'cost_stx_balance',
+    # 'cost_stx_transfer', 'cost_ft_mint', 'cost_ft_transfer', 'cost_ft_balance',
+    # 'cost_ft_get_supply', 'cost_ft_burn', 'poison_microblock', 'cost_analysis_storage',
+    # 'cost_analysis_use_trait_entry', 'cost_analysis_get_function_entry',
+    # 'cost_load_contract', 'cost_create_map', 'cost_create_var', 'cost_create_nft',
+    # 'cost_fetch_entry', 'cost_set_entry', 'cost_fetch_var', 'cost_set_var',
+    # 'cost_contract_storage', 'cost_nft_mint', 'cost_nft_transfer', 'cost_nft_owner',
+    # 'cost_nft_burn',
     # these should be linear regressions, but got measured as a const
     'cost_list_cons',
     'cost_index_of',

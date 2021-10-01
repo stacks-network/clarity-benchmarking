@@ -48,7 +48,7 @@ use blockstack_lib::vm::analysis::type_checker::{trait_type_size, TypeChecker};
 use blockstack_lib::vm::analysis::{AnalysisDatabase, AnalysisPass, CheckResult, ContractAnalysis};
 use blockstack_lib::vm::ast::definition_sorter::DefinitionSorter;
 use blockstack_lib::vm::ast::expression_identifier::ExpressionIdentifier;
-use blockstack_lib::vm::ast::{build_ast, parser, ContractAST};
+use blockstack_lib::vm::ast::{build_ast, parse, parser, ContractAST};
 use blockstack_lib::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
 use blockstack_lib::vm::contracts::Contract;
 use blockstack_lib::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
@@ -88,7 +88,6 @@ const INPUT_SIZES_ANALYSIS_PASS: [u16; 6] = [1, 2, 8, 16, 32, 64];
 const INPUT_SIZES_ARITHMETIC: [u16; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const SCALE: u16 = 100;
-const MARF_SCALE: u32 = 100000;
 
 pub const NUM_BLOCKS: u32 = 60;
 
@@ -103,165 +102,6 @@ lazy_static! {
         make_sized_type_sig_map(INPUT_SIZES.to_vec());
 }
 
-fn as_hash(inp: u32) -> [u8; 32] {
-    let mut out = [0; 32];
-    out[0..4].copy_from_slice(&inp.to_le_bytes());
-    out
-}
-
-fn as_hash160(inp: u32) -> [u8; 20] {
-    let mut out = [0; 20];
-    out[0..4].copy_from_slice(&inp.to_le_bytes());
-    out
-}
-
-fn setup_chain_state<'a>(scaling: u32, headers_db: &'a dyn HeadersDB) -> MarfedKV {
-    let pre_initialized_path = format!("/tmp/clarity_bench_{}.marf", scaling);
-    let out_path = "/tmp/clarity_bench_last.marf";
-
-    if fs::metadata(&pre_initialized_path).is_err() {
-        let marf = MarfedKV::open(&pre_initialized_path, None).unwrap();
-        let mut clarity_instance = ClarityInstance::new(false, marf, ExecutionCost::max_value());
-
-        let p1 = QualifiedContractIdentifier::parse("S1G2081040G2081040G2081040G208105NK8PE5.c1")
-            .unwrap()
-            .issuer;
-        let principals: [PrincipalData; 2] =
-            [p1.into(), StandardPrincipalData(0, as_hash160(2)).into()];
-
-        let mut conn = clarity_instance.begin_test_genesis_block(
-            &StacksBlockId::sentinel(),
-            &StacksBlockId(as_hash(0)),
-            &*headers_db,
-            &NULL_BURN_STATE_DB,
-        );
-
-        // mint and scale marf in genesis block
-        conn.as_transaction(|tx| {
-            // minting
-            tx.with_clarity_db(|db| {
-                principals.iter().for_each(|p| {
-                    let mut stx_account = db.get_stx_balance_snapshot_genesis(&p);
-                    stx_account.credit(1_000_000);
-                    stx_account.save();
-                });
-                Ok(())
-            })
-            .unwrap();
-
-            // scaling
-            tx.with_clarity_db(|db| {
-                (0..100000).for_each(|j| {
-                    db.put(format!("key{}", j).as_str(), &Value::none());
-                });
-                Ok(())
-            })
-            .unwrap();
-        });
-
-        conn.commit_to_block(&StacksBlockId(as_hash(0)));
-
-        // append more blocks
-        let blocks: Vec<_> = (0..=NUM_BLOCKS)
-            .into_iter()
-            .map(|i| StacksBlockId(as_hash(i)))
-            .collect();
-
-        for ix in 1..blocks.len() {
-            let parent_block = &blocks[ix - 1];
-            let current_block = &blocks[ix];
-
-            let mut conn = clarity_instance.begin_block(
-                &parent_block,
-                &current_block,
-                &*headers_db,
-                &NULL_BURN_STATE_DB,
-            );
-
-            conn.as_transaction(|tx| {
-                if ix == 1 {
-                    let define_identifier =
-                        QualifiedContractIdentifier::local("define-trait-contract").unwrap();
-                    let define_contract =
-                        "(define-trait trait-1 ((get-1 (uint) (response uint uint))))";
-
-                    let (define_ast, analysis) = tx
-                        .analyze_smart_contract(&define_identifier, define_contract)
-                        .unwrap();
-
-                    tx.save_analysis(&define_identifier, &analysis).unwrap();
-                    tx.initialize_smart_contract(
-                        &define_identifier,
-                        &define_ast,
-                        &define_contract,
-                        |_, _| false,
-                    )
-                    .unwrap();
-                } else if ix == 2 {
-                    let impl_identifier =
-                        QualifiedContractIdentifier::local("impl-trait-contract").unwrap();
-                    let impl_contract = "(impl-trait .define-trait-contract.trait-1)
-                        (define-public (get-1 (x uint)) (ok u99))";
-
-                    let (impl_ast, analysis) = tx
-                        .analyze_smart_contract(&impl_identifier, impl_contract)
-                        .unwrap();
-
-                    tx.save_analysis(&impl_identifier, &analysis).unwrap();
-                    tx.initialize_smart_contract(
-                        &impl_identifier,
-                        &impl_ast,
-                        &impl_contract,
-                        |_, _| false,
-                    )
-                    .unwrap();
-                } else if ix == 3 {
-                    let use_identifier =
-                        QualifiedContractIdentifier::local("use-trait-contract").unwrap();
-                    let use_contract = "(use-trait trait-1 .define-trait-contract.trait-1)
-                        (define-public (bench-contract-of (contract <trait-1>))
-                            (ok (contract-of contract)))";
-
-                    let (use_ast, analysis) = tx
-                        .analyze_smart_contract(&use_identifier, use_contract)
-                        .unwrap();
-
-                    tx.save_analysis(&use_identifier, &analysis).unwrap();
-                    tx.initialize_smart_contract(
-                        &use_identifier,
-                        &use_ast,
-                        &use_contract,
-                        |_, _| false,
-                    )
-                    .unwrap();
-                }
-
-                tx.with_clarity_db(|db| {
-                    (0..100).for_each(|j| {
-                        db.put(format!("key{}", j).as_str(), &Value::none());
-                    });
-                    Ok(())
-                })
-                .unwrap();
-            });
-
-            conn.commit_to_block(current_block);
-        }
-    };
-
-    if fs::metadata(&out_path).is_err() {
-        fs::create_dir(out_path).unwrap();
-    }
-
-    fs::copy(
-        &format!("{}/marf.sqlite", pre_initialized_path),
-        &format!("{}/marf.sqlite", out_path),
-    )
-    .unwrap();
-
-    return MarfedKV::open(out_path, None).unwrap();
-}
-
 fn eval(
     contract_ast: &ContractAST,
     global_context: &mut GlobalContext,
@@ -272,31 +112,41 @@ fn eval(
         .unwrap();
 }
 
+/// Runs benchmarks for a Clarity function
+///
+/// # Arguments
+///
+/// * `c` - Criterion instance. Automatically passed in by Criterion `bench` function.
+/// * `function` - the Clarity cost function that is being benchmarked
+/// * `scale` - a scaling parameter used by the Clarity function code generator
+/// * `input_sizes` - a list of input sizes. a separate benchmark will be run for each size provided
+/// * `use_headers_db` - if true, use a sim headers db instead of a null one
+/// * `maybe_make_store` - an optional closure returning a `MemoryBackingStore`. useful if you want to run a benchmark with pre-loaded state.
 fn bench_with_input_sizes(
     c: &mut Criterion,
     function: ClarityCostFunction,
     scale: u16,
     input_sizes: Vec<u16>,
-    use_marf: bool,
+    use_headers_db: bool,
+    maybe_make_store: Option<Box<dyn Fn() -> MemoryBackingStore>>,
 ) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in input_sizes.iter() {
-        if use_marf {
-            let headers_db = SimHeadersDB::new();
-            let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
+        let mut memory_backing_store = match maybe_make_store {
+            Some(ref make_store) => make_store(),
+            None => MemoryBackingStore::new(),
+        };
 
-            let mut marf_store =
-                marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-            let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+        let headers_db = SimHeadersDB::new();
+        let clarity_db = match use_headers_db {
+            true => {
+                ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB)
+            }
+            false => memory_backing_store.as_clarity_db(),
+        };
 
-            run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
-        } else {
-            let mut memory_backing_store = MemoryBackingStore::new();
-            let clarity_db = memory_backing_store.as_clarity_db();
-
-            run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
-        }
+        run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
     }
 }
 
@@ -390,14 +240,11 @@ fn bench_analysis<F, G>(
             }
         };
 
-        // use warmed up marf
-        let headers_db = SimHeadersDB::new();
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
+        let mut memory_backing_store = MemoryBackingStore::new();
 
         let mut local_context = TypingContext::new();
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut analysis_db = marf_store.as_analysis_db();
+        let mut analysis_db = memory_backing_store.as_analysis_db();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
         group.throughput(Throughput::Bytes(*input_size as u64));
@@ -451,12 +298,8 @@ where
             cost_tracker,
         );
 
-        // use warmed up marf
-        let headers_db = SimHeadersDB::new();
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-
-        let mut analysis_db = marf_store.as_analysis_db();
+        let mut memory_backing_store = MemoryBackingStore::new();
+        let mut analysis_db = memory_backing_store.as_analysis_db();
 
         analysis_db.execute::<_, _, ()>(|db| {
             group.throughput(Throughput::Bytes(contract_size as u64));
@@ -546,11 +389,8 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             cost_tracker,
         );
 
-        // use warmed up marf
-        let headers_db = SimHeadersDB::new();
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-        let mut analysis_db = marf_store.as_analysis_db();
+        let mut memory_backing_store = MemoryBackingStore::new();
+        let mut analysis_db = memory_backing_store.as_analysis_db();
 
         // add defined traits to pre contract analysis
         let mut cost_tracker = LimitedCostTracker::new_free();
@@ -645,11 +485,8 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             cost_tracker,
         );
 
-        // use warmed up marf
-        let headers_db = SimHeadersDB::new();
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-        let mut analysis_db = marf_store.as_analysis_db();
+        let mut memory_backing_store = MemoryBackingStore::new();
+        let mut analysis_db = memory_backing_store.as_analysis_db();
 
         // add defined traits to pre contract analysis
         let mut cost_tracker = LimitedCostTracker::new_free();
@@ -694,10 +531,8 @@ fn helper_deepen_typing_context(
         helper_deepen_typing_context(i - 1, input_size, &context.extend().unwrap(), group);
     } else {
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let headers_db = SimHeadersDB::new();
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-        let mut analysis_db = marf_store.as_analysis_db();
+        let mut memory_backing_store = MemoryBackingStore::new();
+        let mut analysis_db = memory_backing_store.as_analysis_db();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
         group.throughput(Throughput::Bytes(input_size as u64));
@@ -815,13 +650,10 @@ fn bench_contract_storage(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
     for input_size in &INPUT_SIZES {
-        // want a warmed-up marf
         let headers_db = SimHeadersDB::new();
-
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-
-        let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+        let mut memory_backing_store = MemoryBackingStore::new();
+        let clarity_db =
+            ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
 
         let mut global_context =
             GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
@@ -914,12 +746,9 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let headers_db = SimHeadersDB::new();
+        let mut memory_backing_store = MemoryBackingStore::new();
 
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-
-        let mut analysis_db = marf_store.as_analysis_db();
+        let mut analysis_db = memory_backing_store.as_analysis_db();
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
@@ -988,12 +817,9 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let headers_db = SimHeadersDB::new();
+        let mut memory_backing_store = MemoryBackingStore::new();
 
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-
-        let mut analysis_db = marf_store.as_analysis_db();
+        let mut analysis_db = memory_backing_store.as_analysis_db();
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
@@ -1219,11 +1045,10 @@ fn bench_lookup_function(c: &mut Criterion) {
     let function = ClarityCostFunction::LookupFunction;
     let mut group = c.benchmark_group(function.to_string());
 
-    // use warmed up marf
     let headers_db = SimHeadersDB::new();
-    let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-    let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-    let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+    let mut memory_backing_store = MemoryBackingStore::new();
+    let clarity_db =
+        ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
 
     let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
     global_context.begin();
@@ -1746,10 +1571,8 @@ fn bench_analysis_storage(c: &mut Criterion) {
 
         // use warmed up marf
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let headers_db = SimHeadersDB::new();
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-        let mut analysis_db = marf_store.as_analysis_db();
+        let mut memory_backing_store = MemoryBackingStore::new();
+        let mut analysis_db = memory_backing_store.as_analysis_db();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
         let mut contract_analyses = Vec::new();
@@ -1915,6 +1738,7 @@ fn bench_add(c: &mut Criterion) {
         SCALE,
         INPUT_SIZES_ARITHMETIC.into(),
         false,
+        None,
     )
 }
 
@@ -1925,6 +1749,7 @@ fn bench_sub(c: &mut Criterion) {
         SCALE,
         INPUT_SIZES_ARITHMETIC.into(),
         false,
+        None,
     )
 }
 
@@ -1935,6 +1760,7 @@ fn bench_mul(c: &mut Criterion) {
         SCALE,
         INPUT_SIZES_ARITHMETIC.into(),
         false,
+        None,
     )
 }
 
@@ -1945,23 +1771,24 @@ fn bench_div(c: &mut Criterion) {
         SCALE,
         INPUT_SIZES_ARITHMETIC.into(),
         false,
+        None,
     )
 }
 
 fn bench_le(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Le, SCALE, vec![2], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Le, SCALE, vec![2], false, None)
 }
 
 fn bench_leq(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Leq, SCALE, vec![2], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Leq, SCALE, vec![2], false, None)
 }
 
 fn bench_ge(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Ge, SCALE, vec![2], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Ge, SCALE, vec![2], false, None)
 }
 
 fn bench_geq(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Geq, SCALE, vec![2], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Geq, SCALE, vec![2], false, None)
 }
 
 // boolean functions
@@ -1972,40 +1799,55 @@ fn bench_and(c: &mut Criterion) {
         SCALE,
         INPUT_SIZES.into(),
         false,
+        None,
     )
 }
 
 fn bench_or(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Or, SCALE, INPUT_SIZES.into(), false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Or,
+        SCALE,
+        INPUT_SIZES.into(),
+        false,
+        None,
+    )
 }
 
 fn bench_xor(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Xor, SCALE, vec![2], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Xor, SCALE, vec![2], false, None)
 }
 
 fn bench_not(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Not, SCALE, vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Not, SCALE, vec![1], false, None)
 }
 
 // note: only testing is-eq when the values are bools; could try doing it with ints?
 fn bench_eq(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Eq, SCALE, INPUT_SIZES.into(), false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Eq,
+        SCALE,
+        INPUT_SIZES.into(),
+        false,
+        None,
+    )
 }
 
 fn bench_mod(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Mod, SCALE, vec![2], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Mod, SCALE, vec![2], false, None)
 }
 
 fn bench_pow(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Pow, SCALE, vec![2], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Pow, SCALE, vec![2], false, None)
 }
 
 fn bench_sqrti(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sqrti, SCALE, vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Sqrti, SCALE, vec![1], false, None)
 }
 
 fn bench_log2(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Log2, SCALE, vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Log2, SCALE, vec![1], false, None)
 }
 
 fn bench_tuple_get(c: &mut Criterion) {
@@ -2015,6 +1857,7 @@ fn bench_tuple_get(c: &mut Criterion) {
         SCALE,
         MORE_INPUT_SIZES.into(),
         false,
+        None,
     )
 }
 
@@ -2025,6 +1868,7 @@ fn bench_tuple_merge(c: &mut Criterion) {
         SCALE,
         INPUT_SIZES.into(),
         false,
+        None,
     )
 }
 
@@ -2035,28 +1879,43 @@ fn bench_tuple_cons(c: &mut Criterion) {
         SCALE,
         MORE_INPUT_SIZES.into(),
         false,
+        None,
     )
 }
 
 // hash functions
 fn bench_hash160(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, vec![1], false, None)
 }
 
 fn bench_sha256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, vec![1], false, None)
 }
 
 fn bench_sha512(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, vec![1], false)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, vec![1], false, None)
 }
 
 fn bench_sha512t256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Sha512t256,
+        SCALE,
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_keccak256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Keccak256,
+        SCALE,
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_secp256k1recover(c: &mut Criterion) {
@@ -2066,6 +1925,7 @@ fn bench_secp256k1recover(c: &mut Criterion) {
         SCALE,
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2076,6 +1936,7 @@ fn bench_secp256k1verify(c: &mut Criterion) {
         SCALE,
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2086,6 +1947,7 @@ fn bench_create_ft_old(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2094,13 +1956,11 @@ fn bench_create_ft(c: &mut Criterion) {
     let function = ClarityCostFunction::CreateFt;
     let mut group = c.benchmark_group(function.to_string());
 
-    // want a warmed-up marf
     let headers_db = SimHeadersDB::new();
+    let mut memory_backing_store = MemoryBackingStore::new();
 
-    let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-    let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-
-    let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+    let clarity_db =
+        ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
 
     let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
     global_context.begin();
@@ -2119,7 +1979,14 @@ fn bench_create_ft(c: &mut Criterion) {
 }
 
 fn bench_mint_ft(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::FtMint, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::FtMint,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_ft_transfer(c: &mut Criterion) {
@@ -2129,6 +1996,7 @@ fn bench_ft_transfer(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2139,6 +2007,7 @@ fn bench_ft_balance(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2149,11 +2018,19 @@ fn bench_ft_supply(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
 fn bench_ft_burn(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::FtBurn, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::FtBurn,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 // note: verify that we want a warmed-up marf for this
@@ -2162,13 +2039,11 @@ fn bench_create_nft(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        // want a warmed-up marf
+        let mut memory_backing_store = MemoryBackingStore::new();
+
         let headers_db = SimHeadersDB::new();
-
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-
-        let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+        let clarity_db =
+            ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
 
         let mut global_context =
             GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
@@ -2204,6 +2079,7 @@ fn bench_nft_mint(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2214,6 +2090,7 @@ fn bench_nft_transfer(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2224,6 +2101,7 @@ fn bench_nft_owner(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2234,27 +2112,63 @@ fn bench_nft_burn(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
 fn bench_is_none(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::IsNone, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::IsNone,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_is_some(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::IsSome, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::IsSome,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_is_ok(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::IsOkay, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::IsOkay,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_is_err(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::IsErr, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::IsErr,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_unwrap(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Unwrap, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Unwrap,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_unwrap_ret(c: &mut Criterion) {
@@ -2264,6 +2178,7 @@ fn bench_unwrap_ret(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2274,6 +2189,7 @@ fn bench_unwrap_err(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2284,6 +2200,7 @@ fn bench_unwrap_err_or_ret(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2294,13 +2211,11 @@ fn bench_create_map(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        // want a warmed-up marf
         let headers_db = SimHeadersDB::new();
+        let mut memory_backing_store = MemoryBackingStore::new();
 
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-
-        let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+        let clarity_db =
+            ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
 
         let mut global_context =
             GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
@@ -2339,6 +2254,7 @@ fn bench_create_var_old(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2349,13 +2265,11 @@ fn bench_create_var(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        // want a warmed-up marf
         let headers_db = SimHeadersDB::new();
+        let mut memory_backing_store = MemoryBackingStore::new();
 
-        let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-        let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-
-        let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+        let clarity_db =
+            ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
 
         let mut global_context =
             GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
@@ -2387,7 +2301,14 @@ fn bench_create_var(c: &mut Criterion) {
 }
 
 fn bench_set_var(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::SetVar, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::SetVar,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_fetch_var(c: &mut Criterion) {
@@ -2397,15 +2318,30 @@ fn bench_fetch_var(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
 fn bench_print(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Print, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Print,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_if(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::If, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::If,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_asserts(c: &mut Criterion) {
@@ -2415,11 +2351,19 @@ fn bench_asserts(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
 fn bench_ok_cons(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::OkCons, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::OkCons,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_err_cons(c: &mut Criterion) {
@@ -2429,6 +2373,7 @@ fn bench_err_cons(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2439,11 +2384,19 @@ fn bench_some_cons(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
 fn bench_concat(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Concat, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Concat,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_as_max_len(c: &mut Criterion) {
@@ -2453,11 +2406,19 @@ fn bench_as_max_len(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
 fn bench_begin(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Begin, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Begin,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_bind_name(c: &mut Criterion) {
@@ -2467,6 +2428,7 @@ fn bench_bind_name(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2477,11 +2439,19 @@ fn bench_default_to(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
 fn bench_try(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::TryRet, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::TryRet,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_int_cast(c: &mut Criterion) {
@@ -2491,6 +2461,7 @@ fn bench_int_cast(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2501,6 +2472,7 @@ fn bench_set_entry(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2511,15 +2483,30 @@ fn bench_fetch_entry(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
 fn bench_match(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Match, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Match,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_let(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Let, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Let,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_index_of(c: &mut Criterion) {
@@ -2529,6 +2516,7 @@ fn bench_index_of(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2539,11 +2527,19 @@ fn bench_element_at(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
 fn bench_len(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Len, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Len,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_list_cons(c: &mut Criterion) {
@@ -2553,15 +2549,30 @@ fn bench_list_cons(c: &mut Criterion) {
         SCALE.into(),
         INPUT_SIZES.into(),
         false,
+        None,
     )
 }
 
 fn bench_append(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Append, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Append,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_filter(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Filter, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Filter,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 // note: this takes a lot of time to run; can shorten the list sizes to make it faster
@@ -2572,11 +2583,19 @@ fn bench_map(c: &mut Criterion) {
         SCALE.into(),
         INPUT_SIZES.into(),
         false,
+        None,
     )
 }
 
 fn bench_fold(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Fold, SCALE.into(), vec![1], false)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Fold,
+        SCALE.into(),
+        vec![1],
+        false,
+        None,
+    )
 }
 
 fn bench_block_info(c: &mut Criterion) {
@@ -2586,22 +2605,28 @@ fn bench_block_info(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         true,
+        None,
     )
 }
 
 fn bench_at_block(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::AtBlock, SCALE.into(), vec![1], true)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::AtBlock,
+        SCALE.into(),
+        vec![1],
+        true,
+        None,
+    )
 }
 
 fn bench_load_contract(c: &mut Criterion) {
     let mut group = c.benchmark_group(ClarityCostFunction::LoadContract.to_string());
 
     let headers_db = SimHeadersDB::new();
-
-    let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-    let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-
-    let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+    let mut memory_backing_store = MemoryBackingStore::new();
+    let clarity_db =
+        ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
 
     let mut owned_env = OwnedEnvironment::new_free(true, clarity_db);
     owned_env.begin();
@@ -2659,6 +2684,7 @@ fn bench_stx_transfer(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2669,6 +2695,7 @@ fn bench_stx_get_balance(c: &mut Criterion) {
         SCALE.into(),
         vec![1],
         false,
+        None,
     )
 }
 
@@ -2676,9 +2703,9 @@ fn bench_poison_microblock(c: &mut Criterion) {
     let mut group = c.benchmark_group(ClarityCostFunction::PoisonMicroblock.to_string());
 
     let headers_db = SimHeadersDB::new();
-    let mut marf = setup_chain_state(MARF_SCALE, &headers_db);
-    let mut marf_store = marf.begin(&StacksBlockId(as_hash(60)), &StacksBlockId(as_hash(61)));
-    let clarity_db = marf_store.as_clarity_db(&headers_db, &NULL_BURN_STATE_DB);
+    let mut memory_backing_store = MemoryBackingStore::new();
+    let clarity_db =
+        ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
 
     let mut owned_env = OwnedEnvironment::new_free(true, clarity_db);
     owned_env.begin();
@@ -2728,140 +2755,170 @@ fn bench_contract_call(c: &mut Criterion) {
         ClarityCostFunction::ContractCall,
         SCALE.into(),
         vec![1],
-        true,
+        false,
+        None,
     )
 }
 
 fn bench_contract_of(c: &mut Criterion) {
+    let make_store = || {
+        let mut memory_backing_store = MemoryBackingStore::new();
+        let clarity_db = memory_backing_store.as_clarity_db();
+
+        let mut env = OwnedEnvironment::new_free(false, clarity_db);
+
+        let define_identifier =
+            QualifiedContractIdentifier::local("define-trait-contract").unwrap();
+        let define_contract = "(define-trait trait-1 ((get-1 (uint) (response uint uint))))";
+        env.initialize_contract(define_identifier, define_contract)
+            .unwrap();
+
+        let impl_identifier = QualifiedContractIdentifier::local("impl-trait-contract").unwrap();
+        let impl_contract = "(impl-trait .define-trait-contract.trait-1)
+            (define-public (get-1 (x uint)) (ok u99))";
+        env.initialize_contract(impl_identifier, impl_contract)
+            .unwrap();
+
+        let use_identifier = QualifiedContractIdentifier::local("use-trait-contract").unwrap();
+        let use_contract = "(use-trait trait-1 .define-trait-contract.trait-1)
+            (define-public (bench-contract-of (contract <trait-1>))
+                (ok (contract-of contract)))";
+        env.initialize_contract(use_identifier, use_contract)
+            .unwrap();
+
+        memory_backing_store
+    };
+
     bench_with_input_sizes(
         c,
         ClarityCostFunction::ContractOf,
         SCALE.into(),
         vec![1],
-        true,
+        false,
+        Some(Box::new(make_store)),
     )
 }
 
 criterion_group!(
     benches,
-    // bench_add,
-    // bench_sub,
-    // bench_mul,
-    // bench_div,
-    // bench_le,
-    // bench_leq,
-    // bench_ge,
-    // bench_geq,
-    // bench_and,
-    // bench_or,
-    // bench_xor,
-    // bench_not,
-    // bench_eq,
-    // bench_mod,
-    // bench_pow,
-    // bench_sqrti,
-    // bench_log2,
-    // bench_tuple_get,
-    // bench_tuple_merge,
-    // bench_tuple_cons,
-    // bench_hash160,
-    // bench_sha256,
-    // bench_sha512,
-    // bench_sha512t256,
-    // bench_keccak256,
-    // bench_secp256k1recover,
-    // bench_secp256k1verify,
-    // bench_create_ft, // g
-    // bench_mint_ft, // g
-    // bench_ft_transfer, // g
-    // bench_ft_balance, // g
-    // bench_ft_supply, // g
-    // bench_ft_burn, // g
-    // bench_create_nft, // g
-    // bench_nft_mint, // g
-    // bench_nft_transfer, // g
-    // bench_nft_owner, // g
-    // bench_nft_burn, // g
-    // bench_is_none,
-    // bench_is_some,
-    // bench_is_ok,
-    // bench_is_err,
-    // bench_unwrap,
-    // bench_unwrap_ret,
-    // bench_unwrap_err,
-    // bench_unwrap_err_or_ret,
-    // bench_create_map, // g
-    // bench_create_var, // g
-    // bench_set_var, // g
-    // bench_fetch_var, // g
-    // bench_print,
-    // bench_if,
-    // bench_asserts,
-    // bench_ok_cons,
-    // bench_some_cons,
-    // bench_err_cons,
-    // bench_concat,
-    // bench_as_max_len,
-    // bench_begin,
-    // bench_bind_name,
-    // bench_default_to,
-    // bench_try,
-    // bench_int_cast,
-    // bench_set_entry, // g
-    // bench_fetch_entry, // g
-    // bench_match,
-    // bench_let,
-    // bench_index_of,
-    // bench_element_at,
-    // bench_len,
-    // bench_list_cons,
-    // bench_append,
-    // bench_filter,
-    // bench_fold,
-    // bench_at_block,
-    // bench_load_contract,
-    // bench_map,
-    // bench_block_info,
-    // bench_lookup_variable_depth,
-    // bench_lookup_variable_size,
-    // bench_lookup_function,
-    // bench_type_parse_step,
-    // bench_analysis_option_cons,
-    // bench_analysis_option_check,
-    // bench_analysis_visit,
-    // bench_analysis_bind_name,
-    // bench_analysis_list_items_check,
-    // bench_analysis_check_tuple_get,
-    // bench_analysis_check_tuple_merge,
-    // bench_analysis_check_tuple_cons,
-    // bench_analysis_tuple_items_check,
-    // bench_analysis_check_let,
-    // bench_analysis_lookup_function,
-    // bench_analysis_lookup_function_types,
-    // bench_analysis_type_annotate,
-    // bench_analysis_iterable_func,
-    // bench_analysis_storage,
+    bench_add,
+    bench_sub,
+    bench_mul,
+    bench_div,
+    bench_le,
+    bench_leq,
+    bench_ge,
+    bench_geq,
+    bench_and,
+    bench_or,
+    bench_xor,
+    bench_not,
+    bench_eq,
+    bench_mod,
+    bench_pow,
+    bench_sqrti,
+    bench_log2,
+    bench_tuple_get,
+    bench_tuple_merge,
+    bench_tuple_cons,
+    bench_hash160,
+    bench_sha256,
+    bench_sha512,
+    bench_sha512t256,
+    bench_keccak256,
+    bench_secp256k1recover,
+    bench_secp256k1verify,
+    bench_create_ft,    // g
+    bench_mint_ft,      // g
+    bench_ft_transfer,  // g
+    bench_ft_balance,   // g
+    bench_ft_supply,    // g
+    bench_ft_burn,      // g
+    bench_create_nft,   // g
+    bench_nft_mint,     // g
+    bench_nft_transfer, // g
+    bench_nft_owner,    // g
+    bench_nft_burn,     // g
+    bench_is_none,
+    bench_is_some,
+    bench_is_ok,
+    bench_is_err,
+    bench_unwrap,
+    bench_unwrap_ret,
+    bench_unwrap_err,
+    bench_unwrap_err_or_ret,
+    bench_create_map, // g
+    bench_create_var, // g
+    bench_set_var,    // g
+    bench_fetch_var,  // g
+    bench_print,
+    bench_if,
+    bench_asserts,
+    bench_ok_cons,
+    bench_some_cons,
+    bench_err_cons,
+    bench_concat,
+    bench_as_max_len,
+    bench_begin,
+    bench_bind_name,
+    bench_default_to,
+    bench_try,
+    bench_int_cast,
+    bench_set_entry,   // g
+    bench_fetch_entry, // g
+    bench_match,
+    bench_let,
+    bench_index_of,
+    bench_element_at,
+    bench_len,
+    bench_list_cons,
+    bench_append,
+    bench_filter,
+    bench_fold,
+    bench_at_block,
+    bench_load_contract,
+    bench_map,
+    bench_block_info,
+    bench_lookup_variable_depth,
+    bench_lookup_variable_size,
+    bench_lookup_function,
+    bench_type_parse_step,
+    bench_analysis_option_cons,
+    bench_analysis_option_check,
+    bench_analysis_visit,
+    bench_analysis_bind_name,
+    bench_analysis_list_items_check,
+    bench_analysis_check_tuple_get,
+    bench_analysis_check_tuple_merge,
+    bench_analysis_check_tuple_cons,
+    bench_analysis_tuple_items_check,
+    bench_analysis_check_let,
+    bench_analysis_lookup_function,
+    bench_analysis_lookup_function_types,
+    bench_analysis_type_annotate,
+    bench_analysis_iterable_func,
+    bench_analysis_storage,
     bench_analysis_type_check,
-    // bench_analysis_lookup_variable_depth,
-    // bench_analysis_type_lookup,
-    // bench_analysis_lookup_variable_const,
-    // bench_analysis_use_trait_entry,
-    // bench_analysis_get_function_entry,
-    // bench_inner_type_check_cost,
-    // bench_user_function_application,
-    // bench_ast_cycle_detection,
-    // bench_ast_parse,
-    // bench_contract_storage,
-    // bench_principal_of,
-    // bench_stx_transfer,
-    // bench_stx_get_balance,
-    // bench_analysis_pass_read_only, // g
-    // bench_analysis_pass_arithmetic_only_checker, // g
-    // bench_analysis_pass_trait_checker, // g
-    // bench_analysis_pass_type_checker, // g
-    // bench_poison_microblock,
-    // bench_contract_call,
-    // bench_contract_of,
+    bench_analysis_lookup_variable_depth,
+    bench_analysis_type_lookup,
+    bench_analysis_lookup_variable_const,
+    bench_analysis_use_trait_entry,
+    bench_analysis_get_function_entry,
+    bench_inner_type_check_cost,
+    bench_user_function_application,
+    bench_ast_cycle_detection,
+    bench_ast_parse,
+    bench_contract_storage,
+    bench_principal_of,
+    bench_stx_transfer,
+    bench_stx_get_balance,
+    bench_analysis_pass_read_only,               // g
+    bench_analysis_pass_arithmetic_only_checker, // g
+    bench_analysis_pass_trait_checker,           // g
+    bench_analysis_pass_type_checker,            // g
+    bench_poison_microblock,
+    bench_contract_call,
+    bench_contract_of,
 );
 
 criterion_main!(benches);
