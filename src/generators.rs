@@ -19,7 +19,7 @@ use blockstack_lib::vm::types::{
     ASCIIData, CharType, ListData, OptionalData, SequenceData, TupleData, TupleTypeSignature,
     TypeSignature,
 };
-use blockstack_lib::vm::{ClarityName, Value};
+use blockstack_lib::vm::{execute, ClarityName, Value};
 use lazy_static::lazy_static;
 use rand::rngs::ThreadRng;
 use secp256k1::Message as LibSecp256k1Message;
@@ -30,6 +30,22 @@ use std::fmt::format;
 
 lazy_static! {
     pub static ref TUPLE_NAMES: Vec<String> = create_tuple_names(16);
+}
+
+pub struct GenOutput {
+    pub setup: Option<String>,
+    pub body: String,
+    pub input_size: u16,
+}
+
+impl GenOutput {
+    pub fn new(setup: Option<String>, body: String, input_size: u16) -> Self {
+        GenOutput {
+            setup,
+            body,
+            input_size,
+        }
+    }
 }
 
 fn create_tuple_names(len: u16) -> Vec<String> {
@@ -92,9 +108,9 @@ pub fn make_clarity_type_for_sized_value(input_size: u16) -> String {
 }
 
 // make contract for ast parse
-fn make_clarity_statement_for_sized_contract(mult: u16) -> String {
+fn make_clarity_statement_for_sized_contract(mult: u16) -> (String, u16) {
     let mut rng = rand::thread_rng();
-    (0..mult)
+    let contract = (0..mult)
         .map(|_x| {
             format!(
                 "(list u{} u{}) ",
@@ -102,18 +118,21 @@ fn make_clarity_statement_for_sized_contract(mult: u16) -> String {
                 rng.gen_range(100..999)
             )
         })
-        .collect::<String>()
+        .collect::<String>();
+
+    (contract.clone(), contract.len() as u16)
 }
 
-fn make_sized_contract(input_size: u16) -> String {
+fn make_sized_contract(input_size: u16) -> (String, u16) {
     match input_size {
-        1 => "1".to_string(),
-        2 => "u8".to_string(),
-        8 => "(no-op) ".to_string(),
+        1 => ("1".to_string(), 1),
+        2 => ("u8".to_string(), 2),
+        8 => ("(no-op) ".to_string(), 8),
         n => {
             // assuming n is a multiple of 16
             let mult = n / 16;
-            make_clarity_statement_for_sized_contract(mult)
+            let contract = make_clarity_statement_for_sized_contract(mult);
+            (contract.0, contract.1)
         }
     }
 }
@@ -122,7 +141,7 @@ pub fn make_sized_contracts_map(input_sizes: Vec<u16>) -> HashMap<u16, String> {
     let mut ret_map = HashMap::new();
     for i in input_sizes {
         let val = make_sized_contract(i);
-        ret_map.insert(i, val);
+        ret_map.insert(val.1, val.0);
     }
     ret_map
 }
@@ -293,11 +312,7 @@ pub fn helper_make_sized_clarity_value(input_size: u16) -> String {
     }
 }
 
-pub fn gen_arithmetic(
-    function_name: &'static str,
-    scale: u16,
-    input_size: u16,
-) -> (Option<String>, String) {
+pub fn gen_arithmetic(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -314,10 +329,10 @@ pub fn gen_arithmetic(
         body.push_str(&format!("({} {}) ", function_name, args));
     }
 
-    (None, body)
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_pow(scale: u16) -> (Option<String>, String) {
+fn gen_pow(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -327,10 +342,10 @@ fn gen_pow(scale: u16) -> (Option<String>, String) {
         body.push_str(&*format!("(pow u{} u{}) ", n1, n2));
     }
 
-    (None, body)
+    GenOutput::new(None, body, 2)
 }
 
-fn gen_cmp(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_cmp(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -340,10 +355,10 @@ fn gen_cmp(function_name: &'static str, scale: u16) -> (Option<String>, String) 
         body.push_str(&*format!("({} u{} u{}) ", function_name, n1, n2));
     }
 
-    (None, body)
+    GenOutput::new(None, body, 2)
 }
 
-fn gen_logic(function_name: &'static str, scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_logic(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -360,10 +375,10 @@ fn gen_logic(function_name: &'static str, scale: u16, input_size: u16) -> (Optio
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
 
-    (None, body)
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_xor(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_xor(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -387,7 +402,8 @@ fn gen_xor(function_name: &'static str, scale: u16) -> (Option<String>, String) 
         };
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    (None, body)
+
+    GenOutput::new(None, body, 2)
 }
 
 fn helper_generate_rand_hex_string(n: usize) -> String {
@@ -412,7 +428,7 @@ pub fn helper_generate_rand_char_string(n: usize) -> String {
 
 /// This function generates a single value that either has type uint, int, or buff (randomly chosen)
 /// This value is set as the argument to a hash function ultimately
-fn gen_hash(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_hash(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -441,14 +457,11 @@ fn gen_hash(function_name: &'static str, scale: u16) -> (Option<String>, String)
 
         body.push_str(&*format!("({} {}) ", function_name, arg));
     }
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_secp256k1(
-    function_name: &'static str,
-    scale: u16,
-    verify: bool,
-) -> (Option<String>, String) {
+fn gen_secp256k1(function_name: &'static str, scale: u16, verify: bool) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -478,7 +491,8 @@ fn gen_secp256k1(
 
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
 /// ////////////////////////////////////
@@ -507,14 +521,15 @@ fn helper_define_fungible_token_statement() -> (String, String) {
 }
 
 /// todo: remove function name input for the generator functions that map to a single clarity fn?
-fn gen_create_ft(_function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_create_ft(_function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
         let (statement, _) = helper_define_fungible_token_statement();
         body.push_str(&statement);
     }
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
 fn helper_create_principal_in_hex() -> String {
@@ -537,7 +552,7 @@ fn helper_create_principal() -> String {
     format!("'{}", principal_data)
 }
 
-fn gen_ft_mint(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_ft_mint(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     let (statement, token_name) = helper_define_fungible_token_statement();
@@ -549,7 +564,8 @@ fn gen_ft_mint(function_name: &'static str, scale: u16) -> (Option<String>, Stri
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
     println!("{}", body);
-    (Some(statement), body)
+
+    GenOutput::new(Some(statement), body, 1)
 }
 
 fn helper_create_ft_boilerplate(mint_amount: u16) -> (String, String, String) {
@@ -566,7 +582,7 @@ fn helper_create_ft_boilerplate(mint_amount: u16) -> (String, String, String) {
     (token_name, principal_data, body)
 }
 
-fn gen_ft_transfer(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_ft_transfer(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     let max_transfer = 100;
@@ -583,30 +599,33 @@ fn gen_ft_transfer(function_name: &'static str, scale: u16) -> (Option<String>, 
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
     println!("{}", body);
-    (Some(template), body)
+
+    GenOutput::new(Some(template), body, 1)
 }
 
-fn gen_ft_balance(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_ft_balance(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let (token_name, principal_data, template) = helper_create_ft_boilerplate(100);
     let args = format!("{} {}", token_name, principal_data);
     for _ in 0..scale {
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    (Some(template), body)
+
+    GenOutput::new(Some(template), body, 1)
 }
 
-fn gen_ft_supply(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_ft_supply(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let (token_name, _, template) = helper_create_ft_boilerplate(100);
     let args = format!("{}", token_name);
     for _ in 0..scale {
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    (Some(template), body)
+
+    GenOutput::new(Some(template), body, 1)
 }
 
-fn gen_ft_burn(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_ft_burn(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     let max_burn = 100;
@@ -616,7 +635,8 @@ fn gen_ft_burn(function_name: &'static str, scale: u16) -> (Option<String>, Stri
         let args = format!("{} u{} {}", token_name, burn_amount, principal_data);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    (Some(template), body)
+
+    GenOutput::new(Some(template), body, 1)
 }
 
 /// ////////////////////////////////////////
@@ -675,13 +695,14 @@ fn helper_define_non_fungible_token_statement(
     (statement, token_name, nft_type.to_string(), nft_len)
 }
 
-fn gen_create_nft(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_create_nft(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let (statement, _, _, _) = helper_define_non_fungible_token_statement(true);
         body.push_str(&statement);
     }
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
 fn helper_gen_clarity_value(
@@ -735,7 +756,7 @@ fn helper_gen_random_clarity_value(num: u16) -> String {
     )
 }
 
-fn gen_nft_mint(scale: u16) -> (Option<String>, String) {
+fn gen_nft_mint(scale: u16) -> GenOutput {
     let mut body = String::new();
     let (statement, token_name, nft_type, nft_len) =
         helper_define_non_fungible_token_statement(false);
@@ -752,7 +773,8 @@ fn gen_nft_mint(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (Some(statement), body)
+
+    GenOutput::new(Some(statement), body, 1)
 }
 
 fn helper_create_nft_fn_boilerplate() -> (String, String, String, String, String) {
@@ -779,7 +801,7 @@ fn helper_create_nft_fn_boilerplate() -> (String, String, String, String, String
     )
 }
 
-fn gen_nft_transfer(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_nft_transfer(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let (mut setup, token_name, mut owner_principal, nft_value, _) =
         helper_create_nft_fn_boilerplate();
@@ -793,10 +815,11 @@ fn gen_nft_transfer(function_name: &'static str, scale: u16) -> (Option<String>,
 
         owner_principal = next_principal;
     }
-    (Some(setup), body)
+
+    GenOutput::new(Some(setup), body, 1)
 }
 
-fn gen_nft_owner(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_nft_owner(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     let (mut setup, token_name, _, nft_value, invalid_nft_value) =
@@ -815,10 +838,11 @@ fn gen_nft_owner(function_name: &'static str, scale: u16) -> (Option<String>, St
         let args = format!("{} {}", token_name, curr_nft_value);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    (Some(setup), body)
+
+    GenOutput::new(Some(setup), body, 1)
 }
 
-fn gen_nft_burn(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_nft_burn(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let (mut setup, token_name, mut owner_principal, nft_value, _) =
         helper_create_nft_fn_boilerplate();
@@ -826,7 +850,8 @@ fn gen_nft_burn(function_name: &'static str, scale: u16) -> (Option<String>, Str
         let args = format!("{} {} {}", token_name, nft_value, owner_principal);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    (Some(setup), body)
+
+    GenOutput::new(Some(setup), body, 1)
 }
 
 /// ////////////////////////////////////////
@@ -843,7 +868,7 @@ fn helper_generate_tuple(input_size: u16) -> String {
     format!("(tuple {}) ", tuple_vals)
 }
 
-fn gen_tuple_get(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_tuple_get(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -856,10 +881,15 @@ fn gen_tuple_get(scale: u16, input_size: u16) -> (Option<String>, String) {
         ));
     }
     println!("{}", tuple);
-    (None, format!("(let ((test-tuple {})) {})", tuple, body))
+
+    GenOutput::new(
+        None,
+        format!("(let ((test-tuple {})) {})", tuple, body),
+        input_size,
+    )
 }
 
-fn gen_tuple_merge(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_tuple_merge(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
 
     let tuple_a_vals = (0..input_size)
@@ -879,16 +909,17 @@ fn gen_tuple_merge(scale: u16, input_size: u16) -> (Option<String>, String) {
         body.push_str(&*format!("(merge tuple-a tuple-b) "));
     }
 
-    (
+    GenOutput::new(
         None,
         format!(
             "(let ((tuple-a {}) (tuple-b {})) {})",
             tuple_a, tuple_b, body
         ),
+        input_size,
     )
 }
 
-fn gen_tuple_cons(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_tuple_cons(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
 
     let tuple_vals = (0..input_size)
@@ -902,7 +933,7 @@ fn gen_tuple_cons(scale: u16, input_size: u16) -> (Option<String>, String) {
         body.push_str(&tuple);
     }
 
-    (None, body)
+    GenOutput::new(None, body, input_size)
 }
 
 /// ////////////////////////////////////////
@@ -921,13 +952,14 @@ fn helper_gen_random_optional_value(num: u16, only_some: bool) -> String {
     }
 }
 
-fn gen_optional(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_optional(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let args = helper_gen_random_optional_value(i, false);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
 fn helper_gen_random_response_value(num: u16, only_ok: bool, only_err: bool) -> String {
@@ -950,20 +982,17 @@ fn helper_gen_random_response_value(num: u16, only_ok: bool, only_err: bool) -> 
     }
 }
 
-fn gen_response(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_response(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let args = helper_gen_random_response_value(i, false, false);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_unwrap(
-    function_name: &'static str,
-    scale: u16,
-    ret_value: bool,
-) -> (Option<String>, String) {
+fn gen_unwrap(function_name: &'static str, scale: u16, ret_value: bool) -> GenOutput {
     let mut rng = rand::thread_rng();
     let mut body = String::new();
     for i in 0..scale {
@@ -988,14 +1017,11 @@ fn gen_unwrap(
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_unwrap_err(
-    function_name: &'static str,
-    scale: u16,
-    ret_value: bool,
-) -> (Option<String>, String) {
+fn gen_unwrap_err(function_name: &'static str, scale: u16, ret_value: bool) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let mut args = helper_gen_random_response_value(i, false, true);
@@ -1007,7 +1033,8 @@ fn gen_unwrap_err(
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
 fn helper_create_map() -> (
@@ -1053,19 +1080,20 @@ fn helper_create_map() -> (
     )
 }
 
-fn gen_create_map(_function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_create_map(_function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let (statement, _, _, _, _, _, _, _) = helper_create_map();
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
 // setEntry is the cost for map-delete, map-insert, & map-set
 // q: only ever deleting non-existent key; should we change that?
-fn gen_set_entry(scale: u16) -> (Option<String>, String) {
+fn gen_set_entry(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     let (
@@ -1115,13 +1143,15 @@ fn gen_set_entry(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (Some(statement), body)
+
+    GenOutput::new(Some(statement), body, 1)
 }
 
-fn gen_fetch_entry(scale: u16) -> (Option<String>, String) {
+// TODO: fix input size calculation
+fn gen_fetch_entry(scale: u16) -> GenOutput {
     let mut body = String::new();
     let (
-        mut statement,
+        mut setup,
         map_name,
         key_name,
         key_type,
@@ -1145,7 +1175,7 @@ fn gen_fetch_entry(scale: u16) -> (Option<String>, String) {
         None,
     );
 
-    statement.push_str(&format!(
+    setup.push_str(&format!(
         "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
         map_name, key_name, curr_key, value_name, curr_value
     ));
@@ -1168,10 +1198,15 @@ fn gen_fetch_entry(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (Some(statement), body)
+
+    GenOutput::new(
+        Some(setup),
+        body,
+        key_type_len.unwrap() + value_type_len.unwrap(),
+    )
 }
 
-fn gen_create_var(scale: u16) -> (Option<String>, String) {
+fn gen_create_var(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for i in 0..scale {
@@ -1186,10 +1221,11 @@ fn gen_create_var(scale: u16) -> (Option<String>, String) {
         body.push_str(&*format!("(define-data-var {}) ", args));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool) -> (Option<String>, String) {
+fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -1221,20 +1257,22 @@ fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool) -> (Optio
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
     println!("{}", body);
-    (Some(setup), body)
+
+    GenOutput::new(Some(setup), body, 1)
 }
 
-fn gen_single_clar_value(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_single_clar_value(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let args = helper_gen_random_clarity_value(i);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_if(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_if(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for i in 0..scale {
@@ -1250,17 +1288,19 @@ fn gen_if(function_name: &'static str, scale: u16) -> (Option<String>, String) {
             function_name, curr_bool, if_case_value, else_case_value
         ));
     }
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_asserts(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_asserts(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let clarity_val = helper_gen_random_clarity_value(i);
         body.push_str(&*format!("({} true {}) ", function_name, clarity_val));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
 fn helper_generate_sequences(list_type: &str, output: u16) -> Vec<String> {
@@ -1296,7 +1336,7 @@ fn helper_generate_sequences(list_type: &str, output: u16) -> Vec<String> {
     }
 }
 
-fn gen_concat(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_concat(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let (list_type, _) = helper_gen_clarity_type(true, false, true);
@@ -1307,10 +1347,11 @@ fn gen_concat(function_name: &'static str, scale: u16) -> (Option<String>, Strin
         ));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_as_max_len(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_as_max_len(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
@@ -1320,11 +1361,12 @@ fn gen_as_max_len(function_name: &'static str, scale: u16) -> (Option<String>, S
         body.push_str(&*format!("({} {} {}) ", function_name, operand[0], len));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
 // todo: This is to bench BindName - this cost is also used in define function, so should take worst case of both
-fn gen_define_constant(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_define_constant(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for i in 0..scale {
@@ -1333,10 +1375,11 @@ fn gen_define_constant(function_name: &'static str, scale: u16) -> (Option<Strin
         body.push_str(&*format!("({} {} {}) ", function_name, name, value));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_default_to(function_name: &'static str, scale: u16) -> (Option<String>, String) {
+fn gen_default_to(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -1362,10 +1405,11 @@ fn gen_default_to(function_name: &'static str, scale: u16) -> (Option<String>, S
         ));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_int_cast(scale: u16) -> (Option<String>, String) {
+fn gen_int_cast(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
@@ -1384,10 +1428,11 @@ fn gen_int_cast(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_match(scale: u16) -> (Option<String>, String) {
+fn gen_match(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for i in 0..scale {
@@ -1413,10 +1458,11 @@ fn gen_match(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_let(scale: u16) -> (Option<String>, String) {
+fn gen_let(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for i in 0..scale {
@@ -1426,7 +1472,8 @@ fn gen_let(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
 fn helper_generate_random_sequence() -> (String, usize, String) {
@@ -1450,7 +1497,7 @@ fn helper_generate_random_sequence() -> (String, usize, String) {
     }
 }
 
-fn gen_index_of(scale: u16) -> (Option<String>, String) {
+fn gen_index_of(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
@@ -1462,10 +1509,11 @@ fn gen_index_of(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_element_at(scale: u16) -> (Option<String>, String) {
+fn gen_element_at(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
@@ -1475,10 +1523,11 @@ fn gen_element_at(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_len(scale: u16) -> (Option<String>, String) {
+fn gen_len(scale: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let (seq, _, _) = helper_generate_random_sequence();
@@ -1486,11 +1535,12 @@ fn gen_len(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
 // q: not sure if we are testing worst case here; not allowing list of buffs, for example
-fn gen_append(scale: u16) -> (Option<String>, String) {
+fn gen_append(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
@@ -1506,10 +1556,11 @@ fn gen_append(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_list_cons(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_list_cons(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
@@ -1524,10 +1575,11 @@ fn gen_list_cons(scale: u16, input_size: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_filter(scale: u16) -> (Option<String>, String) {
+fn gen_filter(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
@@ -1542,11 +1594,12 @@ fn gen_filter(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
 // fixed type of B to be bool
-fn gen_fold(scale: u16) -> (Option<String>, String) {
+fn gen_fold(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
@@ -1561,10 +1614,11 @@ fn gen_fold(scale: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_map(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_map(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
@@ -1585,10 +1639,11 @@ fn gen_map(scale: u16, input_size: u16) -> (Option<String>, String) {
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_get_block_info(scale: u16) -> (Option<String>, String) {
+fn gen_get_block_info(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -1607,54 +1662,57 @@ fn gen_get_block_info(scale: u16) -> (Option<String>, String) {
         body.push_str(format!("(get-block-info? {} u5) ", props.choose(&mut rng).unwrap()).as_str())
     }
 
-    (None, body)
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_at_block(scale: u16) -> (Option<String>, String) {
+fn gen_at_block(scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
         body.push_str("(at-block 0x0000000000000000000000000000000000000000000000000000000000000000 (no-op)) ");
     }
 
-    (None, body)
+    GenOutput::new(None, body, 1)
 }
 
-pub fn gen_read_only_func(scale: u16) -> (Option<String>, String) {
+pub fn gen_read_only_func(scale: u16) -> GenOutput {
     let mut body = String::new();
-    let (_, arith_string) = gen_arithmetic("+", scale, 2);
+    let arith_string = gen_arithmetic("+", scale, 2).body;
     body.push_str(arith_string.as_str());
 
-    (
+    GenOutput::new(
         None,
-        dbg!(format!(
+        format!(
             "(define-read-only (benchmark-load-contract) (begin {}))",
             body
-        )),
+        ),
+        1,
     )
 }
 
-fn gen_analysis_option_cons(scale: u16) -> (Option<String>, String) {
+fn gen_analysis_option_cons(scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let args = helper_gen_random_clarity_value(i);
         body.push_str(&*format!("{} ", args));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_analysis_option_check(scale: u16) -> (Option<String>, String) {
+fn gen_analysis_option_check(scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let args = helper_gen_random_response_value(i, false, false);
         body.push_str(&*format!("{} ", args));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_analysis_bind_name(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_bind_name(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -1680,10 +1738,11 @@ fn gen_analysis_bind_name(scale: u16, input_size: u16) -> (Option<String>, Strin
         };
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_analysis_list_items_check(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_list_items_check(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let (base_type, _) = helper_gen_clarity_type(true, false, true);
@@ -1695,19 +1754,21 @@ fn gen_analysis_list_items_check(scale: u16, input_size: u16) -> (Option<String>
         body.push_str(") ");
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_analysis_tuple_get(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_tuple_get(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         body.push_str(&helper_generate_tuple(input_size));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_analysis_tuple_merge(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_tuple_merge(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         body.push_str("(");
@@ -1716,10 +1777,11 @@ fn gen_analysis_tuple_merge(scale: u16, input_size: u16) -> (Option<String>, Str
         body.push_str(") ");
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_analysis_tuple_cons(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_tuple_cons(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         body.push_str("(");
@@ -1731,10 +1793,11 @@ fn gen_analysis_tuple_cons(scale: u16, input_size: u16) -> (Option<String>, Stri
         body.push_str(") ");
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_analysis_tuple_items_check(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_tuple_items_check(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let field_name = helper_generate_rand_char_string(10);
@@ -1742,10 +1805,11 @@ fn gen_analysis_tuple_items_check(scale: u16, input_size: u16) -> (Option<String
         body.push_str(&*format!("({} {}) ", field_name, sized_val));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_analysis_check_let(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_check_let(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..(scale) {
         let no_ops = (0..input_size).map(|_x| "(no-op) ").collect::<String>();
@@ -1754,11 +1818,12 @@ fn gen_analysis_check_let(scale: u16, input_size: u16) -> (Option<String>, Strin
         body.push_str(&*format!("((({} {})) {}) ", var_name, var_val, no_ops));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
 // note: includes AnalysisLookupFunction cost
-fn gen_analysis_iterable_func(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_iterable_func(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
@@ -1773,10 +1838,11 @@ fn gen_analysis_iterable_func(scale: u16, input_size: u16) -> (Option<String>, S
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_analysis_storage(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_storage(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let mut defines = String::new();
@@ -1793,28 +1859,31 @@ fn gen_analysis_storage(scale: u16, input_size: u16) -> (Option<String>, String)
         body.push_str(&statement);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_ast_cycle_detection(input_size: u16) -> (Option<String>, String) {
+fn gen_ast_cycle_detection(input_size: u16) -> GenOutput {
     let mut body = String::new();
     body.push_str(&*format!("(define-read-only (fn-0) (no-op)) "));
     for i in 1..(input_size + 1) {
         body.push_str(&*format!("(define-read-only (fn-{}) (fn-{})) ", i, i - 1));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_empty() -> (Option<String>, String) {
-    (None, "".to_string())
+fn gen_empty() -> GenOutput {
+    GenOutput::new(None, "".to_string(), 1)
 }
 
-fn gen_contract_storage(input_size: u16) -> (Option<String>, String) {
-    (None, make_sized_contract(input_size))
+fn gen_contract_storage(input_size: u16) -> GenOutput {
+    let contract = make_sized_contract(input_size);
+    GenOutput::new(None, contract.0, contract.1)
 }
 
-fn gen_type_parse_step(scale: u16) -> (Option<String>, String) {
+fn gen_type_parse_step(scale: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     let type_list = ["bool ", "int ", "uint ", "principal ", "RANDOM "];
@@ -1823,19 +1892,21 @@ fn gen_type_parse_step(scale: u16) -> (Option<String>, String) {
         body.push_str(curr_type);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_principal_of(scale: u16) -> (Option<String>, String) {
+fn gen_principal_of(scale: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         body.push_str(&helper_create_principal_in_hex());
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_analysis_type_lookup(scale: u16, input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_type_lookup(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let asset_name = helper_generate_rand_char_string(10);
@@ -1844,37 +1915,41 @@ fn gen_analysis_type_lookup(scale: u16, input_size: u16) -> (Option<String>, Str
         body.push_str(&*format!("({} {} {}) ", asset_name, tuple, owner));
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-fn gen_analysis_lookup_variable_const(scale: u16) -> (Option<String>, String) {
+fn gen_analysis_lookup_variable_const(scale: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         body.push_str(&helper_generate_rand_char_string(10));
         body.push_str(" ");
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_no_op_with_scale_repetitions(scale: u16) -> (Option<String>, String) {
+fn gen_no_op_with_scale_repetitions(scale: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         body.push_str("(no-op) ")
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_analysis_lookup_function_types(input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_lookup_function_types(input_size: u16) -> GenOutput {
     let args = (0..input_size).map(|_x| "uint ").collect::<String>();
     let dummy_fn = format!("(dummy-fn ({}) (response uint uint))", args);
     let body = format!("(define-trait dummy-trait ({})) ", dummy_fn);
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_analysis_get_function_entry(input_size: u16) -> (Option<String>, String) {
+fn gen_analysis_get_function_entry(input_size: u16) -> GenOutput {
     let mut body = String::new();
     let args = (0..input_size)
         .map(|i| format!(" (f{} uint) ", i))
@@ -1882,10 +1957,11 @@ fn gen_analysis_get_function_entry(input_size: u16) -> (Option<String>, String) 
     body.push_str(&*format!("(define-read-only (dummy-fn {}) (no-op)) ", args));
 
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_inner_type_check_cost(input_size: u16) -> (Option<String>, String) {
+fn gen_inner_type_check_cost(input_size: u16) -> GenOutput {
     let mut body = String::new();
     let clar_type = make_clarity_type_for_sized_value(input_size);
     body.push_str(&*format!(
@@ -1894,30 +1970,31 @@ fn gen_inner_type_check_cost(input_size: u16) -> (Option<String>, String) {
     ));
 
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, 1)
 }
 
-pub fn gen_stx_transfer(scale: u16) -> (Option<String>, String) {
+pub fn gen_stx_transfer(scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
         body.push_str("(stx-transfer? u1 tx-sender 'S0G0000000000000000000000000000015XM0F7) ");
     }
 
-    (None, body)
+    GenOutput::new(None, body, 1)
 }
 
-pub fn gen_stx_get_balance(scale: u16) -> (Option<String>, String) {
+pub fn gen_stx_get_balance(scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
         body.push_str("(stx-get-balance 'S1G2081040G2081040G2081040G208105NK8PE5) ");
     }
 
-    (None, body)
+    GenOutput::new(None, body, 1)
 }
 
-pub fn gen_analysis_pass_read_only(input_size: u16) -> (Option<String>, String) {
+pub fn gen_analysis_pass_read_only(input_size: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..input_size {
         let fn_body = if i == 0 {
@@ -1929,10 +2006,11 @@ pub fn gen_analysis_pass_read_only(input_size: u16) -> (Option<String>, String) 
         body.push_str(&fn_def);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
-pub fn gen_analysis_pass_arithmetic_only(input_size: u16) -> (Option<String>, String) {
+pub fn gen_analysis_pass_arithmetic_only(input_size: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..input_size {
         let fn_body = if i == 0 {
@@ -1947,7 +2025,8 @@ pub fn gen_analysis_pass_arithmetic_only(input_size: u16) -> (Option<String>, St
         body.push_str(&fn_def);
     }
     println!("{}", body);
-    (None, body)
+
+    GenOutput::new(None, body, input_size)
 }
 
 pub fn define_dummy_trait(i: u16, clarity_type: &str) -> String {
@@ -1955,7 +2034,7 @@ pub fn define_dummy_trait(i: u16, clarity_type: &str) -> String {
     format!("(define-trait dummy-trait-{} ({})) ", i, dummy_fn)
 }
 
-pub fn gen_analysis_pass_trait_checker(input_size: u16) -> (Option<String>, String) {
+pub fn gen_analysis_pass_trait_checker(input_size: u16) -> GenOutput {
     let mut setup_body = String::new();
     let mut body = String::new();
     for i in 0..input_size {
@@ -1975,10 +2054,10 @@ pub fn gen_analysis_pass_trait_checker(input_size: u16) -> (Option<String>, Stri
         body.push_str(&impl_fn);
     }
 
-    (Some(setup_body), body)
+    GenOutput::new(Some(setup_body), body, input_size)
 }
 
-pub fn gen_analysis_pass_type_checker(input_size: u16) -> (Option<String>, String) {
+pub fn gen_analysis_pass_type_checker(input_size: u16) -> GenOutput {
     let mut setup_body = String::new();
     let mut body = String::new();
     for i in 0..input_size {
@@ -1991,7 +2070,8 @@ pub fn gen_analysis_pass_type_checker(input_size: u16) -> (Option<String>, Strin
         body.push_str(&fn_def);
     }
     println!("{}", body);
-    (Some(setup_body), body)
+
+    GenOutput::new(Some(setup_body), body, input_size)
 }
 
 /// Returns tuple of optional setup clarity code, and "main" clarity code
@@ -1999,7 +2079,7 @@ pub fn gen_analysis_pass(
     function: AnalysisCostFunction,
     _scale: u16,
     input_size: u16,
-) -> (Option<String>, String) {
+) -> GenOutput {
     match function {
         AnalysisCostFunction::ReadOnly => gen_analysis_pass_read_only(input_size),
         AnalysisCostFunction::TypeChecker => gen_analysis_pass_type_checker(input_size),
@@ -2011,7 +2091,7 @@ pub fn gen_analysis_pass(
 }
 
 // contract-call-bench? does everything contract-call? does, except load and execute the contract code
-fn gen_contract_call(scale: u16) -> (Option<String>, String) {
+fn gen_contract_call(scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
@@ -2020,10 +2100,10 @@ fn gen_contract_call(scale: u16) -> (Option<String>, String) {
         );
     }
 
-    (None, body)
+    GenOutput::new(None, body, 1)
 }
 
-fn gen_contract_of(scale: u16) -> (Option<String>, String) {
+fn gen_contract_of(scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
@@ -2032,11 +2112,11 @@ fn gen_contract_of(scale: u16) -> (Option<String>, String) {
         );
     }
 
-    (None, body)
+    GenOutput::new(None, body, 1)
 }
 
 /// Returns tuple of optional setup clarity code, and "main" clarity code
-pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> (Option<String>, String) {
+pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOutput {
     match function {
         // arithmetic
         ClarityCostFunction::Add => gen_arithmetic("+", scale, input_size),
