@@ -1151,7 +1151,7 @@ fn bench_lookup_function(c: &mut Criterion) {
         setup: _,
         body: contract,
         input_size: _,
-    } = gen(function, SCALE, SCALE * 2);
+    } = gen(function, SCALE, 1);
 
     let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
         Ok(res) => res,
@@ -1661,7 +1661,7 @@ fn bench_analysis_storage(c: &mut Criterion) {
             setup: _,
             body: contract,
             input_size: _,
-        } = gen(function, 1, *input_size);
+        } = gen(function, SCALE, *input_size);
 
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
             Ok(res) => res,
