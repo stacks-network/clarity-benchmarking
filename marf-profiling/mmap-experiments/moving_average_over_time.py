@@ -6,7 +6,7 @@ Usage:
     python3 speed_over_time.py /path/to/raw/data.csv
 
 Output:
-    rows of the form
+    rows of the form:
         idx,time,moving_average
 """
 

@@ -1,3 +1,15 @@
+"""
+This script ingests the LOG output of the `stacks-node`, and outputs it as a
+csv file, in which each row is a time.
+
+Usage:
+    head -n 1000000 ~/data/no_mmap.log | python3 extract_data.py no_mmap > data/no_mmap.txt
+
+Output:
+    rows of the form:
+        idx,time
+"""
+
 import sys
 import collections
 import json
