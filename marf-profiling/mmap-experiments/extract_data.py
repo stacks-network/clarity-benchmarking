@@ -2,6 +2,8 @@ import sys
 import collections
 import json
 
+dir_name = sys.argv[1]
+
 """
 Converts a Rust-style structured output line to a python-style dict.
 
@@ -26,10 +28,9 @@ for line in sys.stdin:
         time_micros = float(kv['time_micros'])
         key_to_times[db].append(time_micros)
 
-
-for kv, times in key_to_times.items():
-    avg = sum(times) / len(times)
-    print('kv', kv)
-    print('avg', avg)
-    print('len', len(times))
-
+marf_key = '/data/' + dir_name + '/mainnet/chainstate/vm/clarity/marf.sqlite'
+marf_times = key_to_times[marf_key]
+for idx, time in enumerate(marf_times):
+    parts = [idx, time]
+    csv = ','.join([str(f) for f in parts])
+    print(csv)
