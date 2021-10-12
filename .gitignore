@@ -4,3 +4,5 @@
 *.sqlite-shm
 *.sqlite-wal
 report/
+
+node_modules
