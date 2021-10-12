@@ -18,11 +18,11 @@ var settled = 0;
 while (settled < NUM_REQUESTS) {
     for (const promise of results) {
         promise.then(result => {
-        settled += 1;
-        console.log({
-            settled,
-            promise,
-        })
+            settled += 1;
+            console.log({
+                settled,
+                promise,
+            })
         })
     }
 }
