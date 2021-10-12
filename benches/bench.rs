@@ -5,7 +5,7 @@ use benchmarking_lib::generators::{
     define_dummy_trait, gen, gen_analysis_pass, gen_read_only_func,
     helper_generate_rand_char_string, helper_make_value_for_sized_type_sig,
     make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map,
-    make_sized_values_map,
+    make_sized_values_map, GenOutput,
 };
 use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
 use blockstack_lib::address::AddressHashMode;
@@ -112,62 +112,97 @@ fn eval(
         .unwrap();
 }
 
-/// Runs benchmarks for a Clarity function
+/// Run benchmarks for a list of input sizes
 ///
 /// # Arguments
 ///
 /// * `c` - Criterion instance. Automatically passed in by Criterion `bench` function.
 /// * `function` - the Clarity cost function that is being benchmarked
 /// * `scale` - a scaling parameter used by the Clarity function code generator
-/// * `input_sizes` - a list of input sizes. a separate benchmark will be run for each size provided
+/// * `input_sizes` - an optional list of input sizes. a separate benchmark will be run for each size provided. If None, will be benchmarked as constant size.
 /// * `use_headers_db` - if true, use a sim headers db instead of a null one
 /// * `maybe_make_store` - an optional closure returning a `MemoryBackingStore`. useful if you want to run a benchmark with pre-loaded state.
 fn bench_with_input_sizes(
     c: &mut Criterion,
     function: ClarityCostFunction,
     scale: u16,
-    input_sizes: Vec<u16>,
+    input_sizes: Option<Vec<u16>>,
     use_headers_db: bool,
     maybe_make_store: Option<Box<dyn Fn() -> MemoryBackingStore>>,
 ) {
     let mut group = c.benchmark_group(function.to_string());
 
-    for input_size in input_sizes.iter() {
-        let mut memory_backing_store = match maybe_make_store {
-            Some(ref make_store) => make_store(),
-            None => MemoryBackingStore::new(),
-        };
-
-        let headers_db = SimHeadersDB::new();
-        let clarity_db = match use_headers_db {
-            true => {
-                ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB)
+    match input_sizes {
+        Some(sizes) => {
+            for input_size in sizes.iter() {
+                run_bench(
+                    &mut group,
+                    function,
+                    scale,
+                    *input_size,
+                    use_headers_db,
+                    &maybe_make_store,
+                    eval,
+                )
             }
-            false => memory_backing_store.as_clarity_db(),
-        };
-
-        run_bench(&mut group, function, scale, *input_size, clarity_db, eval)
+        }
+        None => run_bench(
+            &mut group,
+            function,
+            scale,
+            1,
+            use_headers_db,
+            &maybe_make_store,
+            eval,
+        ),
     }
 }
 
+/// Runs a benchmark for a Clarity function
+///
+/// # Arguments
+///
+/// * `group` - Criterion benchmark group.
+/// * `function` - the Clarity cost function that is being benchmarked
+/// * `scale` - a scaling parameter used by the Clarity function code generator
+/// * `input_size` - The input size to pass in to the code generator. Pass in 1 if constant.
+/// * `use_headers_db` - if true, use a sim headers db instead of a null one
+/// * `maybe_make_store` - an optional closure returning a `MemoryBackingStore`. useful if you want to run a benchmark with pre-loaded state.
+/// * `code_to_bench` - a function that will run the generated Clarity code
 fn run_bench<F>(
     group: &mut BenchmarkGroup<WallTime>,
     function: ClarityCostFunction,
     scale: u16,
     input_size: u16,
-    clarity_db: ClarityDatabase,
+    use_headers_db: bool,
+    maybe_make_store: &Option<Box<dyn Fn() -> MemoryBackingStore>>,
     code_to_bench: F,
 ) where
     F: Fn(&ContractAST, &mut GlobalContext, &mut ContractContext),
 {
+    let mut memory_backing_store = match maybe_make_store {
+        Some(ref make_store) => make_store(),
+        None => MemoryBackingStore::new(),
+    };
+
+    let headers_db = SimHeadersDB::new();
+    let clarity_db = match use_headers_db {
+        true => ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB),
+        false => memory_backing_store.as_clarity_db(),
+    };
+
     let mut global_context = GlobalContext::new(false, clarity_db, LimitedCostTracker::new_free());
     global_context.begin();
 
-    let contract_identifier =
-        QualifiedContractIdentifier::local(&*format!("c{}", input_size)).unwrap();
-    let mut contract_context = ContractContext::new(contract_identifier.clone());
+    let GenOutput {
+        setup: pre_contract_opt,
+        body: contract,
+        input_size: computed_input_size,
+    } = gen(function, scale, input_size);
 
-    let (pre_contract_opt, contract) = gen(function, scale, input_size);
+    let contract_identifier =
+        QualifiedContractIdentifier::local(&*format!("c{}", computed_input_size)).unwrap();
+    let mut contract_context = ContractContext::new(contract_identifier.clone());
 
     let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
         Ok(res) => res,
@@ -179,7 +214,8 @@ fn run_bench<F>(
     match pre_contract_opt {
         Some(pre_contract) => {
             let pre_contract_identifier =
-                QualifiedContractIdentifier::local(&*format!("pre{}", input_size)).unwrap();
+                QualifiedContractIdentifier::local(&*format!("pre{}", computed_input_size))
+                    .unwrap();
             let pre_contract_ast =
                 match ast::build_ast(&pre_contract_identifier, &pre_contract, &mut ()) {
                     Ok(res) => res,
@@ -194,9 +230,9 @@ fn run_bench<F>(
         _ => {}
     }
 
-    group.throughput(Throughput::Bytes(input_size.clone() as u64));
+    group.throughput(Throughput::Bytes(computed_input_size.clone() as u64));
     group.bench_with_input(
-        BenchmarkId::from_parameter(input_size),
+        BenchmarkId::from_parameter(computed_input_size),
         &input_size,
         |b, &_| {
             b.iter(|| {
@@ -231,7 +267,11 @@ fn bench_analysis<F, G>(
     for input_size in input_sizes.iter() {
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
 
-        let (_, contract) = gen(function, scale, *input_size);
+        let GenOutput {
+            setup: _,
+            body: contract,
+            input_size: computed_input_size,
+        } = gen(function, scale, *input_size);
 
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
             Ok(res) => res,
@@ -247,16 +287,16 @@ fn bench_analysis<F, G>(
         let mut analysis_db = memory_backing_store.as_analysis_db();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
-        group.throughput(Throughput::Bytes(*input_size as u64));
+        group.throughput(Throughput::Bytes(computed_input_size as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(input_size),
-            &input_size,
+            BenchmarkId::from_parameter(computed_input_size),
+            &computed_input_size,
             |b, &_| {
                 setup_code(
                     &mut contract_ast,
                     &mut local_context,
                     &mut type_checker,
-                    *input_size,
+                    computed_input_size,
                     &mut cost_tracker,
                 );
                 b.iter(|| {
@@ -264,7 +304,7 @@ fn bench_analysis<F, G>(
                         &mut contract_ast,
                         &mut local_context,
                         &mut type_checker,
-                        *input_size,
+                        computed_input_size,
                         &mut cost_tracker,
                     );
                 })
@@ -282,7 +322,7 @@ where
     for input_size in INPUT_SIZES_ANALYSIS_PASS.iter() {
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
 
-        let (_, contract) = gen_analysis_pass(function, 1, *input_size);
+        let contract = gen_analysis_pass(function, 1, *input_size).body;
         let contract_size = contract.len();
 
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
@@ -346,10 +386,15 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
 
     for input_size in INPUT_SIZES_ANALYSIS_PASS.iter() {
         // Parse the setup contract
-        let (setup_opt, mut contract) = gen_analysis_pass(function, 1, *input_size);
+        let GenOutput {
+            setup: setup_opt,
+            body: mut contract,
+            input_size: computed_input_size,
+        } = gen_analysis_pass(function, 1, *input_size);
+
         let setup_contract = setup_opt.unwrap();
         let pre_contract_identifier =
-            QualifiedContractIdentifier::local(&*format!("pre{}", input_size)).unwrap();
+            QualifiedContractIdentifier::local(&*format!("pre{}", computed_input_size)).unwrap();
         let pre_contract_ast =
             match ast::build_ast(&pre_contract_identifier, &setup_contract, &mut ()) {
                 Ok(res) => res,
@@ -366,7 +411,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
 
         // add impl-trait statements
         let principal_data = PrincipalData::Standard(pre_contract_identifier.issuer.clone());
-        for i in 0..*input_size {
+        for i in 0..computed_input_size {
             let impl_trait = format!(
                 "(impl-trait '{}.{}.dummy-trait-{}) ",
                 principal_data, pre_contract_identifier.name, i
@@ -442,7 +487,12 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
 
     for input_size in INPUT_SIZES_ANALYSIS_PASS.iter() {
         // Parse the setup contract
-        let (setup_opt, mut contract) = gen_analysis_pass(function, 1, *input_size);
+        let GenOutput {
+            setup: setup_opt,
+            body: mut contract,
+            input_size: computed_input_size,
+        } = gen_analysis_pass(function, 1, *input_size);
+
         let setup_contract = setup_opt.unwrap();
         let pre_contract_identifier =
             QualifiedContractIdentifier::local(&*format!("pre{}", input_size)).unwrap();
@@ -462,7 +512,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
 
         // add use-trait statements
         let principal_data = PrincipalData::Standard(pre_contract_identifier.issuer.clone());
-        for i in 0..*input_size {
+        for i in 0..computed_input_size {
             let impl_trait = format!(
                 "(use-trait dummy-trait-{}-alias '{}.{}.dummy-trait-{}) ",
                 i, principal_data, pre_contract_identifier.name, i
@@ -619,7 +669,11 @@ fn bench_ast_cycle_detection(c: &mut Criterion) {
     for input_size in &INPUT_SIZES {
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
 
-        let (_, contract) = gen(function, 1, *input_size);
+        let GenOutput {
+            setup: _,
+            body: mut contract,
+            input_size: computed_input_size,
+        } = gen(function, 1, *input_size);
 
         let pre_expressions = parser::parse(&contract).unwrap();
         let mut contract_ast = ContractAST::new(contract_identifier.clone(), pre_expressions);
@@ -628,10 +682,10 @@ fn bench_ast_cycle_detection(c: &mut Criterion) {
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut def_sorter = DefinitionSorter::new();
 
-        group.throughput(Throughput::Bytes(*input_size as u64));
+        group.throughput(Throughput::Bytes(computed_input_size as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(input_size),
-            &input_size,
+            BenchmarkId::from_parameter(computed_input_size),
+            &computed_input_size,
             |b, &_| {
                 b.iter(|| {
                     for _ in 0..SCALE {
@@ -662,7 +716,12 @@ fn bench_contract_storage(c: &mut Criterion) {
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_context = ContractContext::new(contract_identifier.clone());
 
-        let (_, contract) = gen(function, 1, *input_size);
+        let GenOutput {
+            setup: _,
+            body: contract,
+            input_size: computed_input_size,
+        } = gen(function, 1, *input_size);
+
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
             Ok(res) => res,
             Err(error) => {
@@ -680,10 +739,10 @@ fn bench_contract_storage(c: &mut Criterion) {
             None,
         );
 
-        group.throughput(Throughput::Bytes(*input_size as u64));
+        group.throughput(Throughput::Bytes(computed_input_size as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(input_size),
-            &input_size,
+            BenchmarkId::from_parameter(computed_input_size),
+            &computed_input_size,
             |b, &_| {
                 b.iter(|| {
                     for _ in 0..SCALE {
@@ -713,7 +772,12 @@ fn bench_principal_of(c: &mut Criterion) {
 
     let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
     let mut contract_context = ContractContext::new(contract_identifier.clone());
-    let (_, contract) = gen(function, SCALE, 0);
+    let GenOutput {
+        setup: _,
+        body: contract,
+        input_size: _,
+    } = gen(function, SCALE, 1);
+
     let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
         Ok(res) => res,
         Err(error) => {
@@ -752,7 +816,12 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
-        let (_, contract) = gen(function, 1, *input_size);
+        let GenOutput {
+            setup: _,
+            body: contract,
+            input_size: _,
+        } = gen(function, 1, *input_size);
+
         let mut contract_identifier =
             QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
@@ -823,7 +892,12 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
 
-        let (_, contract) = gen(function, 1, *input_size);
+        let GenOutput {
+            setup: _,
+            body: contract,
+            input_size: _,
+        } = gen(function, 1, *input_size);
+
         let mut contract_identifier =
             QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
@@ -899,7 +973,13 @@ fn bench_inner_type_check_cost(c: &mut Criterion) {
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_context = ContractContext::new(contract_identifier.clone());
-        let (_, contract) = gen(function, 1, *input_size);
+
+        let GenOutput {
+            setup: _,
+            body: contract,
+            input_size: _,
+        } = gen(function, 1, *input_size);
+
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
             Ok(res) => res,
             Err(error) => {
@@ -943,7 +1023,13 @@ fn bench_user_function_application(c: &mut Criterion) {
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_context = ContractContext::new(contract_identifier.clone());
-        let (_, contract) = gen(function, 1, *input_size);
+
+        let GenOutput {
+            setup: _,
+            body: contract,
+            input_size: computed_input_size,
+        } = gen(function, 1, *input_size);
+
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
             Ok(res) => res,
             Err(error) => {
@@ -957,14 +1043,14 @@ fn bench_user_function_application(c: &mut Criterion) {
 
         let defined_fn = contract_context.lookup_function("dummy-fn").unwrap();
         let mut arg_list = Vec::new();
-        for _ in 0..*input_size {
+        for _ in 0..computed_input_size {
             arg_list.push(Value::UInt(rng.gen()));
         }
 
-        group.throughput(Throughput::Bytes(*input_size as u64));
+        group.throughput(Throughput::Bytes(computed_input_size as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(input_size),
-            &input_size,
+            BenchmarkId::from_parameter(computed_input_size),
+            &computed_input_size,
             |b, &_| {
                 b.iter(|| {
                     for _ in 0..SCALE {
@@ -991,7 +1077,12 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_context = ContractContext::new(contract_identifier.clone());
 
-        let (_, contract) = gen(function, 1, *input_size);
+        let GenOutput {
+            setup: _,
+            body: contract,
+            input_size: _,
+        } = gen(function, 1, *input_size);
+
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
             Ok(res) => res,
             Err(error) => {
@@ -1055,7 +1146,13 @@ fn bench_lookup_function(c: &mut Criterion) {
 
     let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
     let mut contract_context = ContractContext::new(contract_identifier.clone());
-    let (_, contract) = gen(function, SCALE, SCALE * 2);
+
+    let GenOutput {
+        setup: _,
+        body: contract,
+        input_size: _,
+    } = gen(function, SCALE, 1);
+
     let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
         Ok(res) => res,
         Err(error) => {
@@ -1560,7 +1657,11 @@ fn bench_analysis_storage(c: &mut Criterion) {
     for input_size in &INPUT_SIZES {
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
 
-        let (_, contract) = gen(function, 1, *input_size);
+        let GenOutput {
+            setup: _,
+            body: contract,
+            input_size: _,
+        } = gen(function, SCALE, *input_size);
 
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
             Ok(res) => res,
@@ -1736,7 +1837,7 @@ fn bench_add(c: &mut Criterion) {
         c,
         ClarityCostFunction::Add,
         SCALE,
-        INPUT_SIZES_ARITHMETIC.into(),
+        Some(INPUT_SIZES_ARITHMETIC.into()),
         false,
         None,
     )
@@ -1747,7 +1848,7 @@ fn bench_sub(c: &mut Criterion) {
         c,
         ClarityCostFunction::Sub,
         SCALE,
-        INPUT_SIZES_ARITHMETIC.into(),
+        Some(INPUT_SIZES_ARITHMETIC.into()),
         false,
         None,
     )
@@ -1758,7 +1859,7 @@ fn bench_mul(c: &mut Criterion) {
         c,
         ClarityCostFunction::Mul,
         SCALE,
-        INPUT_SIZES_ARITHMETIC.into(),
+        Some(INPUT_SIZES_ARITHMETIC.into()),
         false,
         None,
     )
@@ -1769,26 +1870,26 @@ fn bench_div(c: &mut Criterion) {
         c,
         ClarityCostFunction::Div,
         SCALE,
-        INPUT_SIZES_ARITHMETIC.into(),
+        Some(INPUT_SIZES_ARITHMETIC.into()),
         false,
         None,
     )
 }
 
 fn bench_le(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Le, SCALE, vec![2], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Le, SCALE, None, false, None)
 }
 
 fn bench_leq(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Leq, SCALE, vec![2], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Leq, SCALE, None, false, None)
 }
 
 fn bench_ge(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Ge, SCALE, vec![2], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Ge, SCALE, None, false, None)
 }
 
 fn bench_geq(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Geq, SCALE, vec![2], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Geq, SCALE, None, false, None)
 }
 
 // boolean functions
@@ -1797,7 +1898,7 @@ fn bench_and(c: &mut Criterion) {
         c,
         ClarityCostFunction::And,
         SCALE,
-        INPUT_SIZES.into(),
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -1808,18 +1909,18 @@ fn bench_or(c: &mut Criterion) {
         c,
         ClarityCostFunction::Or,
         SCALE,
-        INPUT_SIZES.into(),
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
 }
 
 fn bench_xor(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Xor, SCALE, vec![2], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Xor, SCALE, None, false, None)
 }
 
 fn bench_not(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Not, SCALE, vec![1], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Not, SCALE, None, false, None)
 }
 
 // note: only testing is-eq when the values are bools; could try doing it with ints?
@@ -1828,26 +1929,26 @@ fn bench_eq(c: &mut Criterion) {
         c,
         ClarityCostFunction::Eq,
         SCALE,
-        INPUT_SIZES.into(),
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
 }
 
 fn bench_mod(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Mod, SCALE, vec![2], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Mod, SCALE, None, false, None)
 }
 
 fn bench_pow(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Pow, SCALE, vec![2], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Pow, SCALE, None, false, None)
 }
 
 fn bench_sqrti(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sqrti, SCALE, vec![1], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sqrti, SCALE, None, false, None)
 }
 
 fn bench_log2(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Log2, SCALE, vec![1], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Log2, SCALE, None, false, None)
 }
 
 fn bench_tuple_get(c: &mut Criterion) {
@@ -1855,7 +1956,7 @@ fn bench_tuple_get(c: &mut Criterion) {
         c,
         ClarityCostFunction::TupleGet,
         SCALE,
-        MORE_INPUT_SIZES.into(),
+        Some(MORE_INPUT_SIZES.into()),
         false,
         None,
     )
@@ -1866,7 +1967,7 @@ fn bench_tuple_merge(c: &mut Criterion) {
         c,
         ClarityCostFunction::TupleMerge,
         SCALE,
-        INPUT_SIZES.into(),
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -1877,7 +1978,7 @@ fn bench_tuple_cons(c: &mut Criterion) {
         c,
         ClarityCostFunction::TupleCons,
         SCALE,
-        MORE_INPUT_SIZES.into(),
+        Some(MORE_INPUT_SIZES.into()),
         false,
         None,
     )
@@ -1885,37 +1986,23 @@ fn bench_tuple_cons(c: &mut Criterion) {
 
 // hash functions
 fn bench_hash160(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, vec![1], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, None, false, None)
 }
 
 fn bench_sha256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, vec![1], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, None, false, None)
 }
 
 fn bench_sha512(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, vec![1], false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, None, false, None)
 }
 
 fn bench_sha512t256(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Sha512t256,
-        SCALE,
-        vec![1],
-        false,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, None, false, None)
 }
 
 fn bench_keccak256(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Keccak256,
-        SCALE,
-        vec![1],
-        false,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, None, false, None)
 }
 
 fn bench_secp256k1recover(c: &mut Criterion) {
@@ -1923,7 +2010,7 @@ fn bench_secp256k1recover(c: &mut Criterion) {
         c,
         ClarityCostFunction::Secp256k1recover,
         SCALE,
-        vec![1],
+        None,
         false,
         None,
     )
@@ -1934,7 +2021,7 @@ fn bench_secp256k1verify(c: &mut Criterion) {
         c,
         ClarityCostFunction::Secp256k1verify,
         SCALE,
-        vec![1],
+        None,
         false,
         None,
     )
@@ -1945,7 +2032,7 @@ fn bench_create_ft_old(c: &mut Criterion) {
         c,
         ClarityCostFunction::CreateFt,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -1983,7 +2070,7 @@ fn bench_mint_ft(c: &mut Criterion) {
         c,
         ClarityCostFunction::FtMint,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -1994,7 +2081,7 @@ fn bench_ft_transfer(c: &mut Criterion) {
         c,
         ClarityCostFunction::FtTransfer,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2005,7 +2092,7 @@ fn bench_ft_balance(c: &mut Criterion) {
         c,
         ClarityCostFunction::FtBalance,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2016,7 +2103,7 @@ fn bench_ft_supply(c: &mut Criterion) {
         c,
         ClarityCostFunction::FtSupply,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2027,7 +2114,7 @@ fn bench_ft_burn(c: &mut Criterion) {
         c,
         ClarityCostFunction::FtBurn,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2077,7 +2164,7 @@ fn bench_nft_mint(c: &mut Criterion) {
         c,
         ClarityCostFunction::NftMint,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2088,7 +2175,7 @@ fn bench_nft_transfer(c: &mut Criterion) {
         c,
         ClarityCostFunction::NftTransfer,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2099,7 +2186,7 @@ fn bench_nft_owner(c: &mut Criterion) {
         c,
         ClarityCostFunction::NftOwner,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2110,7 +2197,7 @@ fn bench_nft_burn(c: &mut Criterion) {
         c,
         ClarityCostFunction::NftBurn,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2121,7 +2208,7 @@ fn bench_is_none(c: &mut Criterion) {
         c,
         ClarityCostFunction::IsNone,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2132,7 +2219,7 @@ fn bench_is_some(c: &mut Criterion) {
         c,
         ClarityCostFunction::IsSome,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2143,7 +2230,7 @@ fn bench_is_ok(c: &mut Criterion) {
         c,
         ClarityCostFunction::IsOkay,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2154,7 +2241,7 @@ fn bench_is_err(c: &mut Criterion) {
         c,
         ClarityCostFunction::IsErr,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2165,7 +2252,7 @@ fn bench_unwrap(c: &mut Criterion) {
         c,
         ClarityCostFunction::Unwrap,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2176,7 +2263,7 @@ fn bench_unwrap_ret(c: &mut Criterion) {
         c,
         ClarityCostFunction::UnwrapRet,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2187,7 +2274,7 @@ fn bench_unwrap_err(c: &mut Criterion) {
         c,
         ClarityCostFunction::UnwrapErr,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2198,7 +2285,7 @@ fn bench_unwrap_err_or_ret(c: &mut Criterion) {
         c,
         ClarityCostFunction::UnwrapErrOrRet,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2252,7 +2339,7 @@ fn bench_create_var_old(c: &mut Criterion) {
         c,
         ClarityCostFunction::CreateVar,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2305,7 +2392,7 @@ fn bench_set_var(c: &mut Criterion) {
         c,
         ClarityCostFunction::SetVar,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2316,7 +2403,7 @@ fn bench_fetch_var(c: &mut Criterion) {
         c,
         ClarityCostFunction::FetchVar,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2327,21 +2414,14 @@ fn bench_print(c: &mut Criterion) {
         c,
         ClarityCostFunction::Print,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
 }
 
 fn bench_if(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::If,
-        SCALE.into(),
-        vec![1],
-        false,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::If, SCALE.into(), None, false, None)
 }
 
 fn bench_asserts(c: &mut Criterion) {
@@ -2349,7 +2429,7 @@ fn bench_asserts(c: &mut Criterion) {
         c,
         ClarityCostFunction::Asserts,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2360,7 +2440,7 @@ fn bench_ok_cons(c: &mut Criterion) {
         c,
         ClarityCostFunction::OkCons,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2371,7 +2451,7 @@ fn bench_err_cons(c: &mut Criterion) {
         c,
         ClarityCostFunction::ErrCons,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2382,7 +2462,7 @@ fn bench_some_cons(c: &mut Criterion) {
         c,
         ClarityCostFunction::SomeCons,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2393,7 +2473,7 @@ fn bench_concat(c: &mut Criterion) {
         c,
         ClarityCostFunction::Concat,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2404,7 +2484,7 @@ fn bench_as_max_len(c: &mut Criterion) {
         c,
         ClarityCostFunction::AsMaxLen,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2415,7 +2495,7 @@ fn bench_begin(c: &mut Criterion) {
         c,
         ClarityCostFunction::Begin,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2426,7 +2506,7 @@ fn bench_bind_name(c: &mut Criterion) {
         c,
         ClarityCostFunction::BindName,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2437,7 +2517,7 @@ fn bench_default_to(c: &mut Criterion) {
         c,
         ClarityCostFunction::DefaultTo,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2448,7 +2528,7 @@ fn bench_try(c: &mut Criterion) {
         c,
         ClarityCostFunction::TryRet,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2459,7 +2539,7 @@ fn bench_int_cast(c: &mut Criterion) {
         c,
         ClarityCostFunction::IntCast,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2470,7 +2550,7 @@ fn bench_set_entry(c: &mut Criterion) {
         c,
         ClarityCostFunction::SetEntry,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2481,7 +2561,7 @@ fn bench_fetch_entry(c: &mut Criterion) {
         c,
         ClarityCostFunction::FetchEntry,
         SCALE.into(),
-        vec![1],
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -2492,21 +2572,14 @@ fn bench_match(c: &mut Criterion) {
         c,
         ClarityCostFunction::Match,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
 }
 
 fn bench_let(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Let,
-        SCALE.into(),
-        vec![1],
-        false,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Let, SCALE.into(), None, false, None)
 }
 
 fn bench_index_of(c: &mut Criterion) {
@@ -2514,7 +2587,7 @@ fn bench_index_of(c: &mut Criterion) {
         c,
         ClarityCostFunction::IndexOf,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2525,21 +2598,14 @@ fn bench_element_at(c: &mut Criterion) {
         c,
         ClarityCostFunction::ElementAt,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
 }
 
 fn bench_len(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Len,
-        SCALE.into(),
-        vec![1],
-        false,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Len, SCALE.into(), None, false, None)
 }
 
 fn bench_list_cons(c: &mut Criterion) {
@@ -2547,7 +2613,7 @@ fn bench_list_cons(c: &mut Criterion) {
         c,
         ClarityCostFunction::ListCons,
         SCALE.into(),
-        INPUT_SIZES.into(),
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -2558,7 +2624,7 @@ fn bench_append(c: &mut Criterion) {
         c,
         ClarityCostFunction::Append,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2569,7 +2635,7 @@ fn bench_filter(c: &mut Criterion) {
         c,
         ClarityCostFunction::Filter,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2581,7 +2647,7 @@ fn bench_map(c: &mut Criterion) {
         c,
         ClarityCostFunction::Map,
         SCALE.into(),
-        INPUT_SIZES.into(),
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -2592,7 +2658,7 @@ fn bench_fold(c: &mut Criterion) {
         c,
         ClarityCostFunction::Fold,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2603,7 +2669,7 @@ fn bench_block_info(c: &mut Criterion) {
         c,
         ClarityCostFunction::BlockInfo,
         SCALE.into(),
-        vec![1],
+        None,
         true,
         None,
     )
@@ -2614,7 +2680,7 @@ fn bench_at_block(c: &mut Criterion) {
         c,
         ClarityCostFunction::AtBlock,
         SCALE.into(),
-        vec![1],
+        None,
         true,
         None,
     )
@@ -2636,7 +2702,12 @@ fn bench_load_contract(c: &mut Criterion) {
     for size in INPUT_SIZES.iter() {
         let contract_identifier =
             QualifiedContractIdentifier::local(format!("contract{}", size).as_str()).unwrap();
-        let (_, contract) = gen_read_only_func(*size);
+
+        let GenOutput {
+            setup: _,
+            body: contract,
+            input_size: _,
+        } = gen_read_only_func(*size);
 
         env.initialize_contract(contract_identifier.clone(), &contract)
             .unwrap();
@@ -2682,7 +2753,7 @@ fn bench_stx_transfer(c: &mut Criterion) {
         c,
         ClarityCostFunction::StxTransfer,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2693,7 +2764,7 @@ fn bench_stx_get_balance(c: &mut Criterion) {
         c,
         ClarityCostFunction::StxBalance,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2754,7 +2825,7 @@ fn bench_contract_call(c: &mut Criterion) {
         c,
         ClarityCostFunction::ContractCall,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         None,
     )
@@ -2793,7 +2864,7 @@ fn bench_contract_of(c: &mut Criterion) {
         c,
         ClarityCostFunction::ContractOf,
         SCALE.into(),
-        vec![1],
+        None,
         false,
         Some(Box::new(make_store)),
     )
