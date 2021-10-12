@@ -1,30 +1,32 @@
 const axios = require('axios');
+const process = require('process');
 
-// const NUM_REQUESTS = 1000;
-const NUM_REQUESTS = 3;
+const arg = process.argv[2];
+console.log({arg});
+const size = parseInt(arg);
 
-var results = [];
-for (var i = 0; i < NUM_REQUESTS; ++i) {
-    const result = axios.get('http://localhost:20443/v2/accounts/SP1P72Z3704VMT3DMHPP2CB8TGQWGDBHD3RPR9GZS')
-    // const result = axios.get('https://stacks-node-api.mainnet.stacks.co/v2/accounts/SP1P72Z3704VMT3DMHPP2CB8TGQWGDBHD3RPR9GZS')
-    results.push(result)
-}
-
-console.log({
-    results
-})
-
-var settled = 0;
-while (settled < NUM_REQUESTS) {
-    for (const promise of results) {
-        promise.then(result => {
-            settled += 1;
-            console.log({
-                settled,
-                promise,
-            })
-        })
+async function RunTests(NUM_REQUESTS) {
+    const startTime = new Date().getTime();
+    var results = [];
+    for (var i = 0; i < NUM_REQUESTS; ++i) {
+        const result = axios.get('http://localhost:20443/v2/accounts/SP1P72Z3704VMT3DMHPP2CB8TGQWGDBHD3RPR9GZS')
+        // const result = axios.get('https://stacks-node-api.mainnet.stacks.co/v2/accounts/SP1P72Z3704VMT3DMHPP2CB8TGQWGDBHD3RPR9GZS')
+        results.push(result)
     }
+
+    var settled = 0;
+    for (const promise of results) {
+        const result = await promise;
+    }
+
+    const endTime = new Date().getTime();
+
+    const diffTime = endTime - startTime;
+
+    console.log({
+            NUM_REQUESTS,
+        diffTime,
+    })
 }
 
-process.exit()
+RunTests(size);
