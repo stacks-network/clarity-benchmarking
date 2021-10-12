@@ -2140,10 +2140,11 @@ fn bench_create_nft(c: &mut Criterion) {
         let mut contract_context = ContractContext::new(contract_identifier.clone());
 
         let asset_type = SIZED_TYPE_SIG.get(input_size).unwrap();
-        group.throughput(Throughput::Bytes(*input_size as u64));
+        let asset_type_size = asset_type.size();
+        group.throughput(Throughput::Bytes(asset_type_size as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(input_size),
-            &input_size,
+            BenchmarkId::from_parameter(asset_type_size),
+            &asset_type_size,
             |b, &_| {
                 b.iter(|| {
                     for _ in 0..SCALE {

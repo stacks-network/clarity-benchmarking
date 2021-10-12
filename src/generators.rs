@@ -224,7 +224,7 @@ fn helper_make_clarity_value_for_sized_type_sig(input_size: u16) -> String {
 pub fn helper_make_value_for_sized_type_sig(input_size: u16) -> Value {
     let mut rng = rand::thread_rng();
     match input_size {
-        1 => Value::Int(rng.gen()),
+        1 => Value::Bool(rng.gen()),
         2 => Value::Optional(OptionalData {
             data: Some(Box::new(Value::Bool(rng.gen_bool(0.5)))),
         }),
@@ -233,7 +233,7 @@ pub fn helper_make_value_for_sized_type_sig(input_size: u16) -> Value {
             // assume n is a multiple of 8
             let mut type_map = BTreeMap::new();
             let mut data_map = BTreeMap::new();
-            let value_type_sig = TypeSignature::IntType;
+            let value_type_sig = TypeSignature::BoolType;
             for i in 0..mult {
                 let id_name = if i < 10 {
                     format!("id--{}", i)
@@ -241,7 +241,7 @@ pub fn helper_make_value_for_sized_type_sig(input_size: u16) -> Value {
                     format!("id-{}", i)
                 };
                 let clarity_name = ClarityName::try_from(id_name).unwrap();
-                let value = Value::Int(rng.gen());
+                let value = Value::Bool(rng.gen());
                 type_map.insert(clarity_name.clone(), value_type_sig.clone());
                 data_map.insert(clarity_name, value);
             }
@@ -259,11 +259,11 @@ pub fn helper_make_value_for_sized_type_sig(input_size: u16) -> Value {
 fn make_sized_type_sig(input_size: u16) -> TypeSignature {
     let mut rng = rand::thread_rng();
     match input_size {
-        1 => IntType,
+        1 => TypeSignature::BoolType,
         2 => TypeSignature::OptionalType(Box::new(TypeSignature::BoolType)),
         n => {
             // assume n is a multiple of 8
-            let type_list = [IntType];
+            let type_list = [TypeSignature::BoolType];
             let mut type_map = Vec::new();
             let mult = n / 8;
             for i in 0..mult {
@@ -547,7 +547,6 @@ fn helper_define_fungible_token_statement() -> (String, String) {
     (statement, token_name)
 }
 
-/// todo: remove function name input for the generator functions that map to a single clarity fn?
 /// cost_function: CreateFt
 /// input_size: 0
 fn gen_create_ft(_function_name: &'static str, scale: u16) -> GenOutput {
@@ -734,19 +733,6 @@ fn helper_define_non_fungible_token_statement(
     (statement, token_name, nft_type.to_string(), nft_len)
 }
 
-/// cost_function: CreateNft
-/// input_size: type signature size of asset
-/// TODO - take in input size
-fn gen_create_nft(function_name: &'static str, scale: u16) -> GenOutput {
-    let mut body = String::new();
-    for _ in 0..scale {
-        let (statement, _, _, _) = helper_define_non_fungible_token_statement(true);
-        body.push_str(&statement);
-    }
-
-    GenOutput::new(None, body, 1)
-}
-
 fn helper_gen_clarity_value(
     value_type: &str,
     num: u16,
@@ -801,7 +787,7 @@ fn helper_gen_random_clarity_value(num: u16) -> String {
 /// cost_function: NftMint
 /// input_size: size of type signature of asset
 /// TODO - take in input size
-fn gen_nft_mint(scale: u16) -> GenOutput {
+fn gen_nft_mint(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let (statement, token_name, nft_type, nft_len) =
         helper_define_non_fungible_token_statement(false);
@@ -2331,9 +2317,13 @@ fn gen_contract_of(scale: u16) -> GenOutput {
 }
 
 /// Returns tuple of optional setup clarity code, and "main" clarity code
+/// The `reviewed` comment above each cost function should list the GitHub usernames of those
+///    who have verified that the benchmark for that cost function seems accurate (given the code
+///    in `benches.rs`, the code in `generators.rs`, and the benchmark data.
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOutput {
     match function {
-        // arithmetic
+        /// Arithmetic ///////////////////////
+        /// reviewed:
         ClarityCostFunction::Add => gen_arithmetic("+", scale, input_size),
         ClarityCostFunction::Sub => gen_arithmetic("-", scale, input_size),
         ClarityCostFunction::Mul => gen_arithmetic("*", scale, input_size),
@@ -2341,150 +2331,361 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
         ClarityCostFunction::Sqrti => gen_arithmetic("sqrti", scale, 1),
         ClarityCostFunction::Log2 => gen_arithmetic("log2", scale, 1),
         ClarityCostFunction::Mod => gen_arithmetic("mod", scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::Pow => gen_pow(scale),
-        // logic
+
+        /// Logic /////////////////////////////
+        /// reviewed:
         ClarityCostFunction::Le => gen_cmp("<", scale),
         ClarityCostFunction::Leq => gen_cmp("<=", scale),
         ClarityCostFunction::Ge => gen_cmp(">", scale),
         ClarityCostFunction::Geq => gen_cmp(">=", scale),
-        // boolean
+
+
+        /// Boolean ///////////////////////////
+        /// reviewed:
         ClarityCostFunction::And => gen_logic("and", scale, input_size),
         ClarityCostFunction::Or => gen_logic("or", scale, input_size),
-        ClarityCostFunction::Xor => gen_xor("xor", scale),
         ClarityCostFunction::Not => gen_logic("not", scale, input_size),
         ClarityCostFunction::Eq => gen_logic("is-eq", scale, input_size),
-        // tuples
+        /// reviewed:
+        ClarityCostFunction::Xor => gen_xor("xor", scale),
+
+
+        /// Tuples ////////////////////////////
+        /// reviewed:
         ClarityCostFunction::TupleGet => gen_tuple_get(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::TupleMerge => gen_tuple_merge(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::TupleCons => gen_tuple_cons(scale, input_size),
-        // Analysis
+
+
+        /// Analysis //////////////////
+        /// reviewed:
         ClarityCostFunction::AnalysisTypeAnnotate => gen_analysis_lookup_variable_const(scale),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisTypeCheck => gen_empty(),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisTypeLookup => gen_analysis_type_lookup(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisVisit => gen_no_op_with_scale_repetitions(scale),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisIterableFunc => gen_analysis_iterable_func(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisOptionCons => gen_analysis_option_cons(scale),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisOptionCheck => gen_analysis_option_check(scale),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisBindName => gen_analysis_bind_name(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisListItemsCheck => {
             gen_analysis_list_items_check(scale, input_size)
         }
+
+        /// reviewed:
         ClarityCostFunction::AnalysisCheckTupleGet => gen_analysis_tuple_get(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisCheckTupleMerge => gen_analysis_tuple_merge(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisCheckTupleCons => gen_analysis_tuple_cons(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisTupleItemsCheck => {
             gen_analysis_tuple_items_check(scale, input_size)
         }
+
+        /// reviewed:
         ClarityCostFunction::AnalysisCheckLet => gen_analysis_check_let(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisLookupFunction => gen_no_op_with_scale_repetitions(scale),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisLookupFunctionTypes => {
             gen_analysis_lookup_function_types(input_size)
         }
+
+        /// reviewed:
         ClarityCostFunction::AnalysisLookupVariableConst => {
             gen_analysis_lookup_variable_const(scale)
         }
+
+        /// reviewed:
         ClarityCostFunction::AnalysisLookupVariableDepth => unimplemented!(), // no gen function needed
+
+        /// reviewed:
         ClarityCostFunction::AnalysisStorage => gen_analysis_storage(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::AnalysisUseTraitEntry => {
             gen_analysis_lookup_function_types(input_size)
         }
+
+        /// reviewed:
         ClarityCostFunction::AnalysisGetFunctionEntry => {
             gen_analysis_get_function_entry(input_size)
         }
+
+        /// reviewed:
         ClarityCostFunction::AnalysisFetchContractEntry => unimplemented!(), // not used anywhere
-        // Ast
+
+
+        /// Ast ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::AstParse => gen_empty(),
+
+        /// reviewed:
         ClarityCostFunction::AstCycleDetection => gen_ast_cycle_detection(input_size),
+
+        /// reviewed:
         ClarityCostFunction::ContractStorage => gen_contract_storage(input_size),
-        // Lookup
+
+
+        /// Lookup ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::LookupVariableDepth => unimplemented!(), // no gen function needed
+
+        /// reviewed:
         ClarityCostFunction::LookupVariableSize => unimplemented!(),  // no gen function needed
+
+        /// reviewed:
         ClarityCostFunction::LookupFunction => gen_ast_cycle_detection(input_size),
-        // List
+
+
+        /// List ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::Map => gen_map(scale, input_size), // includes LookupFunction cost
+
+        /// reviewed:
         ClarityCostFunction::Filter => gen_filter(scale),       // includes LookupFunction cost
+
+        /// reviewed:
         ClarityCostFunction::Fold => gen_fold(scale),           // includes LookupFunction cost
+
+        /// reviewed:
         ClarityCostFunction::Len => gen_len(scale),
+
+        /// reviewed:
         ClarityCostFunction::ElementAt => gen_element_at(scale),
+
+        /// reviewed:
         ClarityCostFunction::IndexOf => gen_index_of(scale),
+
+        /// reviewed:
         ClarityCostFunction::ListCons => gen_list_cons(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::Append => gen_append(scale),
-        // Hash
+
+
+        /// Hash ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::Hash160 => gen_hash("hash160", scale),
+
+        /// reviewed:
         ClarityCostFunction::Sha256 => gen_hash("sha256", scale),
+
+        /// reviewed:
         ClarityCostFunction::Sha512 => gen_hash("sha512", scale),
+
+        /// reviewed:
         ClarityCostFunction::Sha512t256 => gen_hash("sha512/256", scale),
+
+        /// reviewed:
         ClarityCostFunction::Keccak256 => gen_hash("keccak256", scale),
+
+        /// reviewed:
         ClarityCostFunction::Secp256k1recover => gen_secp256k1("secp256k1-recover?", scale, false),
+
+        /// reviewed:
         ClarityCostFunction::Secp256k1verify => gen_secp256k1("secp256k1-verify", scale, true),
-        // FT
+
+        /// FT ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::CreateFt => gen_create_ft("define-fungible-token", scale),
+
+        /// reviewed:
         ClarityCostFunction::FtMint => gen_ft_mint("ft-mint?", scale),
+
+        /// reviewed:
         ClarityCostFunction::FtTransfer => gen_ft_transfer("ft-transfer?", scale),
+
+        /// reviewed:
         ClarityCostFunction::FtBalance => gen_ft_balance("ft-get-balance", scale),
+
+        /// reviewed:
         ClarityCostFunction::FtSupply => gen_ft_supply("ft-get-supply", scale),
+
+        /// reviewed:
         ClarityCostFunction::FtBurn => gen_ft_burn("ft-burn?", scale),
-        // NFT
-        ClarityCostFunction::CreateNft => gen_create_nft("define-non-fungible-token", scale),
-        ClarityCostFunction::NftMint => gen_nft_mint(scale),
+
+
+        /// NFT ////////////////////////////////
+        /// reviewed:
+        ClarityCostFunction::CreateNft => unimplemented!(),
+
+        /// reviewed:
+        ClarityCostFunction::NftMint => gen_nft_mint(scale, input_size),
+
+        /// reviewed:
         ClarityCostFunction::NftTransfer => gen_nft_transfer("nft-transfer?", scale),
+
+        /// reviewed:
         ClarityCostFunction::NftOwner => gen_nft_owner("nft-get-owner?", scale),
+
+        /// reviewed:
         ClarityCostFunction::NftBurn => gen_nft_burn("nft-burn?", scale),
-        // Stacks
+
+        /// Stacks ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::PoisonMicroblock => unimplemented!(), // don't need a gen for this
+
+        /// reviewed:
         ClarityCostFunction::BlockInfo => gen_get_block_info(scale),
+
+        /// reviewed:
         ClarityCostFunction::StxBalance => gen_stx_get_balance(scale),
+
+        /// reviewed:
         ClarityCostFunction::StxTransfer => gen_stx_transfer(scale),
-        // Option & result checks
+
+
+        /// Option & result checks ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::IsSome => gen_optional("is-some", scale),
+
+        /// reviewed:
         ClarityCostFunction::IsNone => gen_optional("is-none", scale),
+
+        /// reviewed:
         ClarityCostFunction::IsOkay => gen_response("is-ok", scale),
+
+        /// reviewed:
         ClarityCostFunction::IsErr => gen_response("is-err", scale),
+
+        /// reviewed:
         ClarityCostFunction::DefaultTo => gen_default_to("default-to", scale),
-        // Unwrap functions
+
+
+        /// Unwrap functions ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::Unwrap => gen_unwrap("unwrap-panic", scale, false),
+
+        /// reviewed:
         ClarityCostFunction::UnwrapRet => gen_unwrap("unwrap!", scale, true),
+
+        /// reviewed:
         ClarityCostFunction::UnwrapErr => gen_unwrap_err("unwrap-err-panic", scale, false),
+
+        /// reviewed:
         ClarityCostFunction::UnwrapErrOrRet => gen_unwrap_err("unwrap-err!", scale, true),
+
+        /// reviewed:
         ClarityCostFunction::TryRet => gen_unwrap("try!", scale, false),
-        // Map
+
+
+        /// Map ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::CreateMap => gen_create_map("define-map", scale),
+
+        /// reviewed:
         ClarityCostFunction::FetchEntry => gen_fetch_entry(scale), // map-get?
+
+        /// reviewed:
         ClarityCostFunction::SetEntry => gen_set_entry(scale),     // map-set
-        // Var
+
+
+        /// Var ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::CreateVar => gen_create_var(scale),
+
+        /// reviewed:
         ClarityCostFunction::FetchVar => gen_var_set_get("var-get", scale, false),
+
+        /// reviewed:
         ClarityCostFunction::SetVar => gen_var_set_get("var-set", scale, true),
+
+        /// reviewed:
         ClarityCostFunction::BindName => gen_define_constant("define-constant-bench", scale), // used for define var and define function
-        // Functions with single clarity value input
+
+
+        /// Functions with single clarity value input ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::Print => gen_single_clar_value("print", scale),
+
+        /// reviewed:
         ClarityCostFunction::SomeCons => gen_single_clar_value("some", scale),
+
+        /// reviewed:
         ClarityCostFunction::OkCons => gen_single_clar_value("ok", scale),
+
+        /// reviewed:
         ClarityCostFunction::ErrCons => gen_single_clar_value("err", scale),
+
+        /// reviewed:
         ClarityCostFunction::Begin => gen_single_clar_value("begin", scale),
-        // If
-        ClarityCostFunction::If => gen_if("if", scale),
-        // Asserts
-        ClarityCostFunction::Asserts => gen_asserts("asserts!", scale),
-        // Concat
-        ClarityCostFunction::Concat => gen_concat("concat", scale),
-        // Sequence
-        ClarityCostFunction::AsMaxLen => gen_as_max_len("as-max-len?", scale),
-        // Int
-        ClarityCostFunction::IntCast => gen_int_cast(scale),
-        // Let
-        ClarityCostFunction::Let => gen_let(scale),
-        // Match
-        ClarityCostFunction::Match => gen_match(scale),
-        // Type Checking
+
+
+        /// Type Checking ////////////////////////////////
+        /// reviewed:
         ClarityCostFunction::InnerTypeCheckCost => gen_inner_type_check_cost(input_size),
+
+        /// reviewed:
         ClarityCostFunction::TypeParseStep => gen_type_parse_step(scale), // called by `parse_type_repr` in `signatures.rs` (takes in symbolic expression)
-        // Uncategorized
+
+
+        /// Uncategorized ////////////////////////////////
+        /// reviewed:
+        ClarityCostFunction::If => gen_if("if", scale),
+
+        /// reviewed:
+        ClarityCostFunction::Asserts => gen_asserts("asserts!", scale),
+
+        /// reviewed:
+        ClarityCostFunction::Concat => gen_concat("concat", scale),
+
+        /// reviewed:
+        ClarityCostFunction::IntCast => gen_int_cast(scale),
+
+        /// reviewed:
+        ClarityCostFunction::Let => gen_let(scale),
+
+        /// reviewed:
+        ClarityCostFunction::Match => gen_match(scale),
+
+        /// reviewed:
+        ClarityCostFunction::AsMaxLen => gen_as_max_len("as-max-len?", scale),
+
+        /// reviewed:
         ClarityCostFunction::UserFunctionApplication => gen_analysis_get_function_entry(input_size),
+
+        /// reviewed:
         ClarityCostFunction::ContractCall => gen_contract_call(scale),
+
+        /// reviewed:
         ClarityCostFunction::ContractOf => gen_contract_of(scale),
+
+        /// reviewed:
         ClarityCostFunction::PrincipalOf => gen_principal_of(scale),
+
+        /// reviewed:
         ClarityCostFunction::AtBlock => gen_at_block(scale),
+
+        /// reviewed:
         ClarityCostFunction::LoadContract => unimplemented!(), // called at start of execute_contract
     }
 }
@@ -2497,9 +2698,16 @@ pub fn gen_analysis_pass(
     input_size: u16,
 ) -> GenOutput {
     match function {
+        /// reviewed:
         AnalysisCostFunction::ReadOnly => gen_analysis_pass_read_only(input_size),
+
+        /// reviewed:
         AnalysisCostFunction::TypeChecker => gen_analysis_pass_type_checker(input_size),
+
+        /// reviewed:
         AnalysisCostFunction::TraitChecker => gen_analysis_pass_trait_checker(input_size),
+
+        /// reviewed:
         AnalysisCostFunction::ArithmeticOnlyChecker => {
             gen_analysis_pass_arithmetic_only(input_size)
         }
