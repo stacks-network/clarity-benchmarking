@@ -170,7 +170,7 @@ pub fn make_sized_tuple_sigs_map(input_sizes: Vec<u16>) -> HashMap<u16, TupleTyp
 
 fn helper_make_clarity_type_for_sized_type_sig(input_size: u16) -> String {
     match input_size {
-        1 => "uint".to_string(),
+        1 => "bool".to_string(),
         2 => "(optional bool)".to_string(),
         n => {
             let mult = n / 8;
@@ -186,7 +186,7 @@ fn helper_make_clarity_type_for_sized_type_sig(input_size: u16) -> String {
                     "id"
                 };
                 let name = format!("{}{}", id_name, i);
-                key_pairs.push_str(&*format!("({} uint) ", name));
+                key_pairs.push_str(&*format!("({} bool) ", name));
             }
             format!("(tuple {})", key_pairs)
         }
@@ -196,7 +196,7 @@ fn helper_make_clarity_type_for_sized_type_sig(input_size: u16) -> String {
 fn helper_make_clarity_value_for_sized_type_sig(input_size: u16) -> String {
     let mut rng = rand::thread_rng();
     match input_size {
-        1 => format!("{}", rng.gen::<u32>()),
+        1 => format!("{}", rng.gen::<bool>()),
         2 => format!("(some {})", rng.gen_bool(0.5)),
         n => {
             let mult = n / 8;
@@ -211,7 +211,7 @@ fn helper_make_clarity_value_for_sized_type_sig(input_size: u16) -> String {
                     } else {
                         "id"
                     };
-                    format!("({}{} {})", id_name, i, rng.gen::<u32>())
+                    format!("({}{} {})", id_name, i, rng.gen::<bool>())
                 })
                 .collect::<Vec<String>>()
                 .join(" ");
@@ -717,20 +717,16 @@ fn helper_gen_clarity_type(
     (nft_type.to_string(), nft_len)
 }
 
-// Returns statement, token_name, the type of the nft, and option for the length of the nft if it is a string
+// Returns statement (that creates nft in clarity) and token_name
 fn helper_define_non_fungible_token_statement(
-    allow_bool_type: bool,
-) -> (String, String, String, Option<u16>) {
+    input_size: u16,
+) -> (String, String) {
     let mut rng = rand::thread_rng();
     let token_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-    let (nft_type, nft_len) = helper_gen_clarity_type(allow_bool_type, false, false);
-    let args = match nft_len {
-        Some(length) => format!("{} ({} {})", token_name, nft_type, length),
-        None => format!("{} {}", token_name, nft_type),
-    };
+    let nft_type = helper_make_clarity_type_for_sized_type_sig(input_size);
 
-    let statement = format!("(define-non-fungible-token {}) ", args);
-    (statement, token_name, nft_type.to_string(), nft_len)
+    let statement = format!("(define-non-fungible-token {} {}) ", token_name, nft_type);
+    (statement, token_name)
 }
 
 fn helper_gen_clarity_value(
@@ -786,16 +782,20 @@ fn helper_gen_random_clarity_value(num: u16) -> String {
 
 /// cost_function: NftMint
 /// input_size: size of type signature of asset
-/// TODO - take in input size
+///     `expected_asset_type.size()`
 fn gen_nft_mint(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
-    let (statement, token_name, nft_type, nft_len) =
-        helper_define_non_fungible_token_statement(false);
+    let (statement, token_name) =
+        helper_define_non_fungible_token_statement(input_size);
 
-    let nft_len = nft_len.map_or(0, |len| len) as usize;
+    let nft_type = make_sized_type_sig(input_size);
+    let nft_value_size = nft_type.size();
+    assert!(nft_value_size <= u16::MAX as u32);
+
     for i in 0..scale {
         let principal_data = helper_create_principal();
-        let nft_value = helper_gen_clarity_value(&nft_type, i, nft_len, None);
+        let nft_value = helper_make_value_for_sized_type_sig(input_size);
+        assert_eq!(nft_value_size, nft_value.size());
 
         let statement = format!(
             "(nft-mint? {} {} {}) ",
@@ -805,18 +805,23 @@ fn gen_nft_mint(scale: u16, input_size: u16) -> GenOutput {
     }
     println!("{}", body);
 
-    GenOutput::new(Some(statement), body, 1)
+
+
+    GenOutput::new(Some(statement), body, nft_value_size as u16)
 }
 
-fn helper_create_nft_fn_boilerplate() -> (String, String, String, String, String) {
+fn helper_create_nft_fn_boilerplate(input_size: u16) -> (String, String, String, String, u16) {
     let mut body = String::new();
-    let (statement, token_name, nft_type, nft_len) =
-        helper_define_non_fungible_token_statement(false);
+    let (statement, token_name) =
+        helper_define_non_fungible_token_statement(input_size);
     body.push_str(&statement);
 
-    let nft_len = nft_len.map_or(0, |len| len) as usize;
-    let nft_value = helper_gen_clarity_value(&nft_type, 0, nft_len, None);
-    let invalid_nft_value = helper_gen_clarity_value(&nft_type, 0, nft_len, None);
+    let nft_type = make_sized_type_sig(input_size);
+    let nft_type_size = nft_type.size();
+    assert!(nft_type_size <= u16::MAX as u32);
+
+    let nft_value = helper_make_value_for_sized_type_sig(input_size);
+    assert_eq!(nft_type_size, nft_value.size());
     let mut owner_principal = helper_create_principal();
     let mint_statement = format!(
         "(nft-mint? {} {} {}) ",
@@ -827,18 +832,18 @@ fn helper_create_nft_fn_boilerplate() -> (String, String, String, String, String
         body,
         token_name,
         owner_principal,
-        nft_value,
-        invalid_nft_value,
+        nft_value.to_string(),
+        nft_type_size as u16
     )
 }
 
 /// cost_function: NftTransfer
 /// input_size: size of type signature of asset
-/// TODO - take in input size
-fn gen_nft_transfer(function_name: &'static str, scale: u16) -> GenOutput {
+///     `expected_asset_type.size()`
+fn gen_nft_transfer(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
-    let (mut setup, token_name, mut owner_principal, nft_value, _) =
-        helper_create_nft_fn_boilerplate();
+    let (mut setup, token_name, mut owner_principal, nft_value, nft_type_size) =
+        helper_create_nft_fn_boilerplate(input_size);
     for _ in 0..scale {
         let next_principal = helper_create_principal();
         let args = format!(
@@ -850,17 +855,22 @@ fn gen_nft_transfer(function_name: &'static str, scale: u16) -> GenOutput {
         owner_principal = next_principal;
     }
 
-    GenOutput::new(Some(setup), body, 1)
+    println!("{}", body);
+    GenOutput::new(Some(setup), body, nft_type_size)
 }
 
 /// cost_function: NftOwner
 /// input_size: size of type signature of asset
-/// TODO - take in input size
-fn gen_nft_owner(function_name: &'static str, scale: u16) -> GenOutput {
+///     `expected_asset_type.size()`
+fn gen_nft_owner(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
-    let (mut setup, token_name, _, nft_value, invalid_nft_value) =
-        helper_create_nft_fn_boilerplate();
+    let (mut setup, token_name, _, nft_value, nft_type_size) =
+        helper_create_nft_fn_boilerplate(input_size);
+    let invalid_nft_value = helper_make_value_for_sized_type_sig(input_size);
+    assert!(invalid_nft_value.size() <= u16::MAX as u32);
+    assert_eq!(nft_type_size, invalid_nft_value.size() as u16);
+    let invalid_nft_as_str = invalid_nft_value.to_string();
     for _ in 0..scale {
         let curr_nft_value = match rng.gen_bool(0.5) {
             true => {
@@ -869,29 +879,31 @@ fn gen_nft_owner(function_name: &'static str, scale: u16) -> GenOutput {
             }
             false => {
                 // use invalid nft value
-                &invalid_nft_value
+                &invalid_nft_as_str
             }
         };
         let args = format!("{} {}", token_name, curr_nft_value);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
 
-    GenOutput::new(Some(setup), body, 1)
+    println!("{}", body);
+    GenOutput::new(Some(setup), body, nft_type_size)
 }
 
 /// cost_function: NftBurn
 /// input_size: size of type signature of asset
-/// TODO - take in input size
-fn gen_nft_burn(function_name: &'static str, scale: u16) -> GenOutput {
+///     `expected_asset_type.size()`
+fn gen_nft_burn(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
-    let (mut setup, token_name, mut owner_principal, nft_value, _) =
-        helper_create_nft_fn_boilerplate();
+    let (mut setup, token_name, mut owner_principal, nft_value, nft_type_size) =
+        helper_create_nft_fn_boilerplate(input_size);
     for _ in 0..scale {
         let args = format!("{} {} {}", token_name, nft_value, owner_principal);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
 
-    GenOutput::new(Some(setup), body, 1)
+    println!("{}", body);
+    GenOutput::new(Some(setup), body, nft_type_size)
 }
 
 /// ////////////////////////////////////////
@@ -1147,21 +1159,6 @@ fn helper_create_map() -> (
     )
 }
 
-/// cost_function: CreateMap
-/// input_size: sum of key type size and value type size
-///     `u64::from(key_type.size()).cost_overflow_add(u64::from(value_type.size()))`
-/// TODO - incorporate input size
-fn gen_create_map(_function_name: &'static str, scale: u16) -> GenOutput {
-    let mut body = String::new();
-    for _ in 0..scale {
-        let (statement, _, _, _, _, _, _, _) = helper_create_map();
-        body.push_str(&statement);
-    }
-    println!("{}", body);
-
-    GenOutput::new(None, body, 1)
-}
-
 // setEntry is the cost for map-delete, map-insert, & map-set
 // q: only ever deleting non-existent key; should we change that?
 /// cost_function: SetEntry
@@ -1280,29 +1277,6 @@ fn gen_fetch_entry(scale: u16) -> GenOutput {
         body,
         key_type_len.unwrap() + value_type_len.unwrap(),
     )
-}
-
-/// cost_function: CreateVar
-/// input_size: value type size
-///     `value_type.size()`
-/// TODO - incorporate size
-fn gen_create_var(scale: u16) -> GenOutput {
-    let mut body = String::new();
-    let mut rng = rand::thread_rng();
-    for i in 0..scale {
-        let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-        let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
-        let clarity_value =
-            helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as usize), None);
-        let args = match length {
-            Some(l) => format!("{} ({} {}) {}", var_name, clarity_type, l, clarity_value),
-            None => format!("{} {} {}", var_name, clarity_type, clarity_value),
-        };
-        body.push_str(&*format!("(define-data-var {}) ", args));
-    }
-    println!("{}", body);
-
-    GenOutput::new(None, body, 1)
 }
 
 
@@ -1434,20 +1408,22 @@ fn helper_generate_sequences(list_type: &str, output: u16) -> Vec<String> {
 /// cost_function: Concat
 /// input_size: sum of Value size of input sequences
 ///     `u64::from(wrapped_seq.size()).cost_overflow_add(u64::from(other_wrapped_seq.size())`
-/// TODO - fix
-fn gen_concat(function_name: &'static str, scale: u16) -> GenOutput {
+fn gen_concat(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
+
+    let value_size = make_sized_type_sig(input_size).size();
+    assert!(value_size < u16::MAX as u32);
     for _ in 0..scale {
-        let (list_type, _) = helper_gen_clarity_type(true, false, true);
-        let operands = helper_generate_sequences(&list_type, 2);
+        let first_val = helper_make_clarity_value_for_sized_type_sig(input_size);
+        let second_val = helper_make_clarity_value_for_sized_type_sig(input_size);
         body.push_str(&*format!(
-            "({} {} {}) ",
-            function_name, operands[0], operands[1]
+            "({} (list {}) (list {})) ",
+            function_name, first_val, second_val
         ));
     }
     println!("{}", body);
 
-    GenOutput::new(None, body, 1)
+    GenOutput::new(None, body, value_size as u16)
 }
 
 /// cost_function: AsMaxLen
@@ -1572,19 +1548,23 @@ fn gen_match(scale: u16) -> GenOutput {
 
 /// cost_function: Let
 /// input_size: number of bindings in the let statement
-/// TODO - factor in input size
-fn gen_let(scale: u16) -> GenOutput {
+///     `bindings.len()`
+fn gen_let(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for i in 0..scale {
-        let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-        let var_value = helper_gen_random_clarity_value(i);
-        let statement = format!("(let (({} {})) (no-op)) ", var_name, var_value);
+        let mut bindings = String::new();
+        for _ in 0..input_size {
+            let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+            let var_value = helper_gen_random_clarity_value(i);
+            bindings.push_str(&*format!("({} {}) ", var_name, var_value));
+        }
+        let statement = format!("(let ({}) (no-op)) ", bindings);
         body.push_str(&statement);
     }
     println!("{}", body);
 
-    GenOutput::new(None, body, 1)
+    GenOutput::new(None, body, input_size)
 }
 
 fn helper_generate_random_sequence() -> (String, usize, String) {
@@ -1656,29 +1636,23 @@ fn gen_len(scale: u16) -> GenOutput {
     GenOutput::new(None, body, 1)
 }
 
-// q: not sure if we are testing worst case here; not allowing list of buffs, for example
 /// cost_function: Append
-/// input_size: max of value type sig size (which is to be appended) and size of the entry type of the list
+/// input_size: max of value size (which is to be appended) and size of the type of the list
 ///     `u64::from(cmp::max(entry_type.size(), element_type.size()))`
-/// TODO: take in input size
-fn gen_append(scale: u16) -> GenOutput {
+fn gen_append(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
-    let mut rng = rand::thread_rng();
+    let value_size = make_sized_type_sig(input_size).size();
+    assert!(value_size < u16::MAX as u32);
     for _ in 0..scale {
-        let (list_type, _) = helper_gen_clarity_type(true, false, true);
-        let list_val = helper_gen_clarity_value(
-            "list",
-            rng.gen_range(2..50),
-            rng.gen_range(2..50) * 2,
-            Some(&list_type),
-        );
-        let new_item_val = helper_gen_clarity_value(&list_type, rng.gen_range(2..50), 1, None);
-        let statement = format!("(append {} {}) ", list_val, new_item_val);
+        let first_val = helper_make_clarity_value_for_sized_type_sig(input_size);
+        let second_val = helper_make_clarity_value_for_sized_type_sig(input_size);
+
+        let statement = format!("(append (list {}) {}) ", first_val, second_val);
         body.push_str(&statement);
     }
     println!("{}", body);
 
-    GenOutput::new(None, body, 1)
+    GenOutput::new(None, body, value_size as u16)
 }
 
 /// cost_function: ListCons
@@ -2488,8 +2462,8 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
         /// reviewed:
         ClarityCostFunction::ListCons => gen_list_cons(scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::Append => gen_append(scale),
+        /// reviewed: @pavitthrap
+        ClarityCostFunction::Append => gen_append(scale, input_size),
 
 
         /// Hash ////////////////////////////////
@@ -2535,20 +2509,23 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
 
 
         /// NFT ////////////////////////////////
-        /// reviewed:
+        /// reviewed: @pavitthrap
+        /// cost_function: CreateNft
+        /// input_size: size of asset type
+        ///     `asset_type.size()`
         ClarityCostFunction::CreateNft => unimplemented!(),
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
         ClarityCostFunction::NftMint => gen_nft_mint(scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::NftTransfer => gen_nft_transfer("nft-transfer?", scale),
+        /// reviewed: @pavitthrap
+        ClarityCostFunction::NftTransfer => gen_nft_transfer("nft-transfer?", scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::NftOwner => gen_nft_owner("nft-get-owner?", scale),
+        /// reviewed: @pavitthrap
+        ClarityCostFunction::NftOwner => gen_nft_owner("nft-get-owner?", scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::NftBurn => gen_nft_burn("nft-burn?", scale),
+        /// reviewed: @pavitthrap
+        ClarityCostFunction::NftBurn => gen_nft_burn("nft-burn?", scale, input_size),
 
         /// Stacks ////////////////////////////////
         /// reviewed:
@@ -2599,8 +2576,11 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
 
 
         /// Map ////////////////////////////////
-        /// reviewed:
-        ClarityCostFunction::CreateMap => gen_create_map("define-map", scale),
+        /// reviewed: @pavitthrap
+        /// cost_function: CreateMap
+        /// input_size: sum of key type size and value type size
+        ///     `u64::from(key_type.size()).cost_overflow_add(u64::from(value_type.size()))`
+        ClarityCostFunction::CreateMap => unimplemented!(),
 
         /// reviewed:
         ClarityCostFunction::FetchEntry => gen_fetch_entry(scale), // map-get?
@@ -2610,8 +2590,11 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
 
 
         /// Var ////////////////////////////////
-        /// reviewed:
-        ClarityCostFunction::CreateVar => gen_create_var(scale),
+        /// reviewed: @pavitthrap
+        /// cost_function: CreateVar
+        /// input_size: value type size
+        ///     `value_type.size()`
+        ClarityCostFunction::CreateVar => unimplemented!(),
 
         /// reviewed:
         ClarityCostFunction::FetchVar => gen_var_set_get("var-get", scale, false),
@@ -2655,14 +2638,14 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
         /// reviewed:
         ClarityCostFunction::Asserts => gen_asserts("asserts!", scale),
 
-        /// reviewed:
-        ClarityCostFunction::Concat => gen_concat("concat", scale),
+        /// reviewed: @pavitthrap
+        ClarityCostFunction::Concat => gen_concat("concat", scale, input_size),
 
         /// reviewed:
         ClarityCostFunction::IntCast => gen_int_cast(scale),
 
-        /// reviewed:
-        ClarityCostFunction::Let => gen_let(scale),
+        /// reviewed: @pavitthrap
+        ClarityCostFunction::Let => gen_let(scale, input_size),
 
         /// reviewed:
         ClarityCostFunction::Match => gen_match(scale),

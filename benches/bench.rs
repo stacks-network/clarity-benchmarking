@@ -1798,6 +1798,9 @@ fn bench_analysis_lookup_variable_const(c: &mut Criterion) {
 /// AST FUNCTIONS
 /// ////////////////////////////////////
 fn bench_ast_parse(c: &mut Criterion) {
+    // SIZED_CONTRACTS will be generated the first time it is "invoked" in the code since it is
+    //  defined in a lazy_static! macro call. The setup_fn uses the object to make sure it is
+    //  created before being invoked in the actual benchmark.
     fn setup_fn<T: CostTracker>(
         _ca: &mut ContractAST,
         _lc: &mut TypingContext,
@@ -2165,7 +2168,7 @@ fn bench_nft_mint(c: &mut Criterion) {
         c,
         ClarityCostFunction::NftMint,
         SCALE.into(),
-        None,
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -2176,7 +2179,7 @@ fn bench_nft_transfer(c: &mut Criterion) {
         c,
         ClarityCostFunction::NftTransfer,
         SCALE.into(),
-        None,
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -2187,7 +2190,7 @@ fn bench_nft_owner(c: &mut Criterion) {
         c,
         ClarityCostFunction::NftOwner,
         SCALE.into(),
-        None,
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -2198,7 +2201,7 @@ fn bench_nft_burn(c: &mut Criterion) {
         c,
         ClarityCostFunction::NftBurn,
         SCALE.into(),
-        None,
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -2293,7 +2296,7 @@ fn bench_unwrap_err_or_ret(c: &mut Criterion) {
 }
 
 // note: verify that we want a warmed-up marf for this
-// note: time to clone the type signature for the value may be significant
+// note: time to clone the type signature for the value in the benching code may be significant
 fn bench_create_map(c: &mut Criterion) {
     let function = ClarityCostFunction::CreateMap;
     let mut group = c.benchmark_group(function.to_string());
@@ -2312,9 +2315,10 @@ fn bench_create_map(c: &mut Criterion) {
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_context = ContractContext::new(contract_identifier.clone());
 
-        let key_type = TypeSignature::UIntType;
+        let key_type = TypeSignature::BoolType;
         let value_type = SIZED_TYPE_SIG.get(input_size).unwrap();
-        let total_size = (key_type.type_size().unwrap() + value_type.type_size().unwrap()) as u64;
+        let total_size = (key_type.size() + value_type.size()) as u64;
+
         group.throughput(Throughput::Bytes(total_size));
         group.bench_with_input(
             BenchmarkId::from_parameter(total_size),
@@ -2333,17 +2337,6 @@ fn bench_create_map(c: &mut Criterion) {
             },
         );
     }
-}
-
-fn bench_create_var_old(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::CreateVar,
-        SCALE.into(),
-        None,
-        false,
-        None,
-    )
 }
 
 // note: verify that we want a warmed-up marf for this
@@ -2367,11 +2360,15 @@ fn bench_create_var(c: &mut Criterion) {
         let mut contract_context = ContractContext::new(contract_identifier.clone());
 
         let value_type = SIZED_TYPE_SIG.get(input_size).unwrap();
+        let value_type_size = value_type.size();
         let value = helper_make_value_for_sized_type_sig(*input_size);
-        group.throughput(Throughput::Bytes(*input_size as u64));
+        assert!(value_type.admits(&value));
+        assert_eq!(value_type.size(), value.size());
+
+        group.throughput(Throughput::Bytes(value_type_size as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(input_size),
-            &input_size,
+            BenchmarkId::from_parameter(value_type_size),
+            &value_type_size,
             |b, &_| {
                 b.iter(|| {
                     for _ in 0..SCALE {
@@ -2474,7 +2471,7 @@ fn bench_concat(c: &mut Criterion) {
         c,
         ClarityCostFunction::Concat,
         SCALE.into(),
-        None,
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -2580,7 +2577,7 @@ fn bench_match(c: &mut Criterion) {
 }
 
 fn bench_let(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Let, SCALE.into(), None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Let, SCALE.into(), Some(INPUT_SIZES.into()), false, None)
 }
 
 fn bench_index_of(c: &mut Criterion) {
@@ -2625,7 +2622,7 @@ fn bench_append(c: &mut Criterion) {
         c,
         ClarityCostFunction::Append,
         SCALE.into(),
-        None,
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -2900,17 +2897,17 @@ criterion_group!(
     bench_keccak256,
     bench_secp256k1recover,
     bench_secp256k1verify,
-    bench_create_ft,    // g
-    bench_mint_ft,      // g
-    bench_ft_transfer,  // g
-    bench_ft_balance,   // g
-    bench_ft_supply,    // g
-    bench_ft_burn,      // g
-    bench_create_nft,   // g
-    bench_nft_mint,     // g
-    bench_nft_transfer, // g
-    bench_nft_owner,    // g
-    bench_nft_burn,     // g
+    bench_create_ft,
+    bench_mint_ft,
+    bench_ft_transfer,
+    bench_ft_balance,
+    bench_ft_supply,
+    bench_ft_burn,
+    bench_create_nft,
+    bench_nft_mint,
+    bench_nft_transfer,
+    bench_nft_owner,
+    bench_nft_burn,
     bench_is_none,
     bench_is_some,
     bench_is_ok,
@@ -2919,10 +2916,10 @@ criterion_group!(
     bench_unwrap_ret,
     bench_unwrap_err,
     bench_unwrap_err_or_ret,
-    bench_create_map, // g
-    bench_create_var, // g
-    bench_set_var,    // g
-    bench_fetch_var,  // g
+    bench_create_map,
+    bench_create_var,
+    bench_set_var,
+    bench_fetch_var,
     bench_print,
     bench_if,
     bench_asserts,
@@ -2936,8 +2933,8 @@ criterion_group!(
     bench_default_to,
     bench_try,
     bench_int_cast,
-    bench_set_entry,   // g
-    bench_fetch_entry, // g
+    bench_set_entry,
+    bench_fetch_entry,
     bench_match,
     bench_let,
     bench_index_of,
@@ -2984,10 +2981,10 @@ criterion_group!(
     bench_principal_of,
     bench_stx_transfer,
     bench_stx_get_balance,
-    bench_analysis_pass_read_only,               // g
-    bench_analysis_pass_arithmetic_only_checker, // g
-    bench_analysis_pass_trait_checker,           // g
-    bench_analysis_pass_type_checker,            // g
+    bench_analysis_pass_read_only,
+    bench_analysis_pass_arithmetic_only_checker,
+    bench_analysis_pass_trait_checker,
+    bench_analysis_pass_type_checker,
     bench_poison_microblock,
     bench_contract_call,
     bench_contract_of,
