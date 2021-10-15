@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 
+import sys
 import os
 import json
 import pandas as pd
@@ -19,9 +20,12 @@ def load_function_name_types(filename):
         for row in csv_reader:
             function_name_to_type[row['function_name']] = row['type_name'].strip()
 
-def load_reports():
-    paths = [f.path for f in os.scandir('target/criterion/') if f.is_dir()]
-    paths.remove('target/criterion/report')
+def load_reports(criterion_dir):
+    paths = [f.path for f in os.scandir(criterion_dir) if f.is_dir()]
+    try:
+        paths.remove(criterion_dir + '/report')
+    except:
+        pass
 
     for path in paths:
         path_end = path.split('/')[-1].split(' ')
@@ -74,8 +78,8 @@ def plot(df, name, a, b, transform):
     plt.scatter(X, Y, color='orange')
     plt.suptitle(name)
     plt.plot(X, y_pred, color='blue')
-    os.makedirs("analysis_output/graphs", exist_ok=True)
-    plt.savefig("analysis_output/graphs/{}.svg".format(name))
+    os.makedirs("analysis_target/graphs", exist_ok=True)
+    plt.savefig("analysis_target/graphs/{}.svg".format(name))
 
 def estimate_plot(df, fun_name, output, transform = lambda x: x):
     if fun_name not in df:
@@ -94,7 +98,7 @@ def estimate_plot(df, fun_name, output, transform = lambda x: x):
 
 
 def main():
-    load_reports()
+    load_reports(sys.argv[1])
 
     pd.set_option('display.max_rows', 500)
     pd.set_option('display.max_columns', 500)
@@ -224,8 +228,8 @@ def main():
     estimate_plot(df, 'cost_nft_burn', output)
     estimate_plot(df, 'poison_microblock', output)
 
-    os.makedirs("analysis_output", exist_ok=True)
-    output.to_csv("analysis_output/cost_constants.csv")
+    os.makedirs("analysis_target", exist_ok=True)
+    output.to_csv("analysis_target/cost_constants.csv", index_label="function")
 
 
 main()
