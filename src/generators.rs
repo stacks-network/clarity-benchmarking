@@ -1,5 +1,8 @@
 use blockstack_lib::burnchains::PrivateKey;
 use blockstack_lib::util::secp256k1::{Secp256k1PrivateKey, Secp256k1PublicKey};
+use blockstack_lib::vm::ast::build_ast_pre;
+use blockstack_lib::vm::ast::definition_sorter::DefinitionSorter;
+use blockstack_lib::vm::costs::LimitedCostTracker;
 use blockstack_lib::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
 use rand::distributions::Uniform;
 use rand::prelude::SliceRandom;
@@ -15,10 +18,7 @@ use blockstack_lib::vm::analysis::contract_interface_builder::ContractInterfaceA
 use blockstack_lib::vm::types::signatures::TypeSignature::{
     BoolType, IntType, PrincipalType, TupleType, UIntType,
 };
-use blockstack_lib::vm::types::{
-    ASCIIData, CharType, ListData, OptionalData, SequenceData, TupleData, TupleTypeSignature,
-    TypeSignature,
-};
+use blockstack_lib::vm::types::{ASCIIData, CharType, ListData, OptionalData, QualifiedContractIdentifier, SequenceData, TupleData, TupleTypeSignature, TypeSignature};
 use blockstack_lib::vm::{execute, ClarityName, Value};
 use lazy_static::lazy_static;
 use rand::rngs::ThreadRng;
@@ -921,7 +921,7 @@ fn helper_generate_tuple(input_size: u16) -> String {
 }
 
 /// cost_function: TupleGet
-/// input_size: length of tuple data
+/// input_size: length of tuple data == number of items
 fn gen_tuple_get(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
@@ -945,7 +945,7 @@ fn gen_tuple_get(scale: u16, input_size: u16) -> GenOutput {
 
 /// cost_function: TupleMerge
 /// input_size: double arg function
-/// TODO - perhaps does not need to take in input size here - check graphs
+/// TODO - TupleMerge is not currently utilizing input size correctly in core codebase
 fn gen_tuple_merge(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
 
@@ -2026,7 +2026,20 @@ fn gen_ast_cycle_detection(input_size: u16) -> GenOutput {
     }
     println!("{}", body);
 
-    GenOutput::new(None, body, input_size)
+    let mut cost_tracker = LimitedCostTracker::new_free();
+
+    let mut ast = build_ast_pre(
+        &QualifiedContractIdentifier::transient(),
+        &body,
+        &mut cost_tracker,
+    ).unwrap();
+
+    let mut definition_sorter = DefinitionSorter::new();
+    definition_sorter.run(&mut ast, &mut cost_tracker).unwrap();
+
+    let edges = definition_sorter.graph.edges_count().unwrap();
+
+    GenOutput::new(None, body, edges as u16)
 }
 
 /// cost_function: AstParse, AnalysisTypeCheck
@@ -2297,7 +2310,7 @@ fn gen_contract_of(scale: u16) -> GenOutput {
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOutput {
     match function {
         /// Arithmetic ///////////////////////
-        /// reviewed:
+        /// reviewed: yes
         ClarityCostFunction::Add => gen_arithmetic("+", scale, input_size),
         ClarityCostFunction::Sub => gen_arithmetic("-", scale, input_size),
         ClarityCostFunction::Mul => gen_arithmetic("*", scale, input_size),
@@ -2306,11 +2319,11 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
         ClarityCostFunction::Log2 => gen_arithmetic("log2", scale, 1),
         ClarityCostFunction::Mod => gen_arithmetic("mod", scale, input_size),
 
-        /// reviewed:
+        /// reviewed: yes
         ClarityCostFunction::Pow => gen_pow(scale),
 
         /// Logic /////////////////////////////
-        /// reviewed:
+        /// reviewed: yes
         ClarityCostFunction::Le => gen_cmp("<", scale),
         ClarityCostFunction::Leq => gen_cmp("<=", scale),
         ClarityCostFunction::Ge => gen_cmp(">", scale),
@@ -2318,23 +2331,23 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
 
 
         /// Boolean ///////////////////////////
-        /// reviewed:
+        /// reviewed: yes
         ClarityCostFunction::And => gen_logic("and", scale, input_size),
         ClarityCostFunction::Or => gen_logic("or", scale, input_size),
         ClarityCostFunction::Not => gen_logic("not", scale, input_size),
         ClarityCostFunction::Eq => gen_logic("is-eq", scale, input_size),
-        /// reviewed:
+        /// reviewed: yes
         ClarityCostFunction::Xor => gen_xor("xor", scale),
 
 
         /// Tuples ////////////////////////////
-        /// reviewed:
+        /// reviewed: yes
         ClarityCostFunction::TupleGet => gen_tuple_get(scale, input_size),
 
-        /// reviewed:
+        /// reviewed: yes
         ClarityCostFunction::TupleMerge => gen_tuple_merge(scale, input_size),
 
-        /// reviewed:
+        /// reviewed: yes
         ClarityCostFunction::TupleCons => gen_tuple_cons(scale, input_size),
 
 
