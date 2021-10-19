@@ -1,15 +1,16 @@
 # `mmap_size` experiments
 
-This is some python analysis code for analyzing the Marf read times with and
+This directory contains python analysis code for analyzing the Marf read times with and
 without using the `mmap_size` pragma.
 
 ## Usage
 
 ### Extract Raw Data (in Rust)
-The script `extract_data.py` expects as input the LOGS output from running this code:
+The script `extract_data.py` expects as STDIN input the `LOGS` output by
+running this code:
 https://github.com/blockstack/stacks-blockchain/pull/2867
 
-In particular, we are scraping lines of the form:
+In particular, we are scraping lines output by the Rust code:
 
 ```
 info!("MARF read"; "db" => c.db_path , "time_micros" => duration);
