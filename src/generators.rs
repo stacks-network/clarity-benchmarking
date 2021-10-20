@@ -1660,16 +1660,12 @@ fn gen_append(scale: u16, input_size: u16) -> GenOutput {
 ///     ```for a in args.iter() {
 ///         arg_size = arg_size.cost_overflow_add(a.size().into())?;
 ///     }```
-/// TODO - make sure input_size used appropriately
 fn gen_list_cons(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
-    let mut rng = rand::thread_rng();
     for _ in 0..scale {
-        let (list_type, _) = helper_gen_clarity_type(true, false, true);
-        let list_len = input_size;
         let item_val = "true";
         let mut args = String::new();
-        for _ in 0..list_len {
+        for _ in 0..input_size {
             args.push_str(&*format!("{} ", item_val));
         }
         let statement = format!("(list {}) ", args);
@@ -2310,7 +2306,7 @@ fn gen_contract_of(scale: u16) -> GenOutput {
 pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOutput {
     match function {
         /// Arithmetic ///////////////////////
-        /// reviewed: yes
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Add => gen_arithmetic("+", scale, input_size),
         ClarityCostFunction::Sub => gen_arithmetic("-", scale, input_size),
         ClarityCostFunction::Mul => gen_arithmetic("*", scale, input_size),
@@ -2319,11 +2315,11 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
         ClarityCostFunction::Log2 => gen_arithmetic("log2", scale, 1),
         ClarityCostFunction::Mod => gen_arithmetic("mod", scale, input_size),
 
-        /// reviewed: yes
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Pow => gen_pow(scale),
 
         /// Logic /////////////////////////////
-        /// reviewed: yes
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Le => gen_cmp("<", scale),
         ClarityCostFunction::Leq => gen_cmp("<=", scale),
         ClarityCostFunction::Ge => gen_cmp(">", scale),
@@ -2331,7 +2327,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
 
 
         /// Boolean ///////////////////////////
-        /// reviewed: yes
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::And => gen_logic("and", scale, input_size),
         ClarityCostFunction::Or => gen_logic("or", scale, input_size),
         ClarityCostFunction::Not => gen_logic("not", scale, input_size),
@@ -2341,13 +2337,13 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
 
 
         /// Tuples ////////////////////////////
-        /// reviewed: yes
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::TupleGet => gen_tuple_get(scale, input_size),
 
-        /// reviewed: yes
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::TupleMerge => gen_tuple_merge(scale, input_size),
 
-        /// reviewed: yes
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::TupleCons => gen_tuple_cons(scale, input_size),
 
 
@@ -2432,47 +2428,47 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
 
 
         /// Ast ////////////////////////////////
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::AstParse => gen_empty(),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::AstCycleDetection => gen_ast_cycle_detection(input_size),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::ContractStorage => gen_contract_storage(input_size),
 
 
         /// Lookup ////////////////////////////////
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::LookupVariableDepth => unimplemented!(), // no gen function needed
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::LookupVariableSize => unimplemented!(),  // no gen function needed
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::LookupFunction => gen_ast_cycle_detection(input_size),
 
 
         /// List ////////////////////////////////
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Map => gen_map(scale, input_size), // includes LookupFunction cost
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Filter => gen_filter(scale),       // includes LookupFunction cost
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Fold => gen_fold(scale),           // includes LookupFunction cost
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Len => gen_len(scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::ElementAt => gen_element_at(scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::IndexOf => gen_index_of(scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::ListCons => gen_list_cons(scale, input_size),
 
         /// reviewed: @pavitthrap
