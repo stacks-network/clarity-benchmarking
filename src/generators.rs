@@ -2504,22 +2504,22 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
         ClarityCostFunction::Secp256k1verify => gen_secp256k1("secp256k1-verify", scale, true),
 
         /// FT ////////////////////////////////
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::CreateFt => gen_create_ft("define-fungible-token", scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::FtMint => gen_ft_mint("ft-mint?", scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::FtTransfer => gen_ft_transfer("ft-transfer?", scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth   
         ClarityCostFunction::FtBalance => gen_ft_balance("ft-get-balance", scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::FtSupply => gen_ft_supply("ft-get-supply", scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::FtBurn => gen_ft_burn("ft-burn?", scale),
 
 
