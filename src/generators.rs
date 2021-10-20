@@ -447,37 +447,43 @@ pub fn helper_generate_rand_char_string(n: usize) -> String {
 ///
 /// cost_function: Hash160, Sha256, Sha512, Sha512t256, Keccak256
 /// input_size: single arg function
-fn gen_hash(function_name: &'static str, scale: u16) -> GenOutput {
+fn gen_hash(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
     for _ in 0..scale {
-        let arg = match rng.gen_range(0..=2) {
-            0 => {
-                // uint
-                let x: u128 = rng.gen();
-                format!("u{}", x)
-            }
-            1 => {
-                // int
-                let x: i128 = rng.gen();
-                format!("{}", x)
-            }
-            2 => {
-                // buff
-                let mut buff = "0x".to_string();
-                buff.push_str(&helper_generate_rand_hex_string(64));
-                format!(r##"{}"##, buff)
-            }
+        let arg = match input_size {
+            128 => {
+                match rng.gen_range(0..=1) {
+                    0 => {
+                        // uint
+                        let x: u128 = rng.gen();
+                        format!("u{}", x)
+                    },
+                    1 => {
+                        // int
+                        let x: i128 = rng.gen();
+                        format!("{}", x)
+                    },
+                    2 => {
+                        let buff = helper_gen_clarity_value("buff", 0, 128, None);
+                        format!(r##"{}"##, buff)
+                    },
+                    _ => {
+                        unreachable!("should only be generating numbers in the range 0..=1.")
+                    }
+                }
+            },
             _ => {
-                unreachable!("should only be generating numbers in the range 0..=2.")
+                let buff = helper_gen_clarity_value("buff", 0, input_size.into(), None);
+                format!(r##"{}"##, buff)
             }
         };
 
         body.push_str(&*format!("({} {}) ", function_name, arg));
     }
 
-    GenOutput::new(None, body, 1)
+    GenOutput::new(None, body, input_size)
 }
 
 
@@ -2476,25 +2482,25 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
 
 
         /// Hash ////////////////////////////////
-        /// reviewed:
-        ClarityCostFunction::Hash160 => gen_hash("hash160", scale),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::Hash160 => gen_hash("hash160", scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::Sha256 => gen_hash("sha256", scale),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::Sha256 => gen_hash("sha256", scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::Sha512 => gen_hash("sha512", scale),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::Sha512 => gen_hash("sha512", scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::Sha512t256 => gen_hash("sha512/256", scale),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::Sha512t256 => gen_hash("sha512/256", scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::Keccak256 => gen_hash("keccak256", scale),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::Keccak256 => gen_hash("keccak256", scale, input_size),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Secp256k1recover => gen_secp256k1("secp256k1-recover?", scale, false),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Secp256k1verify => gen_secp256k1("secp256k1-verify", scale, true),
 
         /// FT ////////////////////////////////

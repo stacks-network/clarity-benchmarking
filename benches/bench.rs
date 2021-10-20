@@ -84,6 +84,7 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
+const INPUT_SIZES_HASH: [u16; 8] = [8, 16, 64, 128, 256, 512, 1024, 2048];
 const INPUT_SIZES_ANALYSIS_PASS: [u16; 6] = [1, 2, 8, 16, 32, 64];
 const INPUT_SIZES_ARITHMETIC: [u16; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
 const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
@@ -1989,23 +1990,23 @@ fn bench_tuple_cons(c: &mut Criterion) {
 
 // hash functions
 fn bench_hash160(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, Some(INPUT_SIZES_HASH.into()), false, None)
 }
 
 fn bench_sha256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, Some(INPUT_SIZES_HASH.into()), false, None)
 }
 
 fn bench_sha512(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, Some(INPUT_SIZES_HASH.into()), false, None)
 }
 
 fn bench_sha512t256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, Some(INPUT_SIZES_HASH.into()), false, None)
 }
 
 fn bench_keccak256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, Some(INPUT_SIZES_HASH.into()), false, None)
 }
 
 fn bench_secp256k1recover(c: &mut Criterion) {
@@ -2890,11 +2891,11 @@ criterion_group!(
     // bench_tuple_get,
     // bench_tuple_merge,
     // bench_tuple_cons,
-    // bench_hash160,
-    // bench_sha256,
-    // bench_sha512,
-    // bench_sha512t256,
-    // bench_keccak256,
+    bench_hash160,
+    bench_sha256,
+    bench_sha512,
+    bench_sha512t256,
+    bench_keccak256,
     // bench_secp256k1recover,
     // bench_secp256k1verify,
     // bench_create_ft,    // g
@@ -2975,7 +2976,7 @@ criterion_group!(
     // bench_analysis_get_function_entry,
     // bench_inner_type_check_cost,
     // bench_user_function_application,
-    bench_ast_cycle_detection,
+    // bench_ast_cycle_detection,
     // bench_ast_parse,
     // bench_contract_storage,
     // bench_principal_of,
