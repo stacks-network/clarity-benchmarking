@@ -4,6 +4,7 @@ use blockstack_lib::vm::ast::build_ast_pre;
 use blockstack_lib::vm::ast::definition_sorter::DefinitionSorter;
 use blockstack_lib::vm::costs::LimitedCostTracker;
 use blockstack_lib::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
+use blockstack_lib::vm::database::ClaritySerializable;
 use rand::distributions::Uniform;
 use rand::prelude::SliceRandom;
 use rand::{Rng, RngCore};
@@ -32,14 +33,23 @@ lazy_static! {
     pub static ref TUPLE_NAMES: Vec<String> = create_tuple_names(16);
 }
 
+fn string_to_value(s: String) -> Value {
+    execute(s.as_str()).unwrap().unwrap()
+}
+
+fn size_of_value(s: String) -> u64 {
+    let v = string_to_value(s);
+    v.serialize().len() as u64 / 2
+}
+
 pub struct GenOutput {
     pub setup: Option<String>,
     pub body: String,
-    pub input_size: u16,
+    pub input_size: u64,
 }
 
 impl GenOutput {
-    pub fn new(setup: Option<String>, body: String, input_size: u16) -> Self {
+    pub fn new(setup: Option<String>, body: String, input_size: u64) -> Self {
         GenOutput {
             setup,
             body,
@@ -57,7 +67,7 @@ fn create_tuple_names(len: u16) -> Vec<String> {
 }
 
 // make values for analysis functions
-fn make_tuple_pair(pairs: u16) -> Value {
+fn make_tuple_pair(pairs: u64) -> Value {
     let mut data = Vec::new();
     for i in 0..pairs {
         let name = TUPLE_NAMES[i as usize].clone();
@@ -68,7 +78,7 @@ fn make_tuple_pair(pairs: u16) -> Value {
     Value::Tuple(td)
 }
 
-pub fn make_sized_values_map(input_sizes: Vec<u16>) -> HashMap<u16, Value> {
+pub fn make_sized_values_map(input_sizes: Vec<u64>) -> HashMap<u64, Value> {
     let mut ret_map = HashMap::new();
     for i in input_sizes {
         let val = match i {
@@ -88,7 +98,7 @@ pub fn make_sized_values_map(input_sizes: Vec<u16>) -> HashMap<u16, Value> {
     ret_map
 }
 
-pub fn make_clarity_type_for_sized_value(input_size: u16) -> String {
+pub fn make_clarity_type_for_sized_value(input_size: u64) -> String {
     match input_size {
         1 => "bool".to_string(),
         2 => "(optional bool)".to_string(),
@@ -108,7 +118,7 @@ pub fn make_clarity_type_for_sized_value(input_size: u16) -> String {
 }
 
 // make contract for ast parse
-fn make_clarity_statement_for_sized_contract(mult: u16) -> (String, u16) {
+fn make_clarity_statement_for_sized_contract(mult: u64) -> (String, u64) {
     let mut rng = rand::thread_rng();
     let contract = (0..mult)
         .map(|_x| {
@@ -120,10 +130,10 @@ fn make_clarity_statement_for_sized_contract(mult: u16) -> (String, u16) {
         })
         .collect::<String>();
 
-    (contract.clone(), contract.len() as u16)
+    (contract.clone(), contract.len() as u64)
 }
 
-fn make_sized_contract(input_size: u16) -> (String, u16) {
+fn make_sized_contract(input_size: u64) -> (String, u64) {
     match input_size {
         1 => ("1".to_string(), 1),
         2 => ("u8".to_string(), 2),
@@ -137,7 +147,7 @@ fn make_sized_contract(input_size: u16) -> (String, u16) {
     }
 }
 
-pub fn make_sized_contracts_map(input_sizes: Vec<u16>) -> HashMap<u16, String> {
+pub fn make_sized_contracts_map(input_sizes: Vec<u64>) -> HashMap<u64, String> {
     let mut ret_map = HashMap::new();
     for i in input_sizes {
         let val = make_sized_contract(i);
@@ -147,7 +157,7 @@ pub fn make_sized_contracts_map(input_sizes: Vec<u16>) -> HashMap<u16, String> {
 }
 
 // make tuple type sigs for AnalysisCheckTupleGet
-fn make_tuple_sig(input_size: u16) -> TupleTypeSignature {
+fn make_tuple_sig(input_size: u64) -> TupleTypeSignature {
     let mut rng = rand::thread_rng();
     let type_list = [IntType, UIntType, BoolType, PrincipalType];
     let mut type_map = Vec::new();
@@ -159,7 +169,7 @@ fn make_tuple_sig(input_size: u16) -> TupleTypeSignature {
     TupleTypeSignature::try_from(type_map).unwrap()
 }
 
-pub fn make_sized_tuple_sigs_map(input_sizes: Vec<u16>) -> HashMap<u16, TupleTypeSignature> {
+pub fn make_sized_tuple_sigs_map(input_sizes: Vec<u64>) -> HashMap<u64, TupleTypeSignature> {
     let mut ret_map = HashMap::new();
     for i in input_sizes {
         let val = make_tuple_sig(i);
@@ -168,7 +178,7 @@ pub fn make_sized_tuple_sigs_map(input_sizes: Vec<u16>) -> HashMap<u16, TupleTyp
     ret_map
 }
 
-fn helper_make_clarity_type_for_sized_type_sig(input_size: u16) -> String {
+fn helper_make_clarity_type_for_sized_type_sig(input_size: u64) -> String {
     match input_size {
         1 => "bool".to_string(),
         2 => "(optional bool)".to_string(),
@@ -193,7 +203,7 @@ fn helper_make_clarity_type_for_sized_type_sig(input_size: u16) -> String {
     }
 }
 
-fn helper_make_clarity_value_for_sized_type_sig(input_size: u16) -> String {
+fn helper_make_clarity_value_for_sized_type_sig(input_size: u64) -> String {
     let mut rng = rand::thread_rng();
     match input_size {
         1 => format!("{}", rng.gen::<bool>()),
@@ -221,7 +231,7 @@ fn helper_make_clarity_value_for_sized_type_sig(input_size: u16) -> String {
     }
 }
 
-pub fn helper_make_value_for_sized_type_sig(input_size: u16) -> Value {
+pub fn helper_make_value_for_sized_type_sig(input_size: u64) -> Value {
     let mut rng = rand::thread_rng();
     match input_size {
         1 => Value::Bool(rng.gen()),
@@ -256,7 +266,7 @@ pub fn helper_make_value_for_sized_type_sig(input_size: u16) -> Value {
 }
 
 // make sized type sigs for AnalysisTypeCheck
-fn make_sized_type_sig(input_size: u16) -> TypeSignature {
+fn make_sized_type_sig(input_size: u64) -> TypeSignature {
     let mut rng = rand::thread_rng();
     match input_size {
         1 => TypeSignature::BoolType,
@@ -284,7 +294,7 @@ fn make_sized_type_sig(input_size: u16) -> TypeSignature {
     }
 }
 
-pub fn make_sized_type_sig_map(input_sizes: Vec<u16>) -> HashMap<u16, TypeSignature> {
+pub fn make_sized_type_sig_map(input_sizes: Vec<u64>) -> HashMap<u64, TypeSignature> {
     let mut ret_map = HashMap::new();
     for i in input_sizes {
         let val = make_sized_type_sig(i);
@@ -293,7 +303,7 @@ pub fn make_sized_type_sig_map(input_sizes: Vec<u16>) -> HashMap<u16, TypeSignat
     ret_map
 }
 
-pub fn helper_make_sized_clarity_value(input_size: u16) -> String {
+pub fn helper_make_sized_clarity_value(input_size: u64) -> String {
     let mut rng = rand::thread_rng();
 
     match input_size {
@@ -317,7 +327,7 @@ pub fn helper_make_sized_clarity_value(input_size: u16) -> String {
 pub fn gen_arithmetic(
     function_name: &'static str,
     scale: u16,
-    input_size: u16,
+    input_size: u64,
 ) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
@@ -370,7 +380,7 @@ fn gen_cmp(function_name: &'static str, scale: u16) -> GenOutput {
 
 /// cost_function: And, Or, Not, Eq
 /// input_size: number of arguments
-fn gen_logic(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
+fn gen_logic(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -442,12 +452,13 @@ pub fn helper_generate_rand_char_string(n: usize) -> String {
         .collect::<String>()
 }
 
+// TODO: Fix this function
 /// This function generates a single value that either has type uint, int, or buff (randomly chosen)
 /// This value is set as the argument to a hash function ultimately
 ///
 /// cost_function: Hash160, Sha256, Sha512, Sha512t256, Keccak256
 /// input_size: single arg function
-fn gen_hash(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
+fn gen_hash(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -467,7 +478,7 @@ fn gen_hash(function_name: &'static str, scale: u16, input_size: u16) -> GenOutp
                     },
                     2 => {
                         let buff = helper_gen_clarity_value("buff", 0, 128, None);
-                        format!(r##"{}"##, buff)
+                        format!(r##"{}"##, buff.0)
                     },
                     _ => {
                         unreachable!("should only be generating numbers in the range 0..=1.")
@@ -475,8 +486,8 @@ fn gen_hash(function_name: &'static str, scale: u16, input_size: u16) -> GenOutp
                 }
             },
             _ => {
-                let buff = helper_gen_clarity_value("buff", 0, input_size.into(), None);
-                format!(r##"{}"##, buff)
+                let buff = helper_gen_clarity_value("buff", 0, input_size, None);
+                format!(r##"{}"##, buff.0)
             }
         };
 
@@ -683,9 +694,29 @@ fn gen_ft_burn(function_name: &'static str, scale: u16) -> GenOutput {
     GenOutput::new(Some(template), body, 1)
 }
 
-/// ////////////////////////////////////////
-/// NON FUNGIBLE TOKEN GENERATOR FUNCTIONS
-/// ////////////////////////////////////////
+fn helper_gen_clarity_list_size(approx_size: u64) -> String {
+    let mut rng = rand::thread_rng();
+
+    let uint_size = 17;
+    let list_bytes = 5;
+    let len: u64 =  (approx_size - list_bytes) / uint_size;
+
+    let mut values = "".to_string();
+    for _ in 0..len {
+        let num: u128 = rng.gen();
+        values.push_str(format!("u{} ", num).as_str());
+    }
+
+    format!("(list {})", values)
+}
+
+// generate list type of approximate size
+fn helper_gen_clarity_list_type(approx_size: u64) -> (String, u64) {
+    let uint_size = 17;
+    let list_bytes = 5;
+    let len: u64 =  (approx_size - list_bytes) / uint_size;
+    (format!("(list {} uint)", len), len)
+}
 
 fn helper_gen_clarity_type(
     allow_bool_type: bool,
@@ -723,9 +754,13 @@ fn helper_gen_clarity_type(
     (nft_type.to_string(), nft_len)
 }
 
+/// ////////////////////////////////////////
+/// NON FUNGIBLE TOKEN GENERATOR FUNCTIONS
+/// ////////////////////////////////////////
+
 // Returns statement (that creates nft in clarity) and token_name
 fn helper_define_non_fungible_token_statement(
-    input_size: u16,
+    input_size: u64,
 ) -> (String, String) {
     let mut rng = rand::thread_rng();
     let token_name = helper_generate_rand_char_string(rng.gen_range(10..20));
@@ -738,37 +773,41 @@ fn helper_define_non_fungible_token_statement(
 fn helper_gen_clarity_value(
     value_type: &str,
     num: u16,
-    value_len: usize,
+    value_len: u64,
     list_type: Option<&str>,
-) -> String {
+) -> (String, u64) {
     let mut rng = rand::thread_rng();
     match value_type {
-        "int" => format!("{}", num),
-        "uint" => format!("u{}", num),
+        "int" => (format!("{}", num), size_of_value(num.to_string())),
+        "uint" => (format!("u{}", num), size_of_value(num.to_string())),
         "buff" => {
             let mut buff = "0x".to_string();
-            buff.push_str(&helper_generate_rand_hex_string(value_len));
-            buff
+            buff.push_str(&helper_generate_rand_hex_string(value_len as usize));
+            (buff.clone(), size_of_value(buff))
         }
         "string-ascii" => {
-            let ascii_string = helper_generate_rand_hex_string(value_len);
-            format!(r##""{}""##, ascii_string)
+            let ascii_string = helper_generate_rand_hex_string(value_len as usize);
+            let val = format!(r##""{}""##, ascii_string);
+            (val.clone(), size_of_value(val))
         }
         "string-utf8" => {
-            let utf8_string = helper_generate_rand_hex_string(value_len);
-            format!(r##"u"{}""##, utf8_string)
+            let utf8_string = helper_generate_rand_hex_string(value_len as usize);
+            let val = format!(r##"u"{}""##, utf8_string);
+            (val.clone(), size_of_value(val))
         }
         "bool" => {
             let rand_bool = rng.gen_bool(0.5);
-            format!("{}", rand_bool)
+            let val = format!("{}", rand_bool);
+            (val.clone(), size_of_value(val))
         }
         "list" => {
             let list_type = list_type.unwrap();
             let args = (0..value_len)
-                .map(|_| helper_gen_clarity_value(&list_type, num, 0, None))
+                .map(|_| helper_gen_clarity_value(&list_type, num, 0, None).0)
                 .collect::<Vec<String>>()
                 .join(" ");
-            format!("(list {})", args)
+            let val = format!("(list {})", args);
+            (val.clone(), size_of_value(val))
         }
         _ => {
             unreachable!("should only be generating the types int, uint, buff, string-ascii, string-utf8, bool.")
@@ -776,12 +815,14 @@ fn helper_gen_clarity_value(
     }
 }
 
-fn helper_gen_random_clarity_value(num: u16) -> String {
+fn helper_gen_random_clarity_value() -> (String, u64) {
+    let mut rng = rand::thread_rng();
+    let num: u16 = rng.gen();
     let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
     helper_gen_clarity_value(
         &clarity_type,
         num,
-        length.map_or(0, |len| len as usize),
+        length.map_or(0, |l| l.into()),
         None,
     )
 }
@@ -789,7 +830,7 @@ fn helper_gen_random_clarity_value(num: u16) -> String {
 /// cost_function: NftMint
 /// input_size: size of type signature of asset
 ///     `expected_asset_type.size()`
-fn gen_nft_mint(scale: u16, input_size: u16) -> GenOutput {
+fn gen_nft_mint(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let (statement, token_name) =
         helper_define_non_fungible_token_statement(input_size);
@@ -813,10 +854,10 @@ fn gen_nft_mint(scale: u16, input_size: u16) -> GenOutput {
 
 
 
-    GenOutput::new(Some(statement), body, nft_value_size as u16)
+    GenOutput::new(Some(statement), body, nft_value_size as u64)
 }
 
-fn helper_create_nft_fn_boilerplate(input_size: u16) -> (String, String, String, String, u16) {
+fn helper_create_nft_fn_boilerplate(input_size: u64) -> (String, String, String, String, u64) {
     let mut body = String::new();
     let (statement, token_name) =
         helper_define_non_fungible_token_statement(input_size);
@@ -839,14 +880,14 @@ fn helper_create_nft_fn_boilerplate(input_size: u16) -> (String, String, String,
         token_name,
         owner_principal,
         nft_value.to_string(),
-        nft_type_size as u16
+        nft_type_size as u64
     )
 }
 
 /// cost_function: NftTransfer
 /// input_size: size of type signature of asset
 ///     `expected_asset_type.size()`
-fn gen_nft_transfer(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
+fn gen_nft_transfer(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let (mut setup, token_name, mut owner_principal, nft_value, nft_type_size) =
         helper_create_nft_fn_boilerplate(input_size);
@@ -868,14 +909,14 @@ fn gen_nft_transfer(function_name: &'static str, scale: u16, input_size: u16) ->
 /// cost_function: NftOwner
 /// input_size: size of type signature of asset
 ///     `expected_asset_type.size()`
-fn gen_nft_owner(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
+fn gen_nft_owner(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     let (mut setup, token_name, _, nft_value, nft_type_size) =
         helper_create_nft_fn_boilerplate(input_size);
     let invalid_nft_value = helper_make_value_for_sized_type_sig(input_size);
     assert!(invalid_nft_value.size() <= u16::MAX as u32);
-    assert_eq!(nft_type_size, invalid_nft_value.size() as u16);
+    assert_eq!(nft_type_size, invalid_nft_value.size() as u64);
     let invalid_nft_as_str = invalid_nft_value.to_string();
     for _ in 0..scale {
         let curr_nft_value = match rng.gen_bool(0.5) {
@@ -899,7 +940,7 @@ fn gen_nft_owner(function_name: &'static str, scale: u16, input_size: u16) -> Ge
 /// cost_function: NftBurn
 /// input_size: size of type signature of asset
 ///     `expected_asset_type.size()`
-fn gen_nft_burn(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
+fn gen_nft_burn(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let (mut setup, token_name, mut owner_principal, nft_value, nft_type_size) =
         helper_create_nft_fn_boilerplate(input_size);
@@ -916,7 +957,7 @@ fn gen_nft_burn(function_name: &'static str, scale: u16, input_size: u16) -> Gen
 /// TUPLE GENERATOR FUNCTIONS
 /// ////////////////////////////////////////
 
-fn helper_generate_tuple(input_size: u16) -> String {
+fn helper_generate_tuple(input_size: u64) -> String {
     let mut rng = rand::thread_rng();
     let tuple_vals = (0..input_size)
         .map(|i| format!("(id{} {})", i, rng.gen::<u32>()))
@@ -928,7 +969,7 @@ fn helper_generate_tuple(input_size: u16) -> String {
 
 /// cost_function: TupleGet
 /// input_size: length of tuple data == number of items
-fn gen_tuple_get(scale: u16, input_size: u16) -> GenOutput {
+fn gen_tuple_get(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -952,7 +993,7 @@ fn gen_tuple_get(scale: u16, input_size: u16) -> GenOutput {
 /// cost_function: TupleMerge
 /// input_size: double arg function
 /// TODO - TupleMerge is not currently utilizing input size correctly in core codebase
-fn gen_tuple_merge(scale: u16, input_size: u16) -> GenOutput {
+fn gen_tuple_merge(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
 
     let tuple_a_vals = (0..input_size)
@@ -984,7 +1025,7 @@ fn gen_tuple_merge(scale: u16, input_size: u16) -> GenOutput {
 
 /// cost_function: TupleCons
 /// input_size: number of bindings in the tuple statement
-fn gen_tuple_cons(scale: u16, input_size: u16) -> GenOutput {
+fn gen_tuple_cons(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
 
     let tuple_vals = (0..input_size)
@@ -1011,8 +1052,8 @@ fn helper_gen_random_optional_value(num: u16, only_some: bool) -> String {
     match rng.gen_bool(p) {
         true => "none".to_string(),
         false => {
-            let clarity_val = helper_gen_random_clarity_value(num);
-            format!("(some {})", clarity_val)
+            let clarity_val = helper_gen_random_clarity_value();
+            format!("(some {})", clarity_val.0)
         }
     }
 }
@@ -1029,9 +1070,9 @@ fn gen_optional(function_name: &'static str, scale: u16) -> GenOutput {
     GenOutput::new(None, body, 1)
 }
 
-fn helper_gen_random_response_value(num: u16, only_ok: bool, only_err: bool) -> String {
+fn helper_gen_random_response_value(only_ok: bool, only_err: bool) -> String {
     let mut rng = rand::thread_rng();
-    let clarity_val = helper_gen_random_clarity_value(num);
+    let clarity_val = helper_gen_random_clarity_value();
     let p = if only_ok {
         0.0
     } else if only_err {
@@ -1041,10 +1082,10 @@ fn helper_gen_random_response_value(num: u16, only_ok: bool, only_err: bool) -> 
     };
     match rng.gen_bool(p) {
         true => {
-            format!("(err {})", clarity_val)
+            format!("(err {})", clarity_val.0)
         }
         false => {
-            format!("(ok {})", clarity_val)
+            format!("(ok {})", clarity_val.0)
         }
     }
 }
@@ -1054,7 +1095,7 @@ fn helper_gen_random_response_value(num: u16, only_ok: bool, only_err: bool) -> 
 fn gen_response(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
-        let args = helper_gen_random_response_value(i, false, false);
+        let args = helper_gen_random_response_value(false, false);
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
 
@@ -1074,7 +1115,7 @@ fn gen_unwrap(
     let mut body = String::new();
     for i in 0..scale {
         let mut args = [
-            helper_gen_random_response_value(i, true, false),
+            helper_gen_random_response_value(true, false),
             helper_gen_random_optional_value(i, true),
         ]
         .choose(&mut rng)
@@ -1086,10 +1127,10 @@ fn gen_unwrap(
             let clarity_val = helper_gen_clarity_value(
                 &clarity_type,
                 i,
-                length.map_or(0, |len| len as usize),
+                length.map_or(0, |len| len as u64),
                 None,
             );
-            args = format!("{} {}", args, clarity_val)
+            args = format!("{} {}", args, clarity_val.0)
         }
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
@@ -1109,11 +1150,11 @@ fn gen_unwrap_err(
 ) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
-        let mut args = helper_gen_random_response_value(i, false, true);
+        let mut args = helper_gen_random_response_value(false, true);
 
         if ret_value {
-            let clarity_val = helper_gen_random_clarity_value(i);
-            args = format!("{} {}", args, clarity_val)
+            let clarity_val = helper_gen_random_clarity_value();
+            args = format!("{} {}", args, clarity_val.0)
         }
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
@@ -1122,47 +1163,57 @@ fn gen_unwrap_err(
     GenOutput::new(None, body, 1)
 }
 
-fn helper_create_map() -> (
-    String,
-    String,
-    String,
-    String,
-    Option<u16>,
-    String,
-    String,
-    Option<u16>,
-) {
+#[derive(Debug)]
+struct DefineMap {
+    body: String,
+    map_name: String,
+    key_name: String,
+    key_type: (String, Option<u16>),
+    value_name: String,
+    value_type: (String, u64),
+}
+
+// generate a define map statement
+// size = approximate size in bytes of key + value
+fn helper_create_map(size: u64) -> DefineMap {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
+    // random map name
     let map_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+
+    // create key name + type
     let key_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-    let (key_type, key_type_len) = helper_gen_clarity_type(true, false, false);
-    let key_args = match key_type_len {
+    let (key_type, key_type_len) = helper_gen_clarity_type(false, false, false);
+    let key_type_formatted = match key_type_len {
         Some(length) => format!("{{ {}: ({} {}) }}", key_name, key_type, length),
         None => format!("{{ {}: {} }}", key_name, key_type),
     };
 
+    // create value name + type
     let value_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-    let (value_type, value_type_len) = helper_gen_clarity_type(true, false, false);
-    let value_args = match value_type_len {
-        Some(length) => format!("{{ {}: ({} {}) }}", value_name, value_type, length),
-        None => format!("{{ {}: {} }}", value_name, value_type),
-    };
+    // let (value_type, value_type_len) = helper_gen_clarity_type(true, false, false);
+    // let value_args = match value_type_len {
+    //     Some(length) => format!("{{ {}: ({} {}) }}", value_name, value_type, length),
+    //     None => format!("{{ {}: {} }}", value_name, value_type),
+    // };
+
+    let value_type = helper_gen_clarity_list_type(size);
+    let value_type_formatted = format!("{{ {}: {} }}", value_name, value_type.0);
+
     body.push_str(&*format!(
         "(define-map {} {} {}) ",
-        map_name, key_args, value_args
+        map_name, key_type_formatted, value_type_formatted
     ));
-    (
+
+    DefineMap {
         body,
         map_name,
         key_name,
-        key_type,
-        key_type_len,
+        key_type: (key_type, key_type_len),
         value_name,
-        value_type,
-        value_type_len,
-    )
+        value_type: (value_type.0, value_type.1),
+    }
 }
 
 // setEntry is the cost for map-delete, map-insert, & map-set
@@ -1170,49 +1221,49 @@ fn helper_create_map() -> (
 /// cost_function: SetEntry
 /// input_size: sum of key type size and value type size
 /// TODO - incorporate input size
-fn gen_set_entry(scale: u16) -> GenOutput {
+fn gen_set_entry(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
-    let (
-        statement,
+
+    let DefineMap {
+        body: mut setup,
         map_name,
         key_name,
         key_type,
-        key_type_len,
         value_name,
         value_type,
-        value_type_len,
-    ) = helper_create_map();
+    } = helper_create_map(input_size);
+
     for i in 0..scale {
         let curr_key = helper_gen_clarity_value(
-            &key_type,
+            &key_type.0,
             i,
-            key_type_len.map_or(0, |len| len as usize),
+            key_type.1.map_or(0, |len| len as u64),
             None,
         );
         let curr_value = helper_gen_clarity_value(
-            &value_type,
+            &value_type.0,
             i,
-            value_type_len.map_or(0, |len| len as usize),
+            value_type.1,
             None,
         );
         let statement = match rng.gen_range(0..3) {
             0 => {
                 format!(
                     "(map-set {} {{ {}: {} }} {{ {}: {} }}) ",
-                    map_name, key_name, curr_key, value_name, curr_value
+                    map_name, key_name, curr_key.0, value_name, curr_value.0
                 )
             }
             1 => {
                 format!(
                     "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
-                    map_name, key_name, curr_key, value_name, curr_value
+                    map_name, key_name, curr_key.0, value_name, curr_value.0
                 )
             }
             2 => {
                 format!(
                     "(map-delete {} {{ {}: {} }}) ",
-                    map_name, key_name, curr_key
+                    map_name, key_name, curr_key.0
                 )
             }
             _ => unreachable!("should only gen numbers from 0 to 2 inclusive"),
@@ -1221,49 +1272,55 @@ fn gen_set_entry(scale: u16) -> GenOutput {
     }
     println!("{}", body);
 
-    GenOutput::new(Some(statement), body, 1)
+    // TODO: fix input size
+    GenOutput::new(Some(setup), body, 1)
 }
 
-// TODO: fix input size calculation - reed
 /// cost_function: FetchEntry
 /// input_size: sum of key type size and value type size
-fn gen_fetch_entry(scale: u16) -> GenOutput {
+fn gen_fetch_entry(scale: u16, input_size: u64) -> GenOutput {
+    dbg!(input_size);
     let mut body = String::new();
-    let (
-        mut setup,
+
+    // define an arbitrary map
+    let DefineMap {
+        body: mut setup,
         map_name,
         key_name,
         key_type,
-        key_type_len,
         value_name,
         value_type,
-        value_type_len,
-    ) = helper_create_map();
+    } = dbg!(helper_create_map(input_size));
 
-    // insert a value into map
+    // construct a properly typed key for the map
     let curr_key = helper_gen_clarity_value(
-        &key_type,
+        &key_type.0,
         23,
-        key_type_len.map_or(0, |len| len as usize),
-        None,
-    );
-    let curr_value = helper_gen_clarity_value(
-        &value_type,
-        89,
-        value_type_len.map_or(0, |len| len as usize),
+        key_type.1.map_or(0, |len| len as u64),
         None,
     );
 
+    // construct a properly typed value for the map
+    let curr_value = helper_gen_clarity_value(
+        "list",
+        89,
+        value_type.1,
+        Some("uint"),
+    );
+
+    // insert the key value pair into the map
     setup.push_str(&format!(
         "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
-        map_name, key_name, curr_key, value_name, curr_value
+        map_name, key_name, curr_key.0, value_name, curr_value.0
     ));
+
+    // construct map-get statements
     for i in 0..scale {
         let curr_key_value = if i % 2 == 0 {
             helper_gen_clarity_value(
-                &key_type,
+                &key_type.0,
                 i,
-                key_type_len.map_or(0, |len| len as usize),
+                key_type.1.map_or(0, |len| len as u64),
                 None,
             )
         } else {
@@ -1272,16 +1329,15 @@ fn gen_fetch_entry(scale: u16) -> GenOutput {
 
         let statement = format!(
             "(map-get? {} {{ {}: {} }}) ",
-            map_name, key_name, curr_key_value
+            map_name, key_name, curr_key_value.0
         );
         body.push_str(&statement);
     }
-    println!("{}", body);
 
     GenOutput::new(
         Some(setup),
         body,
-        key_type_len.unwrap() + value_type_len.unwrap(),
+        curr_key.1 + curr_value.1,
     )
 }
 
@@ -1299,12 +1355,12 @@ fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool) -> GenOut
     let clarity_value = helper_gen_clarity_value(
         &clarity_type,
         rng.gen_range(10..200),
-        length.map_or(0, |len| len as usize),
+        length.map_or(0, |len| len as u64),
         None,
     );
     let args = match length {
-        Some(l) => format!("{} ({} {}) {}", var_name, clarity_type, l, clarity_value),
-        None => format!("{} {} {}", var_name, clarity_type, clarity_value),
+        Some(l) => format!("{} ({} {}) {}", var_name, clarity_type, l, clarity_value.0),
+        None => format!("{} {} {}", var_name, clarity_type, clarity_value.0),
     };
     let setup = format!("({} {}) ", "define-data-var", args);
     for i in 0..scale {
@@ -1312,10 +1368,10 @@ fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool) -> GenOut
             let new_val = helper_gen_clarity_value(
                 &clarity_type,
                 i,
-                length.map_or(0, |len| len as usize),
+                length.map_or(0, |len| len as u64),
                 None,
             );
-            format!("{} {}", var_name, new_val)
+            format!("{} {}", var_name, new_val.0)
         } else {
             format!("{}", var_name)
         };
@@ -1335,8 +1391,8 @@ fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool) -> GenOut
 fn gen_single_clar_value(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
-        let args = helper_gen_random_clarity_value(i);
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        let args = helper_gen_random_clarity_value();
+        body.push_str(&*format!("({} {}) ", function_name, args.0));
     }
     println!("{}", body);
 
@@ -1351,14 +1407,14 @@ fn gen_if(function_name: &'static str, scale: u16) -> GenOutput {
     for i in 0..scale {
         let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
         let if_case_value =
-            helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as usize), None);
+            helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as u64), None);
         let else_case_value =
-            helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as usize), None);
+            helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as u64), None);
         let curr_bool = rng.gen_bool(0.5);
 
         body.push_str(&*format!(
             "({} {} {} {}) ",
-            function_name, curr_bool, if_case_value, else_case_value
+            function_name, curr_bool, if_case_value.0, else_case_value.0
         ));
     }
 
@@ -1370,8 +1426,8 @@ fn gen_if(function_name: &'static str, scale: u16) -> GenOutput {
 fn gen_asserts(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
-        let clarity_val = helper_gen_random_clarity_value(i);
-        body.push_str(&*format!("({} true {}) ", function_name, clarity_val));
+        let clarity_val = helper_gen_random_clarity_value();
+        body.push_str(&*format!("({} true {}) ", function_name, clarity_val.0));
     }
     println!("{}", body);
 
@@ -1391,7 +1447,7 @@ fn helper_generate_sequences(list_type: &str, output: u16) -> Vec<String> {
                         rng.gen_range(2..50),
                         rng.gen_range(2..50) * 2,
                         None,
-                    )
+                    ).0
                 })
                 .collect()
         }
@@ -1404,7 +1460,7 @@ fn helper_generate_sequences(list_type: &str, output: u16) -> Vec<String> {
                         rng.gen_range(2..50),
                         rng.gen_range(2..50) * 2,
                         Some(list_type),
-                    )
+                    ).0
                 })
                 .collect()
         }
@@ -1414,7 +1470,7 @@ fn helper_generate_sequences(list_type: &str, output: u16) -> Vec<String> {
 /// cost_function: Concat
 /// input_size: sum of Value size of input sequences
 ///     `u64::from(wrapped_seq.size()).cost_overflow_add(u64::from(other_wrapped_seq.size())`
-fn gen_concat(function_name: &'static str, scale: u16, input_size: u16) -> GenOutput {
+fn gen_concat(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
 
     let value_size = make_sized_type_sig(input_size).size();
@@ -1429,7 +1485,7 @@ fn gen_concat(function_name: &'static str, scale: u16, input_size: u16) -> GenOu
     }
     println!("{}", body);
 
-    GenOutput::new(None, body, value_size as u16)
+    GenOutput::new(None, body, value_size as u64)
 }
 
 /// cost_function: AsMaxLen
@@ -1441,7 +1497,7 @@ fn gen_as_max_len(function_name: &'static str, scale: u16) -> GenOutput {
         let (list_type, _) = helper_gen_clarity_type(true, false, true);
         let operand = helper_generate_sequences(&list_type, 1);
         let len = helper_gen_clarity_value("uint", rng.gen_range(2..50), 0, None);
-        body.push_str(&*format!("({} {} {}) ", function_name, operand[0], len));
+        body.push_str(&*format!("({} {} {}) ", function_name, operand[0], len.0));
     }
     println!("{}", body);
 
@@ -1455,8 +1511,8 @@ fn gen_define_constant(function_name: &'static str, scale: u16) -> GenOutput {
     let mut rng = rand::thread_rng();
     for i in 0..scale {
         let name = helper_generate_rand_char_string(rng.gen_range(10..50));
-        let value = helper_gen_random_clarity_value(i);
-        body.push_str(&*format!("({} {} {}) ", function_name, name, value));
+        let value = helper_gen_random_clarity_value();
+        body.push_str(&*format!("({} {} {}) ", function_name, name, value.0));
     }
     println!("{}", body);
 
@@ -1472,22 +1528,22 @@ fn gen_default_to(function_name: &'static str, scale: u16) -> GenOutput {
     for i in 0..scale {
         let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
         let default_val =
-            helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as usize), None);
+            helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as u64), None);
         let opt_string = match rng.gen_bool(0.5) {
             true => "none".to_string(),
             false => {
                 let inner_val = helper_gen_clarity_value(
                     &clarity_type,
                     i,
-                    length.map_or(0, |len| len as usize),
+                    length.map_or(0, |len| len as u64),
                     None,
                 );
-                format!("(some {})", inner_val)
+                format!("(some {})", inner_val.0)
             }
         };
         body.push_str(&*format!(
             "({} {} {}) ",
-            function_name, default_val, opt_string
+            function_name, default_val.0, opt_string
         ));
     }
     println!("{}", body);
@@ -1530,7 +1586,7 @@ fn gen_match(scale: u16) -> GenOutput {
 
         let statement = match rng.gen_bool(0.5) {
             true => {
-                let match_val = helper_gen_random_response_value(i, false, false);
+                let match_val = helper_gen_random_response_value(false, false);
                 let second_branch_name = helper_generate_rand_char_string(rng.gen_range(10..20));
                 format!(
                     "(match {} {} (no-op) {} (no-op)) ",
@@ -1555,15 +1611,15 @@ fn gen_match(scale: u16) -> GenOutput {
 /// cost_function: Let
 /// input_size: number of bindings in the let statement
 ///     `bindings.len()`
-fn gen_let(scale: u16, input_size: u16) -> GenOutput {
+fn gen_let(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for i in 0..scale {
         let mut bindings = String::new();
         for _ in 0..input_size {
             let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-            let var_value = helper_gen_random_clarity_value(i);
-            bindings.push_str(&*format!("({} {}) ", var_name, var_value));
+            let var_value = helper_gen_random_clarity_value();
+            bindings.push_str(&*format!("({} {}) ", var_name, var_value.0));
         }
         let statement = format!("(let ({}) (no-op)) ", bindings);
         body.push_str(&statement);
@@ -1582,14 +1638,14 @@ fn helper_generate_random_sequence() -> (String, usize, String) {
             let (clarity_type, _) = helper_gen_clarity_type(true, true, false);
             let value =
                 helper_gen_clarity_value(&clarity_type, rng.gen_range(2..50), value_len, None);
-            (value, value_len, clarity_type)
+            (value.0, value_len as usize, clarity_type)
         }
         false => {
             // list case
             let (list_type, _) = helper_gen_clarity_type(true, false, true);
             let value =
                 helper_gen_clarity_value("list", rng.gen_range(2..50), value_len, Some(&list_type));
-            (value, value_len, list_type)
+            (value.0, value_len as usize, list_type)
         }
     }
 }
@@ -1604,7 +1660,7 @@ fn gen_index_of(scale: u16) -> GenOutput {
         let item_len = if seq_inner_type == "buff" { 2 } else { 1 };
         let item_val =
             helper_gen_clarity_value(&seq_inner_type, rng.gen_range(2..50), item_len, None);
-        let statement = format!("(index-of {} {}) ", seq, item_val);
+        let statement = format!("(index-of {} {}) ", seq, item_val.0);
         body.push_str(&statement);
     }
     println!("{}", body);
@@ -1645,7 +1701,7 @@ fn gen_len(scale: u16) -> GenOutput {
 /// cost_function: Append
 /// input_size: max of value size (which is to be appended) and size of the type of the list
 ///     `u64::from(cmp::max(entry_type.size(), element_type.size()))`
-fn gen_append(scale: u16, input_size: u16) -> GenOutput {
+fn gen_append(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let value_size = make_sized_type_sig(input_size).size();
     assert!(value_size < u16::MAX as u32);
@@ -1658,7 +1714,7 @@ fn gen_append(scale: u16, input_size: u16) -> GenOutput {
     }
     println!("{}", body);
 
-    GenOutput::new(None, body, value_size as u16)
+    GenOutput::new(None, body, value_size as u64)
 }
 
 /// cost_function: ListCons
@@ -1666,7 +1722,7 @@ fn gen_append(scale: u16, input_size: u16) -> GenOutput {
 ///     ```for a in args.iter() {
 ///         arg_size = arg_size.cost_overflow_add(a.size().into())?;
 ///     }```
-fn gen_list_cons(scale: u16, input_size: u16) -> GenOutput {
+fn gen_list_cons(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let item_val = "true";
@@ -1696,7 +1752,7 @@ fn gen_filter(scale: u16) -> GenOutput {
             rng.gen_range(1..5) * 2,
             Some(&list_type),
         );
-        let statement = format!("(filter no-op {}) ", list_val);
+        let statement = format!("(filter no-op {}) ", list_val.0);
         body.push_str(&statement);
     }
     println!("{}", body);
@@ -1718,7 +1774,7 @@ fn gen_fold(scale: u16) -> GenOutput {
             rng.gen_range(1..5) * 2,
             Some(&list_type),
         );
-        let statement = format!("(fold no-op {} true) ", list_val);
+        let statement = format!("(fold no-op {} true) ", list_val.0);
         body.push_str(&statement);
     }
     println!("{}", body);
@@ -1728,7 +1784,7 @@ fn gen_fold(scale: u16) -> GenOutput {
 
 /// cost_function: Map
 /// input_size: number of arguments
-fn gen_map(scale: u16, input_size: u16) -> GenOutput {
+fn gen_map(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
@@ -1741,7 +1797,7 @@ fn gen_map(scale: u16, input_size: u16) -> GenOutput {
                 rng.gen_range(2..50) * 2,
                 Some(&list_type),
             );
-            lists.push_str(&list_val);
+            lists.push_str(&list_val.0);
             lists.push_str(" ");
         }
 
@@ -1790,9 +1846,9 @@ fn gen_at_block(scale: u16) -> GenOutput {
 }
 
 // helper function used in bench.rs
-pub fn gen_read_only_func(scale: u16) -> GenOutput {
+pub fn gen_read_only_func(size: u16) -> GenOutput {
     let mut body = String::new();
-    let arith_string = gen_arithmetic("+", scale, 2).body;
+    let arith_string = gen_arithmetic("+", size, 2).body;
     body.push_str(arith_string.as_str());
 
     GenOutput::new(
@@ -1810,8 +1866,8 @@ pub fn gen_read_only_func(scale: u16) -> GenOutput {
 fn gen_analysis_option_cons(scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
-        let args = helper_gen_random_clarity_value(i);
-        body.push_str(&*format!("{} ", args));
+        let args = helper_gen_random_clarity_value();
+        body.push_str(&*format!("{} ", args.0));
     }
     println!("{}", body);
 
@@ -1823,7 +1879,7 @@ fn gen_analysis_option_cons(scale: u16) -> GenOutput {
 fn gen_analysis_option_check(scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
-        let args = helper_gen_random_response_value(i, false, false);
+        let args = helper_gen_random_response_value(false, false);
         body.push_str(&*format!("{} ", args));
     }
     println!("{}", body);
@@ -1834,7 +1890,7 @@ fn gen_analysis_option_check(scale: u16) -> GenOutput {
 /// cost_function: AnalysisBindName
 /// input_size: type size (could be value, constant, function, total map size, etc.)
 ///     `v_type.type_size()`
-fn gen_analysis_bind_name(scale: u16, input_size: u16) -> GenOutput {
+fn gen_analysis_bind_name(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -1867,14 +1923,14 @@ fn gen_analysis_bind_name(scale: u16, input_size: u16) -> GenOutput {
 /// cost_function: AnalysisListItemsCheck
 /// input_size: type signature size of item
 ///     `type_arg.type_size()`
-fn gen_analysis_list_items_check(scale: u16, input_size: u16) -> GenOutput {
+fn gen_analysis_list_items_check(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let (base_type, _) = helper_gen_clarity_type(true, false, true);
         body.push_str("(");
         for _ in 0..input_size {
             let base_val = helper_gen_clarity_value(&base_type, i, 0, None);
-            body.push_str(&*format!("{} ", base_val));
+            body.push_str(&*format!("{} ", base_val.0));
         }
         body.push_str(") ");
     }
@@ -1886,7 +1942,7 @@ fn gen_analysis_list_items_check(scale: u16, input_size: u16) -> GenOutput {
 /// cost_function: AnalysisCheckTupleGet
 /// input_size: length of tuple
 ///     `tuple_type_sig.len()`
-fn gen_analysis_tuple_get(scale: u16, input_size: u16) -> GenOutput {
+fn gen_analysis_tuple_get(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         body.push_str(&helper_generate_tuple(input_size));
@@ -1899,7 +1955,7 @@ fn gen_analysis_tuple_get(scale: u16, input_size: u16) -> GenOutput {
 /// cost_function: AnalysisCheckTupleMerge
 /// input_size: length of second tuple
 ///     `update.len()`
-fn gen_analysis_tuple_merge(scale: u16, input_size: u16) -> GenOutput {
+fn gen_analysis_tuple_merge(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         body.push_str("(");
@@ -1915,14 +1971,14 @@ fn gen_analysis_tuple_merge(scale: u16, input_size: u16) -> GenOutput {
 /// cost_function: AnalysisCheckTupleCons
 /// input_size: number of arguments provided
 ///     `args.len()`
-fn gen_analysis_tuple_cons(scale: u16, input_size: u16) -> GenOutput {
+fn gen_analysis_tuple_cons(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         body.push_str("(");
         for _ in 0..input_size {
-            let var_val = helper_gen_random_clarity_value(i);
+            let var_val = helper_gen_random_clarity_value();
             let var_name = helper_generate_rand_char_string(10);
-            body.push_str(&*format!("({} {}) ", var_name, var_val));
+            body.push_str(&*format!("({} {}) ", var_name, var_val.0));
         }
         body.push_str(") ");
     }
@@ -1934,7 +1990,7 @@ fn gen_analysis_tuple_cons(scale: u16, input_size: u16) -> GenOutput {
 /// cost_function: AnalysisTupleItemsCheck
 /// input_size: type signature size of value
 ///     `var_type.type_size()`
-fn gen_analysis_tuple_items_check(scale: u16, input_size: u16) -> GenOutput {
+fn gen_analysis_tuple_items_check(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let field_name = helper_generate_rand_char_string(10);
@@ -1949,13 +2005,13 @@ fn gen_analysis_tuple_items_check(scale: u16, input_size: u16) -> GenOutput {
 /// cost_function: AnalysisCheckLet
 /// input_size: number of arguments total (the binding list counts as an arg)
 ///     `args.len()`
-fn gen_analysis_check_let(scale: u16, input_size: u16) -> GenOutput {
+fn gen_analysis_check_let(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     for i in 0..(scale) {
         let no_ops = (0..input_size).map(|_x| "(no-op) ").collect::<String>();
-        let var_val = helper_gen_random_clarity_value(i);
+        let var_val = helper_gen_random_clarity_value();
         let var_name = helper_generate_rand_char_string(10);
-        body.push_str(&*format!("((({} {})) {}) ", var_name, var_val, no_ops));
+        body.push_str(&*format!("((({} {})) {}) ", var_name, var_val.0, no_ops));
     }
     println!("{}", body);
 
@@ -1966,14 +2022,14 @@ fn gen_analysis_check_let(scale: u16, input_size: u16) -> GenOutput {
 /// cost_function: AnalysisIterableFunc
 /// input_size: 0 in most cases, `args.len()` in `check_special_map`
 /// TODO - check this is benched correctly
-fn gen_analysis_iterable_func(scale: u16, input_size: u16) -> GenOutput {
+fn gen_analysis_iterable_func(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     for _ in 0..scale {
         let mut lists = String::new();
         for _ in 0..input_size {
             let list_val = helper_gen_clarity_value("list", rng.gen_range(2..50), 3, Some("int"));
-            lists.push_str(&list_val);
+            lists.push_str(&list_val.0);
             lists.push_str(" ");
         }
 
@@ -1996,17 +2052,17 @@ fn gen_analysis_iterable_func(scale: u16, input_size: u16) -> GenOutput {
 ///            Err(e) => Err(e),
 ///        })?;
 ///    }```
-fn gen_analysis_storage(scale: u16, input_size: u16) -> GenOutput {
+fn gen_analysis_storage(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let mut defines = String::new();
         for j in 0..input_size {
             let (base_type, _) = helper_gen_clarity_type(true, false, true);
-            let base_val = helper_gen_clarity_value(&base_type, j, 0, None);
+            let base_val = helper_gen_clarity_value(&base_type, j as u16, 0, None);
             let constant_name = helper_generate_rand_char_string(10);
             defines.push_str(&*format!(
                 "(define-constant {} {}) ",
-                constant_name, base_val
+                constant_name, base_val.0
             ));
         }
         let statement = format!("({}) ", defines);
@@ -2020,7 +2076,7 @@ fn gen_analysis_storage(scale: u16, input_size: u16) -> GenOutput {
 /// cost_function: AstCycleDetection, LookupFunction
 /// input_size: number of edges in AST / 0
 ///     `self.graph.edges_count()`
-fn gen_ast_cycle_detection(input_size: u16) -> GenOutput {
+fn gen_ast_cycle_detection(input_size: u64) -> GenOutput {
     let mut body = String::new();
     body.push_str(&*format!("(define-read-only (fn-0) (no-op)) "));
     for i in 1..(input_size + 1) {
@@ -2041,7 +2097,7 @@ fn gen_ast_cycle_detection(input_size: u16) -> GenOutput {
 
     let edges = definition_sorter.graph.edges_count().unwrap();
 
-    GenOutput::new(None, body, edges as u16)
+    GenOutput::new(None, body, edges as u64)
 }
 
 /// cost_function: AstParse, AnalysisTypeCheck
@@ -2053,7 +2109,7 @@ fn gen_empty() -> GenOutput {
 /// cost_function: ContractStorage
 /// input_size: length of contract string
 ///     `contract_string.len()`
-fn gen_contract_storage(input_size: u16) -> GenOutput {
+fn gen_contract_storage(input_size: u64) -> GenOutput {
     let contract = make_sized_contract(input_size);
     GenOutput::new(None, contract.0, contract.1)
 }
@@ -2088,7 +2144,7 @@ fn gen_principal_of(scale: u16) -> GenOutput {
 /// cost_function: AnalysisTypeLookup
 /// input_size: type signature size of value being looked up
 ///     `expected_asset_type.type_size()`
-fn gen_analysis_type_lookup(scale: u16, input_size: u16) -> GenOutput {
+fn gen_analysis_type_lookup(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let asset_name = helper_generate_rand_char_string(10);
@@ -2131,7 +2187,7 @@ fn gen_no_op_with_scale_repetitions(scale: u16) -> GenOutput {
 /// cost_function: AnalysisLookupFunctionTypes, AnalysisUseTraitEntry
 /// input_size: type signature size of function / sum of type size of function sigs in a trait
 ///     `func_signature.total_type_size()` / `trait_type_size(&trait_sig)`
-fn gen_analysis_lookup_function_types(input_size: u16) -> GenOutput {
+fn gen_analysis_lookup_function_types(input_size: u64) -> GenOutput {
     let args = (0..input_size).map(|_x| "uint ").collect::<String>();
     let dummy_fn = format!("(dummy-fn ({}) (response uint uint))", args);
     let body = format!("(define-trait dummy-trait ({})) ", dummy_fn);
@@ -2143,7 +2199,7 @@ fn gen_analysis_lookup_function_types(input_size: u16) -> GenOutput {
 /// cost_function: AnalysisGetFunctionEntry, UserFunctionApplication
 /// input_size: type size of function signature / number of arguments
 ///    `func_signature.total_type_size()` / `self.arguments.len()`
-fn gen_analysis_get_function_entry(input_size: u16) -> GenOutput {
+fn gen_analysis_get_function_entry(input_size: u64) -> GenOutput {
     let mut body = String::new();
     let args = (0..input_size)
         .map(|i| format!(" (f{} uint) ", i))
@@ -2158,7 +2214,7 @@ fn gen_analysis_get_function_entry(input_size: u16) -> GenOutput {
 /// cost_function: InnerTypeCheckCost
 /// input_size: type signature size of argument
 ///     `arg_type.size()`
-fn gen_inner_type_check_cost(input_size: u16) -> GenOutput {
+fn gen_inner_type_check_cost(input_size: u64) -> GenOutput {
     let mut body = String::new();
     let clar_type = make_clarity_type_for_sized_value(input_size);
     body.push_str(&*format!(
@@ -2196,7 +2252,7 @@ pub fn gen_stx_get_balance(scale: u16) -> GenOutput {
 }
 ////////////////////// ANALYSIS PASS COSTS /////////////////////////
 
-pub fn gen_analysis_pass_read_only(input_size: u16) -> GenOutput {
+pub fn gen_analysis_pass_read_only(input_size: u64) -> GenOutput {
     let mut body = String::new();
     for i in 0..input_size {
         let fn_body = if i == 0 {
@@ -2212,7 +2268,7 @@ pub fn gen_analysis_pass_read_only(input_size: u16) -> GenOutput {
     GenOutput::new(None, body, input_size)
 }
 
-pub fn gen_analysis_pass_arithmetic_only(input_size: u16) -> GenOutput {
+pub fn gen_analysis_pass_arithmetic_only(input_size: u64) -> GenOutput {
     let mut body = String::new();
     for i in 0..input_size {
         let fn_body = if i == 0 {
@@ -2231,12 +2287,12 @@ pub fn gen_analysis_pass_arithmetic_only(input_size: u16) -> GenOutput {
     GenOutput::new(None, body, input_size)
 }
 
-pub fn define_dummy_trait(i: u16, clarity_type: &str) -> String {
+pub fn define_dummy_trait(i: u64, clarity_type: &str) -> String {
     let dummy_fn = format!("(dummy-fn-{} ({}) (response uint uint))", i, clarity_type);
     format!("(define-trait dummy-trait-{} ({})) ", i, dummy_fn)
 }
 
-pub fn gen_analysis_pass_trait_checker(input_size: u16) -> GenOutput {
+pub fn gen_analysis_pass_trait_checker(input_size: u64) -> GenOutput {
     let mut setup_body = String::new();
     let mut body = String::new();
     for i in 0..input_size {
@@ -2259,7 +2315,7 @@ pub fn gen_analysis_pass_trait_checker(input_size: u16) -> GenOutput {
     GenOutput::new(Some(setup_body), body, input_size)
 }
 
-pub fn gen_analysis_pass_type_checker(input_size: u16) -> GenOutput {
+pub fn gen_analysis_pass_type_checker(input_size: u64) -> GenOutput {
     let mut setup_body = String::new();
     let mut body = String::new();
     for i in 0..input_size {
@@ -2309,7 +2365,7 @@ fn gen_contract_of(scale: u16) -> GenOutput {
 /// The `reviewed` comment above each cost function should list the GitHub usernames of those
 ///    who have verified that the benchmark for that cost function seems accurate (given the code
 ///    in `benches.rs`, the code in `generators.rs`, and the benchmark data.
-pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOutput {
+pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOutput {
     match function {
         /// Arithmetic ///////////////////////
         /// reviewed: @reedrosenbluth
@@ -2543,50 +2599,50 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
         ClarityCostFunction::NftBurn => gen_nft_burn("nft-burn?", scale, input_size),
 
         /// Stacks ////////////////////////////////
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::PoisonMicroblock => unimplemented!(), // don't need a gen for this
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::BlockInfo => gen_get_block_info(scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::StxBalance => gen_stx_get_balance(scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::StxTransfer => gen_stx_transfer(scale),
 
 
         /// Option & result checks ////////////////////////////////
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::IsSome => gen_optional("is-some", scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::IsNone => gen_optional("is-none", scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::IsOkay => gen_response("is-ok", scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::IsErr => gen_response("is-err", scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::DefaultTo => gen_default_to("default-to", scale),
 
 
         /// Unwrap functions ////////////////////////////////
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Unwrap => gen_unwrap("unwrap-panic", scale, false),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::UnwrapRet => gen_unwrap("unwrap!", scale, true),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::UnwrapErr => gen_unwrap_err("unwrap-err-panic", scale, false),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::UnwrapErrOrRet => gen_unwrap_err("unwrap-err!", scale, true),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::TryRet => gen_unwrap("try!", scale, false),
 
 
@@ -2597,11 +2653,11 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
         ///     `u64::from(key_type.size()).cost_overflow_add(u64::from(value_type.size()))`
         ClarityCostFunction::CreateMap => unimplemented!(),
 
-        /// reviewed:
-        ClarityCostFunction::FetchEntry => gen_fetch_entry(scale), // map-get?
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::FetchEntry => gen_fetch_entry(scale, input_size), // map-get?
 
         /// reviewed:
-        ClarityCostFunction::SetEntry => gen_set_entry(scale),     // map-set
+        ClarityCostFunction::SetEntry => gen_set_entry(scale, input_size),     // map-set
 
 
         /// Var ////////////////////////////////
@@ -2693,7 +2749,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
 pub fn gen_analysis_pass(
     function: AnalysisCostFunction,
     _scale: u16,
-    input_size: u16,
+    input_size: u64,
 ) -> GenOutput {
     match function {
         /// reviewed:

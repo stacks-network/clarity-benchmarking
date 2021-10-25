@@ -83,23 +83,24 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 
-const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
-const INPUT_SIZES_HASH: [u16; 8] = [8, 16, 64, 128, 256, 512, 1024, 2048];
-const INPUT_SIZES_ANALYSIS_PASS: [u16; 6] = [1, 2, 8, 16, 32, 64];
-const INPUT_SIZES_ARITHMETIC: [u16; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
-const MORE_INPUT_SIZES: [u16; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
+const INPUT_SIZES: [u64; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
+const INPUT_SIZES_DATA: [u64; 8] = [15620, 31250, 62500, 125000, 250000, 500000, 1000000, 2000000];
+const INPUT_SIZES_HASH: [u64; 8] = [8, 16, 64, 128, 256, 512, 1024, 2048];
+const INPUT_SIZES_ANALYSIS_PASS: [u64; 6] = [1, 2, 8, 16, 32, 64];
+const INPUT_SIZES_ARITHMETIC: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+const MORE_INPUT_SIZES: [u64; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const SCALE: u16 = 100;
 
 pub const NUM_BLOCKS: u32 = 60;
 
 lazy_static! {
-    pub static ref SIZED_VALUES: HashMap<u16, Value> = make_sized_values_map(INPUT_SIZES.to_vec());
-    pub static ref SIZED_CONTRACTS: HashMap<u16, String> =
+    pub static ref SIZED_VALUES: HashMap<u64, Value> = make_sized_values_map(INPUT_SIZES.to_vec());
+    pub static ref SIZED_CONTRACTS: HashMap<u64, String> =
         make_sized_contracts_map(INPUT_SIZES.to_vec());
     // The size of the TupleTypeSignature is measured by the length of its type map
-    pub static ref SIZED_TUPLE_SIG: HashMap<u16, TupleTypeSignature> =
+    pub static ref SIZED_TUPLE_SIG: HashMap<u64, TupleTypeSignature> =
         make_sized_tuple_sigs_map(INPUT_SIZES.to_vec());
-    pub static ref SIZED_TYPE_SIG: HashMap<u16, TypeSignature> =
+    pub static ref SIZED_TYPE_SIG: HashMap<u64, TypeSignature> =
         make_sized_type_sig_map(INPUT_SIZES.to_vec());
 }
 
@@ -127,7 +128,7 @@ fn bench_with_input_sizes(
     c: &mut Criterion,
     function: ClarityCostFunction,
     scale: u16,
-    input_sizes: Option<Vec<u16>>,
+    input_sizes: Option<Vec<u64>>,
     use_headers_db: bool,
     maybe_make_store: Option<Box<dyn Fn() -> MemoryBackingStore>>,
 ) {
@@ -174,7 +175,7 @@ fn run_bench<F>(
     group: &mut BenchmarkGroup<WallTime>,
     function: ClarityCostFunction,
     scale: u16,
-    input_size: u16,
+    input_size: u64,
     use_headers_db: bool,
     maybe_make_store: &Option<Box<dyn Fn() -> MemoryBackingStore>>,
     code_to_bench: F,
@@ -247,7 +248,7 @@ fn dummy_setup_code(
     _ca: &mut ContractAST,
     _lc: &mut TypingContext,
     _tc: &mut TypeChecker,
-    _i: u16,
+    _i: u64,
     _c: &mut LimitedCostTracker,
 ) {
 }
@@ -256,12 +257,12 @@ fn bench_analysis<F, G>(
     c: &mut Criterion,
     function: ClarityCostFunction,
     scale: u16,
-    input_sizes: Vec<u16>,
+    input_sizes: Vec<u64>,
     setup_code: G,
     code_to_bench: F,
 ) where
-    F: Fn(&mut ContractAST, &mut TypingContext, &mut TypeChecker, u16, &mut LimitedCostTracker),
-    G: Fn(&mut ContractAST, &mut TypingContext, &mut TypeChecker, u16, &mut LimitedCostTracker),
+    F: Fn(&mut ContractAST, &mut TypingContext, &mut TypeChecker, u64, &mut LimitedCostTracker),
+    G: Fn(&mut ContractAST, &mut TypingContext, &mut TypeChecker, u64, &mut LimitedCostTracker),
 {
     let mut group = c.benchmark_group(function.to_string());
 
@@ -573,8 +574,8 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
 }
 
 fn helper_deepen_typing_context(
-    i: u16,
-    input_size: u16,
+    i: u64,
+    input_size: u64,
     context: &TypingContext,
     group: &mut BenchmarkGroup<WallTime>,
 ) {
@@ -612,8 +613,8 @@ fn bench_analysis_lookup_variable_depth(c: &mut Criterion) {
 }
 
 fn helper_deepen_local_context(
-    i: u16,
-    input_size: u16,
+    i: u64,
+    input_size: u64,
     context: &LocalContext,
     group: &mut BenchmarkGroup<WallTime>,
 ) {
@@ -1254,7 +1255,7 @@ fn bench_analysis_option_cons(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        _i: u64,
         _c: &mut LimitedCostTracker,
     ) {
         type_checker.type_map.delete_all();
@@ -1279,7 +1280,7 @@ fn bench_analysis_option_check(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        _i: u64,
         _c: &mut LimitedCostTracker,
     ) {
         type_checker.type_map.delete_all();
@@ -1305,7 +1306,7 @@ fn bench_analysis_visit(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        _i: u64,
         _c: &mut LimitedCostTracker,
     ) {
         for exp in &contract_ast.expressions {
@@ -1329,7 +1330,7 @@ fn bench_analysis_bind_name(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        _i: u64,
         _c: &mut T,
     ) {
         type_checker.type_map.delete_all();
@@ -1353,7 +1354,7 @@ fn bench_analysis_list_items_check(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _is: u16,
+        _is: u64,
         _c: &mut T,
     ) {
         type_checker.type_map.delete_all();
@@ -1380,7 +1381,7 @@ fn bench_analysis_check_tuple_get(c: &mut Criterion) {
         _ca: &mut ContractAST,
         _lc: &mut TypingContext,
         _tc: &mut TypeChecker,
-        i: u16,
+        i: u64,
         _c: &mut T,
     ) {
         SIZED_TUPLE_SIG.get(&i);
@@ -1390,7 +1391,7 @@ fn bench_analysis_check_tuple_get(c: &mut Criterion) {
         _ca: &mut ContractAST,
         _lc: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        i: u16,
+        i: u64,
         _c: &mut T,
     ) {
         let tuple_type_sig = SIZED_TUPLE_SIG.get(&i).unwrap();
@@ -1412,7 +1413,7 @@ fn bench_analysis_check_tuple_merge(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        _i: u64,
         _c: &mut T,
     ) {
         type_checker.type_map.delete_all();
@@ -1437,7 +1438,7 @@ fn bench_analysis_check_tuple_cons(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _is: u16,
+        _is: u64,
         _c: &mut T,
     ) {
         type_checker.type_map.delete_all();
@@ -1463,7 +1464,7 @@ fn bench_analysis_tuple_items_check(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _is: u16,
+        _is: u64,
         _c: &mut T,
     ) {
         type_checker.type_map.delete_all();
@@ -1488,7 +1489,7 @@ fn bench_analysis_check_let(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        _i: u64,
         _c: &mut T,
     ) {
         type_checker.type_map.delete_all();
@@ -1556,7 +1557,7 @@ fn bench_analysis_type_annotate(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         _lc: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        input_size: u16,
+        input_size: u64,
         _c: &mut LimitedCostTracker,
     ) {
         let var_type_sig = SIZED_TYPE_SIG.get(&input_size).unwrap();
@@ -1572,7 +1573,7 @@ fn bench_analysis_type_annotate(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _is: u16,
+        _is: u64,
         _c: &mut T,
     ) {
         type_checker.type_map.delete_all();
@@ -1596,7 +1597,7 @@ fn bench_analysis_type_check(c: &mut Criterion) {
         _ca: &mut ContractAST,
         _lc: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        i: u16,
+        i: u64,
         _c: &mut T,
     ) {
         let tuple_type_sig = SIZED_TYPE_SIG.get(&i).unwrap().clone();
@@ -1607,7 +1608,7 @@ fn bench_analysis_type_check(c: &mut Criterion) {
         _ca: &mut ContractAST,
         _lc: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        i: u16,
+        i: u64,
         _c: &mut T,
     ) {
         let tuple_type_sig = SIZED_TYPE_SIG.get(&i).unwrap().clone();
@@ -1631,7 +1632,7 @@ fn bench_analysis_iterable_func(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        _i: u64,
         _c: &mut T,
     ) {
         type_checker.type_map.delete_all();
@@ -1717,7 +1718,7 @@ fn bench_analysis_type_lookup(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         _lc: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        input_size: u16,
+        input_size: u64,
         _c: &mut LimitedCostTracker,
     ) {
         let token_type = SIZED_TYPE_SIG.get(&input_size).unwrap();
@@ -1734,7 +1735,7 @@ fn bench_analysis_type_lookup(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         _lc: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        _i: u64,
         _c: &mut LimitedCostTracker,
     ) {
         for exp in &contract_ast.expressions {
@@ -1758,7 +1759,7 @@ fn bench_analysis_lookup_variable_const(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         _lc: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _is: u16,
+        _is: u64,
         _c: &mut LimitedCostTracker,
     ) {
         let mut rng = rand::thread_rng();
@@ -1776,7 +1777,7 @@ fn bench_analysis_lookup_variable_const(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        _i: u64,
         _c: &mut LimitedCostTracker,
     ) {
         for exp in &contract_ast.expressions {
@@ -1806,7 +1807,7 @@ fn bench_ast_parse(c: &mut Criterion) {
         _ca: &mut ContractAST,
         _lc: &mut TypingContext,
         _tc: &mut TypeChecker,
-        input_size: u16,
+        input_size: u64,
         _ct: &mut T,
     ) {
         SIZED_CONTRACTS.get(&input_size);
@@ -1816,7 +1817,7 @@ fn bench_ast_parse(c: &mut Criterion) {
         _ca: &mut ContractAST,
         _lc: &mut TypingContext,
         _tc: &mut TypeChecker,
-        input_size: u16,
+        input_size: u64,
         cost_tracker: &mut T,
     ) {
         let contract = SIZED_CONTRACTS.get(&input_size).unwrap();
@@ -2560,7 +2561,7 @@ fn bench_fetch_entry(c: &mut Criterion) {
         c,
         ClarityCostFunction::FetchEntry,
         SCALE.into(),
-        Some(INPUT_SIZES.into()),
+        Some(INPUT_SIZES_DATA.into()),
         false,
         None,
     )
@@ -2706,7 +2707,7 @@ fn bench_load_contract(c: &mut Criterion) {
             setup: _,
             body: contract,
             input_size: _,
-        } = gen_read_only_func(*size);
+        } = gen_read_only_func(*size as u16);
 
         env.initialize_contract(contract_identifier.clone(), &contract)
             .unwrap();
@@ -2729,7 +2730,7 @@ fn bench_type_parse_step(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         _lc: &mut TypingContext,
         _tc: &mut TypeChecker,
-        _i: u16,
+        _i: u64,
         cost_tracker: &mut T,
     ) {
         for exp in &contract_ast.expressions {
@@ -2891,11 +2892,11 @@ criterion_group!(
     // bench_tuple_get,
     // bench_tuple_merge,
     // bench_tuple_cons,
-    bench_hash160,
-    bench_sha256,
-    bench_sha512,
-    bench_sha512t256,
-    bench_keccak256,
+    // bench_hash160,
+    // bench_sha256,
+    // bench_sha512,
+    // bench_sha512t256,
+    // bench_keccak256,
     // bench_secp256k1recover,
     // bench_secp256k1verify,
     // bench_create_ft,    // g
@@ -2935,7 +2936,7 @@ criterion_group!(
     // bench_try,
     // bench_int_cast,
     // bench_set_entry,   // g
-    // bench_fetch_entry, // g
+    bench_fetch_entry, // g
     // bench_match,
     // bench_let,
     // bench_index_of,
