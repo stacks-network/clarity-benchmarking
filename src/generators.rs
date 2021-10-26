@@ -42,6 +42,7 @@ fn size_of_value(s: String) -> u64 {
     v.serialize().len() as u64 / 2
 }
 
+#[derive(Debug)]
 pub struct GenOutput {
     pub setup: Option<String>,
     pub body: String,
@@ -464,8 +465,8 @@ fn gen_hash(function_name: &'static str, scale: u16, input_size: u64) -> GenOutp
 
     for _ in 0..scale {
         let arg = match input_size {
-            128 => {
-                match rng.gen_range(0..=1) {
+            17 => {
+                match rng.gen_range(0..=2) {
                     0 => {
                         // uint
                         let x: u128 = rng.gen();

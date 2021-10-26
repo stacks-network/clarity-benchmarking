@@ -84,7 +84,7 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 
 const INPUT_SIZES: [u64; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
-const INPUT_SIZES_DATA: [u64; 8] = [15620, 31250, 62500, 125000, 250000, 500000, 1000000, 2000000];
+const INPUT_SIZES_DATA: [u64; 8] = [17, 1000, 40000, 160000, 360000, 640000, 1000000, 1100000];
 const INPUT_SIZES_HASH: [u64; 8] = [8, 16, 64, 128, 256, 512, 1024, 2048];
 const INPUT_SIZES_ANALYSIS_PASS: [u64; 6] = [1, 2, 8, 16, 32, 64];
 const INPUT_SIZES_ARITHMETIC: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -1991,23 +1991,23 @@ fn bench_tuple_cons(c: &mut Criterion) {
 
 // hash functions
 fn bench_hash160(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, Some(INPUT_SIZES_HASH.into()), false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, Some(INPUT_SIZES_DATA.into()), false, None)
 }
 
 fn bench_sha256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, Some(INPUT_SIZES_HASH.into()), false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, Some(INPUT_SIZES_DATA.into()), false, None)
 }
 
 fn bench_sha512(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, Some(INPUT_SIZES_HASH.into()), false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, Some(INPUT_SIZES_DATA.into()), false, None)
 }
 
 fn bench_sha512t256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, Some(INPUT_SIZES_HASH.into()), false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, Some(INPUT_SIZES_DATA.into()), false, None)
 }
 
 fn bench_keccak256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, Some(INPUT_SIZES_HASH.into()), false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, Some(INPUT_SIZES_DATA.into()), false, None)
 }
 
 fn bench_secp256k1recover(c: &mut Criterion) {
@@ -2892,9 +2892,9 @@ criterion_group!(
     // bench_tuple_get,
     // bench_tuple_merge,
     // bench_tuple_cons,
-    // bench_hash160,
-    // bench_sha256,
-    // bench_sha512,
+    bench_hash160,
+    bench_sha256,
+    bench_sha512,
     // bench_sha512t256,
     // bench_keccak256,
     // bench_secp256k1recover,
@@ -2936,7 +2936,7 @@ criterion_group!(
     // bench_try,
     // bench_int_cast,
     // bench_set_entry,   // g
-    bench_fetch_entry, // g
+    // bench_fetch_entry, // g
     // bench_match,
     // bench_let,
     // bench_index_of,
