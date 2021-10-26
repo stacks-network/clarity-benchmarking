@@ -1224,10 +1224,9 @@ fn helper_create_map(size: u64) -> DefineMap {
 /// TODO - incorporate input size
 fn gen_set_entry(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
-    let mut rng = rand::thread_rng();
 
     let DefineMap {
-        body: mut setup,
+        body: setup,
         map_name,
         key_name,
         key_type,
@@ -1235,29 +1234,30 @@ fn gen_set_entry(scale: u16, input_size: u64) -> GenOutput {
         value_type,
     } = helper_create_map(input_size);
 
+    let curr_key = helper_gen_clarity_value(
+        &key_type.0,
+        89,
+        key_type.1.map_or(0, |len| len as u64),
+        None,
+    );
+    let curr_value = helper_gen_clarity_value(
+        "list",
+        0,
+        value_type.1,
+        Some("uint"),
+    );
+
     for i in 0..scale {
-        let curr_key = helper_gen_clarity_value(
-            &key_type.0,
-            i,
-            key_type.1.map_or(0, |len| len as u64),
-            None,
-        );
-        let curr_value = helper_gen_clarity_value(
-            &value_type.0,
-            i,
-            value_type.1,
-            None,
-        );
-        let statement = match rng.gen_range(0..3) {
+        let statement = match i % 3 {
             0 => {
                 format!(
-                    "(map-set {} {{ {}: {} }} {{ {}: {} }}) ",
+                    "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
                     map_name, key_name, curr_key.0, value_name, curr_value.0
                 )
             }
             1 => {
                 format!(
-                    "(map-insert {} {{ {}: {} }} {{ {}: {} }}) ",
+                    "(map-set {} {{ {}: {} }} {{ {}: {} }}) ",
                     map_name, key_name, curr_key.0, value_name, curr_value.0
                 )
             }
@@ -1271,10 +1271,8 @@ fn gen_set_entry(scale: u16, input_size: u64) -> GenOutput {
         };
         body.push_str(&statement);
     }
-    println!("{}", body);
 
-    // TODO: fix input size
-    GenOutput::new(Some(setup), body, 1)
+    GenOutput::new(Some(setup), body, curr_key.1 + curr_value.1)
 }
 
 /// cost_function: FetchEntry
@@ -2657,7 +2655,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         /// reviewed: @reedrosenbluth
         ClarityCostFunction::FetchEntry => gen_fetch_entry(scale, input_size), // map-get?
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::SetEntry => gen_set_entry(scale, input_size),     // map-set
 
 

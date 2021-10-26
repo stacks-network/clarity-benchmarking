@@ -2550,7 +2550,7 @@ fn bench_set_entry(c: &mut Criterion) {
         c,
         ClarityCostFunction::SetEntry,
         SCALE.into(),
-        None,
+        Some(INPUT_SIZES_DATA.into()),
         false,
         None,
     )
@@ -2892,9 +2892,9 @@ criterion_group!(
     // bench_tuple_get,
     // bench_tuple_merge,
     // bench_tuple_cons,
-    bench_hash160,
-    bench_sha256,
-    bench_sha512,
+    // bench_hash160,
+    // bench_sha256,
+    // bench_sha512,
     // bench_sha512t256,
     // bench_keccak256,
     // bench_secp256k1recover,
@@ -2935,7 +2935,7 @@ criterion_group!(
     // bench_default_to,
     // bench_try,
     // bench_int_cast,
-    // bench_set_entry,   // g
+    bench_set_entry,   // g
     // bench_fetch_entry, // g
     // bench_match,
     // bench_let,
