@@ -1193,12 +1193,6 @@ fn helper_create_map(size: u64) -> DefineMap {
 
     // create value name + type
     let value_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-    // let (value_type, value_type_len) = helper_gen_clarity_type(true, false, false);
-    // let value_args = match value_type_len {
-    //     Some(length) => format!("{{ {}: ({} {}) }}", value_name, value_type, length),
-    //     None => format!("{{ {}: {} }}", value_name, value_type),
-    // };
-
     let value_type = helper_gen_clarity_list_type(size);
     let value_type_formatted = format!("{{ {}: {} }}", value_name, value_type.0);
 
@@ -1278,7 +1272,6 @@ fn gen_set_entry(scale: u16, input_size: u64) -> GenOutput {
 /// cost_function: FetchEntry
 /// input_size: sum of key type size and value type size
 fn gen_fetch_entry(scale: u16, input_size: u64) -> GenOutput {
-    dbg!(input_size);
     let mut body = String::new();
 
     // define an arbitrary map
@@ -1289,7 +1282,7 @@ fn gen_fetch_entry(scale: u16, input_size: u64) -> GenOutput {
         key_type,
         value_name,
         value_type,
-    } = dbg!(helper_create_map(input_size));
+    } = helper_create_map(input_size);
 
     // construct a properly typed key for the map
     let curr_key = helper_gen_clarity_value(
@@ -1342,43 +1335,42 @@ fn gen_fetch_entry(scale: u16, input_size: u64) -> GenOutput {
 
 
 /// cost_function: FetchVar, SetVar
-/// input_size: value type size
-///     `data_types.value_type.size()`
-/// TODO - incorporate this
-fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool) -> GenOutput {
+/// input_size: dynamic size of data being persisted
+fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
     let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-    let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
+
+    // let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
+    let (clarity_type, length) = helper_gen_clarity_list_type(input_size);
+
     let clarity_value = helper_gen_clarity_value(
-        &clarity_type,
-        rng.gen_range(10..200),
-        length.map_or(0, |len| len as u64),
-        None,
+        "list",
+        0,
+        length,
+        Some("uint"),
     );
-    let args = match length {
-        Some(l) => format!("{} ({} {}) {}", var_name, clarity_type, l, clarity_value.0),
-        None => format!("{} {} {}", var_name, clarity_type, clarity_value.0),
-    };
-    let setup = format!("({} {}) ", "define-data-var", args);
-    for i in 0..scale {
+
+    let setup = format!("(define-data-var {} {} {})", var_name, clarity_type, clarity_value.0);
+
+    let new_val = helper_gen_clarity_value(
+        "list",
+        0,
+        length,
+        Some("uint"),
+    );
+
+    for _ in 0..scale {
         let args = if set {
-            let new_val = helper_gen_clarity_value(
-                &clarity_type,
-                i,
-                length.map_or(0, |len| len as u64),
-                None,
-            );
             format!("{} {}", var_name, new_val.0)
         } else {
             format!("{}", var_name)
         };
         body.push_str(&*format!("({} {}) ", function_name, args));
     }
-    println!("{}", body);
 
-    GenOutput::new(Some(setup), body, 1)
+    GenOutput::new(Some(setup), body, new_val.1)
 }
 
 /// cost_function:
@@ -1386,16 +1378,21 @@ fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool) -> GenOut
 /// print: size of given Value for print
 /// SomeCons/OkCons/ErrCons: single arg function
 /// begin: multi arg function
-/// TODO - fix above
-fn gen_single_clar_value(function_name: &'static str, scale: u16) -> GenOutput {
+fn gen_single_clar_value(function_name: &'static str, scale: u16, input_size: Option<u64>) -> GenOutput {
     let mut body = String::new();
-    for i in 0..scale {
-        let args = helper_gen_random_clarity_value();
-        body.push_str(&*format!("({} {}) ", function_name, args.0));
-    }
-    println!("{}", body);
 
-    GenOutput::new(None, body, 1)
+    let l = helper_gen_clarity_list_size(input_size.unwrap_or(20));
+    let l_size = size_of_value(l.clone());
+
+    for _ in 0..scale {
+        let arg = match input_size {
+            Some(_) => l.clone(),
+            None => helper_gen_random_clarity_value().0,
+        };
+        body.push_str(&*format!("({} {}) ", function_name, arg));
+    }
+
+    GenOutput::new(None, body, l_size)
 }
 
 /// cost_function: If
@@ -2666,31 +2663,31 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         ///     `value_type.size()`
         ClarityCostFunction::CreateVar => unimplemented!(),
 
-        /// reviewed:
-        ClarityCostFunction::FetchVar => gen_var_set_get("var-get", scale, false),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::FetchVar => gen_var_set_get("var-get", scale, false, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::SetVar => gen_var_set_get("var-set", scale, true),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::SetVar => gen_var_set_get("var-set", scale, true, input_size),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::BindName => gen_define_constant("define-constant-bench", scale), // used for define var and define function
 
 
         /// Functions with single clarity value input ////////////////////////////////
-        /// reviewed:
-        ClarityCostFunction::Print => gen_single_clar_value("print", scale),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::Print => gen_single_clar_value("print", scale, Some(input_size)),
 
-        /// reviewed:
-        ClarityCostFunction::SomeCons => gen_single_clar_value("some", scale),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::SomeCons => gen_single_clar_value("some", scale, None),
 
-        /// reviewed:
-        ClarityCostFunction::OkCons => gen_single_clar_value("ok", scale),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::OkCons => gen_single_clar_value("ok", scale, None),
 
-        /// reviewed:
-        ClarityCostFunction::ErrCons => gen_single_clar_value("err", scale),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::ErrCons => gen_single_clar_value("err", scale, None),
 
-        /// reviewed:
-        ClarityCostFunction::Begin => gen_single_clar_value("begin", scale),
+        /// reviewed: @reedrosenbluth
+        ClarityCostFunction::Begin => gen_single_clar_value("begin", scale, None),
 
 
         /// Type Checking ////////////////////////////////

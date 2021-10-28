@@ -2392,7 +2392,7 @@ fn bench_set_var(c: &mut Criterion) {
         c,
         ClarityCostFunction::SetVar,
         SCALE.into(),
-        None,
+        Some(INPUT_SIZES_DATA.into()),
         false,
         None,
     )
@@ -2414,7 +2414,7 @@ fn bench_print(c: &mut Criterion) {
         c,
         ClarityCostFunction::Print,
         SCALE.into(),
-        None,
+        Some(INPUT_SIZES_DATA.into()),
         false,
         None,
     )
@@ -2922,7 +2922,7 @@ criterion_group!(
     // bench_create_var, // g
     // bench_set_var,    // g
     // bench_fetch_var,  // g
-    // bench_print,
+    bench_print,
     // bench_if,
     // bench_asserts,
     // bench_ok_cons,
@@ -2935,7 +2935,7 @@ criterion_group!(
     // bench_default_to,
     // bench_try,
     // bench_int_cast,
-    bench_set_entry,   // g
+    // bench_set_entry,   // g
     // bench_fetch_entry, // g
     // bench_match,
     // bench_let,
