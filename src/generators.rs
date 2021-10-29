@@ -2371,7 +2371,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         ClarityCostFunction::Div => gen_arithmetic("/", scale, input_size),
         ClarityCostFunction::Sqrti => gen_arithmetic("sqrti", scale, 1),
         ClarityCostFunction::Log2 => gen_arithmetic("log2", scale, 1),
-        ClarityCostFunction::Mod => gen_arithmetic("mod", scale, input_size),
+        ClarityCostFunction::Mod => gen_arithmetic("mod", scale, 2),
 
         /// reviewed: @reedrosenbluth
         ClarityCostFunction::Pow => gen_pow(scale),
