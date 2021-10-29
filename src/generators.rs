@@ -88,6 +88,15 @@ pub fn make_sized_values_map(input_sizes: Vec<u16>) -> HashMap<u16, Value> {
     ret_map
 }
 
+pub fn make_type_sig_list_of_size(input_sizes: Vec<u16>) -> HashMap<u16, Vec<TypeSignature>> {
+    let mut ret_map = HashMap::new();
+    for i in input_sizes {
+        let val = vec![TypeSignature::BoolType; i as usize];
+        ret_map.insert(i, val);
+    }
+    ret_map
+}
+
 pub fn make_clarity_type_for_sized_value(input_size: u16) -> String {
     match input_size {
         1 => "bool".to_string(),
@@ -1803,63 +1812,15 @@ pub fn gen_read_only_func(scale: u16) -> GenOutput {
     )
 }
 
-/// cost_function: AnalysisOptionCons
-/// input_size: 0
-fn gen_analysis_option_cons(scale: u16) -> GenOutput {
-    let mut body = String::new();
-    for i in 0..scale {
-        let args = helper_gen_random_clarity_value(i);
-        body.push_str(&*format!("{} ", args));
-    }
-    println!("{}", body);
-
-    GenOutput::new(None, body, 1)
-}
-
-/// cost_function: AnalysisOptionCheck
-/// input_size: 0
-fn gen_analysis_option_check(scale: u16) -> GenOutput {
-    let mut body = String::new();
-    for i in 0..scale {
-        let args = helper_gen_random_response_value(i, false, false);
-        body.push_str(&*format!("{} ", args));
-    }
-    println!("{}", body);
-
-    GenOutput::new(None, body, 1)
-}
-
 /// cost_function: AnalysisBindName
 /// input_size: type size (could be value, constant, function, total map size, etc.)
 ///     `v_type.type_size()`
-fn gen_analysis_bind_name(scale: u16, input_size: u16) -> GenOutput {
-    let mut body = String::new();
-    let mut rng = rand::thread_rng();
+fn gen_type_sig_size(input_size: u16) -> GenOutput {
+    let type_sig_map = make_sized_type_sig_map(vec![input_size]);
+    let type_sig_size = type_sig_map.get(&input_size).unwrap().type_size().unwrap();
+    assert!(type_sig_size < u16::MAX as u32);
 
-    for _ in 0..scale {
-        let var_name = "dummy-name";
-        let clar_type = helper_make_clarity_type_for_sized_type_sig(input_size);
-        let clar_val = helper_make_clarity_value_for_sized_type_sig(input_size);
-
-        match rng.gen_range(0..3) {
-            0 => {
-                let args = format!("{} {} {}", var_name, clar_type, clar_val);
-                body.push_str(&*format!("(define-data-var {}) ", args));
-            }
-            1 => {
-                let args = format!("{} {}", var_name, clar_val);
-                body.push_str(&*format!("(define-constant {}) ", args));
-            }
-            2 => {
-                let args = format!("{} {}", var_name, clar_type);
-                body.push_str(&*format!("(define-non-fungible-token {}) ", args));
-            }
-            _ => unreachable!("Numbers out of range should not be generated."),
-        };
-    }
-    println!("{}", body);
-
-    GenOutput::new(None, body, input_size)
+    GenOutput::new(None, "".to_string(), type_sig_size as u16)
 }
 
 /// cost_function: AnalysisListItemsCheck
@@ -1894,20 +1855,12 @@ fn gen_analysis_tuple_get(scale: u16, input_size: u16) -> GenOutput {
     GenOutput::new(None, body, input_size)
 }
 
-/// cost_function: AnalysisCheckTupleMerge
-/// input_size: length of second tuple
-///     `update.len()`
-fn gen_analysis_tuple_merge(scale: u16, input_size: u16) -> GenOutput {
-    let mut body = String::new();
-    for _ in 0..scale {
-        body.push_str("(");
-        body.push_str(&helper_generate_tuple(input_size));
-        body.push_str(&helper_generate_tuple(input_size));
-        body.push_str(") ");
-    }
-    println!("{}", body);
+fn gen_tuple_size(input_size: u16) -> GenOutput {
+    let tuple_map = make_sized_tuple_sigs_map(vec![input_size]);
+    let tuple_sig_size = tuple_map.get(&input_size).unwrap().len();
+    assert!(tuple_sig_size < u16::MAX as u64);
 
-    GenOutput::new(None, body, input_size)
+    GenOutput::new(None, "".to_string(), tuple_sig_size as u16)
 }
 
 /// cost_function: AnalysisCheckTupleCons
@@ -1929,21 +1882,6 @@ fn gen_analysis_tuple_cons(scale: u16, input_size: u16) -> GenOutput {
     GenOutput::new(None, body, input_size)
 }
 
-/// cost_function: AnalysisTupleItemsCheck
-/// input_size: type signature size of value
-///     `var_type.type_size()`
-fn gen_analysis_tuple_items_check(scale: u16, input_size: u16) -> GenOutput {
-    let mut body = String::new();
-    for _ in 0..scale {
-        let field_name = helper_generate_rand_char_string(10);
-        let sized_val = helper_make_sized_clarity_value(input_size);
-        body.push_str(&*format!("({} {}) ", field_name, sized_val));
-    }
-    println!("{}", body);
-
-    GenOutput::new(None, body, input_size)
-}
-
 /// cost_function: AnalysisCheckLet
 /// input_size: number of arguments total (the binding list counts as an arg)
 ///     `args.len()`
@@ -1954,29 +1892,6 @@ fn gen_analysis_check_let(scale: u16, input_size: u16) -> GenOutput {
         let var_val = helper_gen_random_clarity_value(i);
         let var_name = helper_generate_rand_char_string(10);
         body.push_str(&*format!("((({} {})) {}) ", var_name, var_val, no_ops));
-    }
-    println!("{}", body);
-
-    GenOutput::new(None, body, input_size)
-}
-
-// note: includes AnalysisLookupFunction cost
-/// cost_function: AnalysisIterableFunc
-/// input_size: 0 in most cases, `args.len()` in `check_special_map`
-/// TODO - check this is benched correctly
-fn gen_analysis_iterable_func(scale: u16, input_size: u16) -> GenOutput {
-    let mut body = String::new();
-    let mut rng = rand::thread_rng();
-    for _ in 0..scale {
-        let mut lists = String::new();
-        for _ in 0..input_size {
-            let list_val = helper_gen_clarity_value("list", rng.gen_range(2..50), 3, Some("int"));
-            lists.push_str(&list_val);
-            lists.push_str(" ");
-        }
-
-        let statement = format!("(no-op {}) ", lists);
-        body.push_str(&statement);
     }
     println!("{}", body);
 
@@ -2089,11 +2004,27 @@ fn gen_analysis_type_lookup(scale: u16, input_size: u16) -> GenOutput {
 /// cost_function: AnalysisTypeAnnotate, AnalysisLookupVariableConst
 /// input_size: type signature size of SymbolicExpression / 0
 ///     `type_sig.type_size()` / 0
-/// TODO - make sure first cost function is using input size
-fn gen_analysis_lookup_variable_const(scale: u16) -> GenOutput {
+fn gen_analysis_type_annotate(scale: u16, input_size: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         body.push_str(&helper_generate_rand_char_string(10));
+        body.push_str(" ");
+    }
+    println!("{}", body);
+    let type_sig_map = make_sized_type_sig_map(vec![input_size]);
+    let type_sig_size = type_sig_map.get(&input_size).unwrap().type_size().unwrap();
+    assert!(type_sig_size < u16::MAX as u32);
+
+    GenOutput::new(None, body, type_sig_size as u16)
+}
+
+
+/// cost_function: AnalysisLookupVariableConst
+/// input_size: 0
+fn gen_analysis_lookup_variable_const(scale: u16) -> GenOutput {
+    let mut body = String::new();
+    for i in 0..scale {
+        body.push_str(&*format!("var-{}", i));
         body.push_str(" ");
     }
     println!("{}", body);
@@ -2101,7 +2032,8 @@ fn gen_analysis_lookup_variable_const(scale: u16) -> GenOutput {
     GenOutput::new(None, body, 1)
 }
 
-/// cost_function: AnalysisVisit, AnalysisLookupFunction
+
+/// cost_function: AnalysisVisit
 /// input_size: 0
 fn gen_no_op_with_scale_repetitions(scale: u16) -> GenOutput {
     let mut body = String::new();
@@ -2122,6 +2054,7 @@ fn gen_analysis_lookup_function_types(input_size: u16) -> GenOutput {
     let body = format!("(define-trait dummy-trait ({})) ", dummy_fn);
     println!("{}", body);
 
+    /// The input size is calculated in `bench.rs`
     GenOutput::new(None, body, 1)
 }
 
@@ -2338,83 +2271,90 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u16) -> GenOut
         ClarityCostFunction::TupleCons => gen_tuple_cons(scale, input_size),
 
 
-        /// Analysis //////////////////
-        /// reviewed:
-        ClarityCostFunction::AnalysisTypeAnnotate => gen_analysis_lookup_variable_const(scale),
+        /// Analysis //////////////////////////
+        /// reviewed: @pavitthrap
+        ClarityCostFunction::AnalysisTypeAnnotate => gen_analysis_type_annotate(scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::AnalysisTypeCheck => gen_empty(),
+        /// reviewed: @pavitthrap
+        ClarityCostFunction::AnalysisTypeCheck => gen_type_sig_size(input_size),
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
         ClarityCostFunction::AnalysisTypeLookup => gen_analysis_type_lookup(scale, input_size),
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
         ClarityCostFunction::AnalysisVisit => gen_no_op_with_scale_repetitions(scale),
 
-        /// reviewed:
-        ClarityCostFunction::AnalysisIterableFunc => gen_analysis_iterable_func(scale, input_size),
+        /// reviewed: @pavitthrap
+        /// input_size: 0 in most cases, `args.len()` in `check_special_map`
+        ClarityCostFunction::AnalysisIterableFunc => unimplemented!(),
 
-        /// reviewed:
-        ClarityCostFunction::AnalysisOptionCons => gen_analysis_option_cons(scale),
+        /// reviewed: @pavitthrap
+        /// input_size: 0
+        ClarityCostFunction::AnalysisOptionCons => gen_empty(),
 
-        /// reviewed:
-        ClarityCostFunction::AnalysisOptionCheck => gen_analysis_option_check(scale),
+        /// reviewed: @pavitthrap
+        /// input_size: 0
+        ClarityCostFunction::AnalysisOptionCheck => gen_empty(),
 
-        /// reviewed:
-        ClarityCostFunction::AnalysisBindName => gen_analysis_bind_name(scale, input_size),
+        /// reviewed: @pavitthrap
+        /// TODO: super slow, get second review
+        /// input_size: type signature size of item
+        ClarityCostFunction::AnalysisBindName => gen_type_sig_size(input_size),
 
-        /// reviewed:
-        ClarityCostFunction::AnalysisListItemsCheck => {
-            gen_analysis_list_items_check(scale, input_size)
-        }
+        /// reviewed: @pavitthrap
+        /// input_size: type signature size of item
+        ClarityCostFunction::AnalysisListItemsCheck => gen_type_sig_size(input_size),
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
         ClarityCostFunction::AnalysisCheckTupleGet => gen_analysis_tuple_get(scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::AnalysisCheckTupleMerge => gen_analysis_tuple_merge(scale, input_size),
+        /// reviewed: @pavitthrap
+        /// input_size: length of second tuple
+        ClarityCostFunction::AnalysisCheckTupleMerge => gen_tuple_size(input_size),
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
         ClarityCostFunction::AnalysisCheckTupleCons => gen_analysis_tuple_cons(scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::AnalysisTupleItemsCheck => {
-            gen_analysis_tuple_items_check(scale, input_size)
-        }
+        /// reviewed: @pavitthrap
+        /// input_size: type signature size of value
+        ClarityCostFunction::AnalysisTupleItemsCheck => gen_type_sig_size(input_size),
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
+        /// TODO: size is args.len() not binding_list.len()
         ClarityCostFunction::AnalysisCheckLet => gen_analysis_check_let(scale, input_size),
 
-        /// reviewed:
-        ClarityCostFunction::AnalysisLookupFunction => gen_no_op_with_scale_repetitions(scale),
+        /// reviewed: @pavitthrap
+        /// input_size: 0
+        ClarityCostFunction::AnalysisLookupFunction => unimplemented!(),
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
         ClarityCostFunction::AnalysisLookupFunctionTypes => {
             gen_analysis_lookup_function_types(input_size)
         }
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
         ClarityCostFunction::AnalysisLookupVariableConst => {
             gen_analysis_lookup_variable_const(scale)
         }
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
         ClarityCostFunction::AnalysisLookupVariableDepth => unimplemented!(), // no gen function needed
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
         ClarityCostFunction::AnalysisStorage => gen_analysis_storage(scale, input_size),
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
         ClarityCostFunction::AnalysisUseTraitEntry => {
             gen_analysis_lookup_function_types(input_size)
         }
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
         ClarityCostFunction::AnalysisGetFunctionEntry => {
             gen_analysis_get_function_entry(input_size)
         }
 
-        /// reviewed:
+        /// reviewed: @pavitthrap
+        /// This cost function is not used anywhere.
         ClarityCostFunction::AnalysisFetchContractEntry => unimplemented!(), // not used anywhere
 
 

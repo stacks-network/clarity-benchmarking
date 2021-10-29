@@ -8,8 +8,8 @@ edition = "2018"
 criterion = "0.3.4"
 
 [dependencies]
-blockstack-core = { git = "https://github.com/blockstack/stacks-blockchain", branch = "dev/clarity-benchmarking" }
-# blockstack-core = { path = "../stacks-blockchain" }
+#blockstack-core = { git = "https://github.com/blockstack/stacks-blockchain", branch = "dev/clarity-benchmarking" }
+ blockstack-core = { path = "../stacks-blockchain" }
 rand = "0.8.3"
 lazy_static = "1.4.0"
 

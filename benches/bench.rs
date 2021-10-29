@@ -5,7 +5,7 @@ use benchmarking_lib::generators::{
     define_dummy_trait, gen, gen_analysis_pass, gen_read_only_func,
     helper_generate_rand_char_string, helper_make_value_for_sized_type_sig,
     make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map,
-    make_sized_values_map, GenOutput,
+    make_sized_values_map, GenOutput, make_type_sig_list_of_size
 };
 use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
 use blockstack_lib::address::AddressHashMode;
@@ -33,17 +33,9 @@ use blockstack_lib::vm::analysis::read_only_checker::ReadOnlyChecker;
 use blockstack_lib::vm::analysis::trait_checker::TraitChecker;
 use blockstack_lib::vm::analysis::type_checker::contexts::TypingContext;
 use blockstack_lib::vm::analysis::type_checker::natives::assets::bench_check_special_mint_asset;
-use blockstack_lib::vm::analysis::type_checker::natives::options::{
-    check_special_is_response, check_special_some,
-};
-use blockstack_lib::vm::analysis::type_checker::natives::sequences::{
-    check_special_map, get_simple_native_or_user_define,
-};
-use blockstack_lib::vm::analysis::type_checker::natives::{
-    bench_analysis_get_function_entry_in_context, bench_check_contract_call, check_special_get,
-    check_special_let, check_special_list_cons, check_special_merge, check_special_tuple_cons,
-    inner_handle_tuple_get,
-};
+use blockstack_lib::vm::analysis::type_checker::natives::options::{check_special_is_response, check_special_some, bench_analysis_option_check_helper, bench_analysis_option_cons_helper};
+use blockstack_lib::vm::analysis::type_checker::natives::sequences::{check_special_map, get_simple_native_or_user_define, bench_analysis_iterable_function_helper};
+use blockstack_lib::vm::analysis::type_checker::natives::{bench_analysis_get_function_entry_in_context, bench_check_contract_call, check_special_get, check_special_let, check_special_list_cons, check_special_merge, check_special_tuple_cons, inner_handle_tuple_get, bench_analysis_list_items_check_helper, bench_analysis_check_tuple_merge_helper, bench_analysis_tuple_cons_helper, bench_analysis_tuple_items_check_helper};
 use blockstack_lib::vm::analysis::type_checker::{trait_type_size, TypeChecker};
 use blockstack_lib::vm::analysis::{AnalysisDatabase, AnalysisPass, CheckResult, ContractAnalysis};
 use blockstack_lib::vm::ast::definition_sorter::DefinitionSorter;
@@ -55,7 +47,7 @@ use blockstack_lib::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCos
 use blockstack_lib::vm::costs::{CostTracker, ExecutionCost, LimitedCostTracker};
 use blockstack_lib::vm::database::clarity_store::NullBackingStore;
 use blockstack_lib::vm::database::{
-    ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB,
+    ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB, ClaritySerializable
 };
 use blockstack_lib::vm::functions::crypto::special_principal_of;
 use blockstack_lib::vm::representations::depth_traverse;
@@ -63,10 +55,7 @@ use blockstack_lib::vm::types::signatures::TypeSignature::{
     BoolType, IntType, NoType, PrincipalType, TupleType, UIntType,
 };
 use blockstack_lib::vm::types::signatures::{TupleTypeSignature, TypeSignature};
-use blockstack_lib::vm::types::{
-    FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier,
-    StandardPrincipalData, TraitIdentifier,
-};
+use blockstack_lib::vm::types::{FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier, StandardPrincipalData, TraitIdentifier, SequenceSubtype, BufferLength};
 use blockstack_lib::vm::{
     ast, bench_create_ft_in_context, bench_create_map_in_context, bench_create_nft_in_context,
     bench_create_var_in_context, eval_all, lookup_function, lookup_variable, CallStack,
@@ -82,6 +71,7 @@ use rand::{thread_rng, Rng};
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+// use secp256k1::serde::Serialize;
 
 const INPUT_SIZES: [u16; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const INPUT_SIZES_ANALYSIS_PASS: [u16; 6] = [1, 2, 8, 16, 32, 64];
@@ -100,6 +90,8 @@ lazy_static! {
         make_sized_tuple_sigs_map(INPUT_SIZES.to_vec());
     pub static ref SIZED_TYPE_SIG: HashMap<u16, TypeSignature> =
         make_sized_type_sig_map(INPUT_SIZES.to_vec());
+    pub static ref TYPE_SIG_LIST: HashMap<u16, Vec<TypeSignature>> =
+        make_type_sig_list_of_size(INPUT_SIZES.to_vec());
 }
 
 fn eval(
@@ -592,7 +584,7 @@ fn helper_deepen_typing_context(
             |b, &_| {
                 b.iter(|| {
                     for _ in 0..SCALE {
-                        type_checker.lookup_variable("dummy", &context);
+                        type_checker.bench_analysis_lookup_variable_depth_helper("dummy", &context);
                     }
                 })
             },
@@ -1062,7 +1054,6 @@ fn bench_user_function_application(c: &mut Criterion) {
     }
 }
 
-// q: should I add more traits to the contract context?
 fn bench_analysis_lookup_function_types(c: &mut Criterion) {
     let function = ClarityCostFunction::AnalysisLookupFunctionTypes;
     let mut group = c.benchmark_group(function.to_string());
@@ -1248,18 +1239,17 @@ fn bench_lookup_variable_size(c: &mut Criterion) {
 /// ////////////////////////////////////
 /// ANALYSIS FUNCTIONS
 /// ////////////////////////////////////
+
 fn bench_analysis_option_cons(c: &mut Criterion) {
     fn eval_check_special_some(
-        contract_ast: &mut ContractAST,
-        local_context: &mut TypingContext,
-        type_checker: &mut TypeChecker,
+        _ast: &mut ContractAST,
+        _lc: &mut TypingContext,
+        _tc: &mut TypeChecker,
         _i: u16,
         _c: &mut LimitedCostTracker,
     ) {
-        type_checker.type_map.delete_all();
-        for exp in &contract_ast.expressions {
-            let arg = [exp.clone()];
-            check_special_some(type_checker.borrow_mut(), &arg, &local_context);
+        for _ in 0..SCALE {
+            bench_analysis_option_cons_helper(TypeSignature::BoolType);
         }
     }
 
@@ -1275,16 +1265,14 @@ fn bench_analysis_option_cons(c: &mut Criterion) {
 
 fn bench_analysis_option_check(c: &mut Criterion) {
     fn eval_check_special_is_response(
-        contract_ast: &mut ContractAST,
-        local_context: &mut TypingContext,
-        type_checker: &mut TypeChecker,
+        _ast: &mut ContractAST,
+        _lc: &mut TypingContext,
+        _tc: &mut TypeChecker,
         _i: u16,
         _c: &mut LimitedCostTracker,
     ) {
-        type_checker.type_map.delete_all();
-        for exp in &contract_ast.expressions {
-            let arg = [exp.clone()];
-            check_special_is_response(type_checker.borrow_mut(), &arg, &local_context);
+        for _ in 0..SCALE {
+           bench_analysis_option_check_helper(TypeSignature::ResponseType(Box::new((TypeSignature::BoolType, TypeSignature::BoolType))));
         }
     }
 
@@ -1298,7 +1286,7 @@ fn bench_analysis_option_check(c: &mut Criterion) {
     )
 }
 
-// q: need review of benching function
+// Cost of the match statement in inner_type_check - doesn't include cost of calls from the match
 fn bench_analysis_visit(c: &mut Criterion) {
     fn eval_type_check(
         contract_ast: &mut ContractAST,
@@ -1308,7 +1296,7 @@ fn bench_analysis_visit(c: &mut Criterion) {
         _c: &mut LimitedCostTracker,
     ) {
         for exp in &contract_ast.expressions {
-            type_checker.bench_type_check(exp, &local_context);
+            type_checker.bench_analysis_visit_helper(exp, &local_context);
         }
     }
 
@@ -1322,18 +1310,17 @@ fn bench_analysis_visit(c: &mut Criterion) {
     )
 }
 
-// includes cost of AnalysisVisit in inner type check
 fn bench_analysis_bind_name(c: &mut Criterion) {
     fn eval_type_check_define<T: CostTracker>(
-        contract_ast: &mut ContractAST,
-        local_context: &mut TypingContext,
+        _ast: &mut ContractAST,
+        _lc: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        input_size: u16,
         _c: &mut T,
     ) {
-        type_checker.type_map.delete_all();
-        for exp in &contract_ast.expressions {
-            type_checker.bench_try_type_check_define(&exp, local_context);
+        let type_sig = SIZED_TYPE_SIG.get(&input_size).unwrap();
+        for _ in 0..SCALE {
+            type_checker.bench_analysis_bind_name_helper(type_sig.clone());
         }
     }
 
@@ -1349,16 +1336,15 @@ fn bench_analysis_bind_name(c: &mut Criterion) {
 
 fn bench_analysis_list_items_check(c: &mut Criterion) {
     fn eval_check_special_list_cons<T: CostTracker>(
-        contract_ast: &mut ContractAST,
-        local_context: &mut TypingContext,
-        type_checker: &mut TypeChecker,
-        _is: u16,
+        _ast: &mut ContractAST,
+        _lc: &mut TypingContext,
+        _tc: &mut TypeChecker,
+        input_size: u16,
         _c: &mut T,
     ) {
-        type_checker.type_map.delete_all();
-        for exp in &contract_ast.expressions {
-            let exp_list = exp.match_list().unwrap();
-            check_special_list_cons(type_checker, exp_list, local_context);
+        let type_sig_list = vec![SIZED_TYPE_SIG.get(&input_size).unwrap().clone()];
+        for _ in 0..SCALE {
+            bench_analysis_list_items_check_helper(&*type_sig_list);
         }
     }
 
@@ -1408,17 +1394,17 @@ fn bench_analysis_check_tuple_get(c: &mut Criterion) {
 
 fn bench_analysis_check_tuple_merge(c: &mut Criterion) {
     fn eval_check_special_merge<T: CostTracker>(
-        contract_ast: &mut ContractAST,
+        _ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        input_size: u16,
         _c: &mut T,
     ) {
-        type_checker.type_map.delete_all();
-        for exp in &contract_ast.expressions {
-            let exp_list = exp.match_list().unwrap();
-            check_special_merge(type_checker, exp_list, local_context);
+        let sized_tuple_sig = TypeSignature::TupleType(SIZED_TUPLE_SIG.get(&input_size).unwrap().clone());
+        for _ in 0..SCALE {
+            bench_analysis_check_tuple_merge_helper(type_checker, sized_tuple_sig.clone(), sized_tuple_sig.clone(), local_context);
         }
+
     }
 
     bench_analysis(
@@ -1431,6 +1417,7 @@ fn bench_analysis_check_tuple_merge(c: &mut Criterion) {
     )
 }
 
+
 fn bench_analysis_check_tuple_cons(c: &mut Criterion) {
     fn eval_check_special_tuple_cons<T: CostTracker>(
         contract_ast: &mut ContractAST,
@@ -1442,7 +1429,7 @@ fn bench_analysis_check_tuple_cons(c: &mut Criterion) {
         type_checker.type_map.delete_all();
         for exp in &contract_ast.expressions {
             let exp_list = exp.match_list().unwrap();
-            check_special_tuple_cons(type_checker, exp_list, local_context);
+            bench_analysis_tuple_cons_helper(type_checker, exp_list, local_context);
         }
     }
 
@@ -1456,19 +1443,17 @@ fn bench_analysis_check_tuple_cons(c: &mut Criterion) {
     )
 }
 
-// includes cost of AnalysisCheckTupleCons
 fn bench_analysis_tuple_items_check(c: &mut Criterion) {
     fn eval_check_special_tuple_cons<T: CostTracker>(
-        contract_ast: &mut ContractAST,
+        _ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _is: u16,
+        input_size: u16,
         _c: &mut T,
     ) {
-        type_checker.type_map.delete_all();
-        for exp in &contract_ast.expressions {
-            let arg = [exp.clone()];
-            check_special_tuple_cons(type_checker, &arg, local_context);
+        let type_sig = SIZED_TYPE_SIG.get(&input_size).unwrap();
+        for _ in 0..SCALE {
+            bench_analysis_tuple_items_check_helper(type_checker, type_sig.clone(), local_context);
         }
     }
 
@@ -1484,16 +1469,15 @@ fn bench_analysis_tuple_items_check(c: &mut Criterion) {
 
 fn bench_analysis_check_let(c: &mut Criterion) {
     fn eval_check_special_let<T: CostTracker>(
-        contract_ast: &mut ContractAST,
+        _ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _i: u16,
+        input_size: u16,
         _c: &mut T,
     ) {
-        type_checker.type_map.delete_all();
-        for exp in &contract_ast.expressions {
-            let exp_list = exp.match_list().unwrap();
-            check_special_let(type_checker, exp_list, local_context);
+        let type_sig_list = TYPE_SIG_LIST.get(&input_size).unwrap();
+        for _ in 0..SCALE {
+            type_checker.bench_analysis_check_let_helper(type_sig_list.clone(), local_context);
         }
     }
 
@@ -1571,12 +1555,13 @@ fn bench_analysis_type_annotate(c: &mut Criterion) {
         contract_ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
-        _is: u16,
+        input_size: u16,
         _c: &mut T,
     ) {
         type_checker.type_map.delete_all();
+        let var_type_sig = SIZED_TYPE_SIG.get(&input_size).unwrap();
         for expr in &contract_ast.expressions {
-            type_checker.inner_type_check(expr, local_context);
+            type_checker.type_map.set_type(expr, var_type_sig.clone());
         }
     }
 
@@ -1626,30 +1611,35 @@ fn bench_analysis_type_check(c: &mut Criterion) {
 }
 
 fn bench_analysis_iterable_func(c: &mut Criterion) {
-    fn eval_check_special_map<T: CostTracker>(
-        contract_ast: &mut ContractAST,
-        local_context: &mut TypingContext,
-        type_checker: &mut TypeChecker,
-        _i: u16,
-        _c: &mut T,
-    ) {
-        type_checker.type_map.delete_all();
-        for exp in &contract_ast.expressions {
-            let exp_list = exp.match_list().unwrap();
-            check_special_map(type_checker, exp_list, local_context);
-        }
-    }
+    let function = ClarityCostFunction::AnalysisIterableFunc;
+    let mut group = c.benchmark_group(function.to_string());
 
-    bench_analysis(
-        c,
-        ClarityCostFunction::AnalysisIterableFunc,
-        SCALE,
-        INPUT_SIZES.into(),
-        dummy_setup_code,
-        eval_check_special_map,
-    )
+    for input_size in &INPUT_SIZES {
+        let type_sig_list = vec![TypeSignature::SequenceType(SequenceSubtype::BufferType(BufferLength::try_from(15u32).unwrap())); *input_size as usize];
+
+        let mut local_context = TypingContext::new();
+
+        let mut cost_tracker = LimitedCostTracker::new_free();
+        let mut null_store = NullBackingStore::new();
+        let mut analysis_db = null_store.as_analysis_db();
+        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
+
+        group.throughput(Throughput::Bytes(*input_size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(input_size),
+            &input_size,
+            |b, &_| {
+                b.iter(|| {
+                    for _ in 0..SCALE {
+                        bench_analysis_iterable_function_helper(&mut type_checker, &type_sig_list, &mut local_context);
+                    }
+                })
+            },
+        );
+    }
 }
 
+// this is the cost of storing the contract - measure contract analysis serialization
 fn bench_analysis_storage(c: &mut Criterion) {
     let function = ClarityCostFunction::AnalysisStorage;
     let mut group = c.benchmark_group(function.to_string());
@@ -1679,10 +1669,19 @@ fn bench_analysis_storage(c: &mut Criterion) {
         let mut contract_analyses = Vec::new();
         for exp in &contract_ast.expressions {
             let contract_id = QualifiedContractIdentifier::local("analysis_test").unwrap();
-            let cost_tracker = LimitedCostTracker::new_free();
             let exp_list = exp.match_list().unwrap();
             let mut contract_analysis =
-                ContractAnalysis::new(contract_id.clone(), exp_list.to_vec(), cost_tracker);
+                ContractAnalysis::new(contract_id.clone(), exp_list.to_vec(), cost_tracker.clone());
+
+            let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone());
+            let mut typing_context = TypingContext::new();
+            for exp in exp_list {
+                type_checker.try_type_check_define(exp, &mut typing_context);
+            }
+            type_checker
+                .contract_context
+                .into_contract_analysis(&mut contract_analysis);
+
             contract_analyses.push(contract_analysis);
         }
 
@@ -1701,10 +1700,9 @@ fn bench_analysis_storage(c: &mut Criterion) {
         group.throughput(Throughput::Bytes(size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, &_| {
             b.iter(|| {
-                type_checker.type_map.delete_all();
-                type_checker.contract_context.clear_variable_types();
-                for analysis in &mut contract_analyses {
-                    type_checker.run(analysis);
+                for analysis in &contract_analyses {
+                    // serialize the contract
+                    let r = &analysis.serialize();
                 }
             })
         });
@@ -1739,6 +1737,7 @@ fn bench_analysis_type_lookup(c: &mut Criterion) {
         for exp in &contract_ast.expressions {
             let exp_list = exp.match_list().unwrap();
             bench_check_special_mint_asset(type_checker, exp_list);
+
         }
     }
 
@@ -1772,15 +1771,16 @@ fn bench_analysis_lookup_variable_const(c: &mut Criterion) {
     }
 
     fn eval_lookup_variable(
-        contract_ast: &mut ContractAST,
+        _ast: &mut ContractAST,
         local_context: &mut TypingContext,
         type_checker: &mut TypeChecker,
         _i: u16,
         _c: &mut LimitedCostTracker,
     ) {
-        for exp in &contract_ast.expressions {
-            let var_name = exp.match_atom().unwrap().to_string();
+        for i in 0..SCALE {
+            let var_name = format!("var-{}", i);
             type_checker.lookup_variable(&var_name, local_context);
+
         }
     }
 
@@ -2870,108 +2870,108 @@ fn bench_contract_of(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_add,
-    bench_sub,
-    bench_mul,
-    bench_div,
-    bench_le,
-    bench_leq,
-    bench_ge,
-    bench_geq,
-    bench_and,
-    bench_or,
-    bench_xor,
-    bench_not,
-    bench_eq,
-    bench_mod,
-    bench_pow,
-    bench_sqrti,
-    bench_log2,
-    bench_tuple_get,
-    bench_tuple_merge,
-    bench_tuple_cons,
-    bench_hash160,
-    bench_sha256,
-    bench_sha512,
-    bench_sha512t256,
-    bench_keccak256,
-    bench_secp256k1recover,
-    bench_secp256k1verify,
-    bench_create_ft,
-    bench_mint_ft,
-    bench_ft_transfer,
-    bench_ft_balance,
-    bench_ft_supply,
-    bench_ft_burn,
-    bench_create_nft,
-    bench_nft_mint,
-    bench_nft_transfer,
-    bench_nft_owner,
-    bench_nft_burn,
-    bench_is_none,
-    bench_is_some,
-    bench_is_ok,
-    bench_is_err,
-    bench_unwrap,
-    bench_unwrap_ret,
-    bench_unwrap_err,
-    bench_unwrap_err_or_ret,
-    bench_create_map,
-    bench_create_var,
-    bench_set_var,
-    bench_fetch_var,
-    bench_print,
-    bench_if,
-    bench_asserts,
-    bench_ok_cons,
-    bench_some_cons,
-    bench_err_cons,
-    bench_concat,
-    bench_as_max_len,
-    bench_begin,
-    bench_bind_name,
-    bench_default_to,
-    bench_try,
-    bench_int_cast,
-    bench_set_entry,
-    bench_fetch_entry,
-    bench_match,
-    bench_let,
-    bench_index_of,
-    bench_element_at,
-    bench_len,
-    bench_list_cons,
-    bench_append,
-    bench_filter,
-    bench_fold,
-    bench_at_block,
-    bench_load_contract,
-    bench_map,
-    bench_block_info,
-    bench_lookup_variable_depth,
-    bench_lookup_variable_size,
-    bench_lookup_function,
-    bench_type_parse_step,
-    bench_analysis_option_cons,
-    bench_analysis_option_check,
-    bench_analysis_visit,
-    bench_analysis_bind_name,
-    bench_analysis_list_items_check,
-    bench_analysis_check_tuple_get,
-    bench_analysis_check_tuple_merge,
-    bench_analysis_check_tuple_cons,
-    bench_analysis_tuple_items_check,
-    bench_analysis_check_let,
-    bench_analysis_lookup_function,
-    bench_analysis_lookup_function_types,
-    bench_analysis_type_annotate,
-    bench_analysis_iterable_func,
-    bench_analysis_storage,
-    bench_analysis_type_check,
-    bench_analysis_lookup_variable_depth,
-    bench_analysis_type_lookup,
-    bench_analysis_lookup_variable_const,
-    bench_analysis_use_trait_entry,
+    // bench_add,
+    // bench_sub,
+    // bench_mul,
+    // bench_div,
+    // bench_le,
+    // bench_leq,
+    // bench_ge,
+    // bench_geq,
+    // bench_and,
+    // bench_or,
+    // bench_xor,
+    // bench_not,
+    // bench_eq,
+    // bench_mod,
+    // bench_pow,
+    // bench_sqrti,
+    // bench_log2,
+    // bench_tuple_get,
+    // bench_tuple_merge,
+    // bench_tuple_cons,
+    // bench_hash160,
+    // bench_sha256,
+    // bench_sha512,
+    // bench_sha512t256,
+    // bench_keccak256,
+    // bench_secp256k1recover,
+    // bench_secp256k1verify,
+    // bench_create_ft,
+    // bench_mint_ft,
+    // bench_ft_transfer,
+    // bench_ft_balance,
+    // bench_ft_supply,
+    // bench_ft_burn,
+    // bench_create_nft,
+    // bench_nft_mint,
+    // bench_nft_transfer,
+    // bench_nft_owner,
+    // bench_nft_burn,
+    // bench_is_none,
+    // bench_is_some,
+    // bench_is_ok,
+    // bench_is_err,
+    // bench_unwrap,
+    // bench_unwrap_ret,
+    // bench_unwrap_err,
+    // bench_unwrap_err_or_ret,
+    // bench_create_map,
+    // bench_create_var,
+    // bench_set_var,
+    // bench_fetch_var,
+    // bench_print,
+    // bench_if,
+    // bench_asserts,
+    // bench_ok_cons,
+    // bench_some_cons,
+    // bench_err_cons,
+    // bench_concat,
+    // bench_as_max_len,
+    // bench_begin,
+    // bench_bind_name,
+    // bench_default_to,
+    // bench_try,
+    // bench_int_cast,
+    // bench_set_entry,
+    // bench_fetch_entry,
+    // bench_match,
+    // bench_let,
+    // bench_index_of,
+    // bench_element_at,
+    // bench_len,
+    // bench_list_cons,
+    // bench_append,
+    // bench_filter,
+    // bench_fold,
+    // bench_at_block,
+    // bench_load_contract,
+    // bench_map,
+    // bench_block_info,
+    // bench_lookup_variable_depth,
+    // bench_lookup_variable_size,
+    // bench_lookup_function,
+    // bench_type_parse_step,
+    // bench_analysis_option_cons,
+    // bench_analysis_option_check,
+    // bench_analysis_visit,
+    // bench_analysis_bind_name,
+    // bench_analysis_list_items_check,
+    // bench_analysis_check_tuple_get,
+    // bench_analysis_check_tuple_merge,
+    // bench_analysis_check_tuple_cons,
+    // bench_analysis_tuple_items_check,
+    // bench_analysis_check_let,
+    // bench_analysis_lookup_function,
+    // bench_analysis_lookup_function_types,
+    // bench_analysis_type_annotate,
+    // bench_analysis_iterable_func,
+    // bench_analysis_storage,
+    // bench_analysis_type_check,
+    // bench_analysis_lookup_variable_depth,
+    // bench_analysis_type_lookup,
+    // bench_analysis_lookup_variable_const,
+    // bench_analysis_use_trait_entry,
     bench_analysis_get_function_entry,
     bench_inner_type_check_cost,
     bench_user_function_application,
