@@ -84,16 +84,23 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 
+// for when input size is the number of elements
 const INPUT_SIZES: [u64; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
-const INPUT_SIZES_DATA: [u64; 8] = [17, 1000, 40000, 160000, 360000, 640000, 1000000, 1100000];
-const INPUT_SIZES_DATA_SMALL: [u64; 8] = [17, 100, 500, 1000, 5000, 10000, 50000, 500000];
-const INPUT_SIZES_HASH: [u64; 8] = [8, 16, 64, 128, 256, 512, 1024, 2048];
-const INPUT_SIZES_ANALYSIS_PASS: [u64; 6] = [1, 2, 8, 16, 32, 64];
-const INPUT_SIZES_ARITHMETIC: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
 const MORE_INPUT_SIZES: [u64; 12] = [1, 2, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
-const SCALE: u16 = 100;
 
-pub const NUM_BLOCKS: u32 = 60;
+// for when input size is the size of the data
+const INPUT_SIZES_DATA: [u64; 8] = [17, 1000, 40000, 160000, 360000, 640000, 1000000, 1100000];
+
+// for when input size is the size of the data, but with a smaller max value
+const INPUT_SIZES_DATA_SMALL: [u64; 8] = [17, 100, 500, 1000, 5000, 10000, 50000, 500000];
+
+// input sizes for arithmetic functions
+const INPUT_SIZES_ARITHMETIC: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+
+const INPUT_SIZES_ANALYSIS_PASS: [u64; 6] = [1, 2, 8, 16, 32, 64];
+
+// scaling factor for code generators
+const SCALE: u16 = 100;
 
 lazy_static! {
     pub static ref SIZED_VALUES: HashMap<u64, Value> = make_sized_values_map(INPUT_SIZES.to_vec());

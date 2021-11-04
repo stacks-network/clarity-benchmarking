@@ -453,9 +453,7 @@ pub fn helper_generate_rand_char_string(n: usize) -> String {
         .collect::<String>()
 }
 
-// TODO: Fix this function
-/// This function generates a single value that either has type uint, int, or buff (randomly chosen)
-/// This value is set as the argument to a hash function ultimately
+/// This function generates a hash function (scaled) with an argument that either has type uint, int, or buff (randomly chosen)
 ///
 /// cost_function: Hash160, Sha256, Sha512, Sha512t256, Keccak256
 /// input_size: single arg function
@@ -465,6 +463,7 @@ fn gen_hash(function_name: &'static str, scale: u16, input_size: u64) -> GenOutp
 
     for _ in 0..scale {
         let arg = match input_size {
+            // size of (u)ints
             17 => {
                 match rng.gen_range(0..=2) {
                     0 => {
@@ -482,7 +481,7 @@ fn gen_hash(function_name: &'static str, scale: u16, input_size: u64) -> GenOutp
                         format!(r##"{}"##, buff.0)
                     },
                     _ => {
-                        unreachable!("should only be generating numbers in the range 0..=1.")
+                        unreachable!("should only be generating numbers in the range 0..=2.")
                     }
                 }
             },
@@ -695,6 +694,7 @@ fn gen_ft_burn(function_name: &'static str, scale: u16) -> GenOutput {
     GenOutput::new(Some(template), body, 1)
 }
 
+// size of argument is in bytes
 fn helper_gen_clarity_list_size(approx_size: u64) -> String {
     let mut rng = rand::thread_rng();
 
@@ -779,8 +779,8 @@ fn helper_gen_clarity_value(
 ) -> (String, u64) {
     let mut rng = rand::thread_rng();
     match value_type {
-        "int" => (format!("{}", num), size_of_value(num.to_string())),
-        "uint" => (format!("u{}", num), size_of_value(num.to_string())),
+        "int" => (format!("{}", num), 17),
+        "uint" => (format!("u{}", num), 17),
         "buff" => {
             let mut buff = "0x".to_string();
             buff.push_str(&helper_generate_rand_hex_string(value_len as usize));
@@ -1216,7 +1216,6 @@ fn helper_create_map(size: u64) -> DefineMap {
 // q: only ever deleting non-existent key; should we change that?
 /// cost_function: SetEntry
 /// input_size: sum of key type size and value type size
-/// TODO - incorporate input size
 fn gen_set_entry(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
 
