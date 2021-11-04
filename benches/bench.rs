@@ -1,4 +1,5 @@
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::num::ParseIntError;
 
 use benchmarking_lib::generators::{
@@ -85,6 +86,7 @@ use std::convert::{TryFrom, TryInto};
 
 const INPUT_SIZES: [u64; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
 const INPUT_SIZES_DATA: [u64; 8] = [17, 1000, 40000, 160000, 360000, 640000, 1000000, 1100000];
+const INPUT_SIZES_DATA_SMALL: [u64; 8] = [17, 100, 500, 1000, 5000, 10000, 50000, 500000];
 const INPUT_SIZES_HASH: [u64; 8] = [8, 16, 64, 128, 256, 512, 1024, 2048];
 const INPUT_SIZES_ANALYSIS_PASS: [u64; 6] = [1, 2, 8, 16, 32, 64];
 const INPUT_SIZES_ARITHMETIC: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -2392,7 +2394,7 @@ fn bench_set_var(c: &mut Criterion) {
         c,
         ClarityCostFunction::SetVar,
         SCALE.into(),
-        Some(INPUT_SIZES_DATA.into()),
+        Some(INPUT_SIZES_DATA_SMALL.into()),
         false,
         None,
     )
@@ -2711,11 +2713,13 @@ fn bench_load_contract(c: &mut Criterion) {
 
         env.initialize_contract(contract_identifier.clone(), &contract)
             .unwrap();
+        
+        let contract_size = env.global_context.database.get_contract_size(&contract_identifier).unwrap();
 
-        group.throughput(Throughput::Bytes(contract.len() as u64));
+        group.throughput(Throughput::Bytes(contract_size));
         group.bench_with_input(
-            BenchmarkId::from_parameter(contract.len()),
-            &contract.len(),
+            BenchmarkId::from_parameter(contract_size),
+            &contract_size,
             |b, &_| {
                 b.iter(|| {
                     env.load_contract_for_bench(&contract_identifier).unwrap();
@@ -2872,124 +2876,124 @@ fn bench_contract_of(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_add,
-    bench_sub,
-    bench_mul,
-    bench_div,
-    bench_le,
-    bench_leq,
-    bench_ge,
-    bench_geq,
-    bench_and,
-    bench_or,
-    bench_xor,
-    bench_not,
-    bench_eq,
-    bench_mod,
-    bench_pow,
-    bench_sqrti,
-    bench_log2,
-    bench_tuple_get,
-    bench_tuple_merge,
-    bench_tuple_cons,
-    bench_hash160,
-    bench_sha256,
-    bench_sha512,
-    bench_sha512t256,
-    bench_keccak256,
-    bench_secp256k1recover,
-    bench_secp256k1verify,
-    bench_create_ft,    // g
-    bench_mint_ft,      // g
-    bench_ft_transfer,  // g
-    bench_ft_balance,   // g
-    bench_ft_supply,    // g
-    bench_ft_burn,      // g
-    bench_create_nft,   // g
-    bench_nft_mint,     // g
-    bench_nft_transfer, // g
-    bench_nft_owner,    // g
-    bench_nft_burn,     // g
-    bench_is_none,
-    bench_is_some,
-    bench_is_ok,
-    bench_is_err,
-    bench_unwrap,
-    bench_unwrap_ret,
-    bench_unwrap_err,
-    bench_unwrap_err_or_ret,
-    bench_create_map, // g
-    bench_create_var, // g
+    // bench_add,
+    // bench_sub,
+    // bench_mul,
+    // bench_div,
+    // bench_le,
+    // bench_leq,
+    // bench_ge,
+    // bench_geq,
+    // bench_and,
+    // bench_or,
+    // bench_xor,
+    // bench_not,
+    // bench_eq,
+    // bench_mod,
+    // bench_pow,
+    // bench_sqrti,
+    // bench_log2,
+    // bench_tuple_get,
+    // bench_tuple_merge,
+    // bench_tuple_cons,
+    // bench_hash160,
+    // bench_sha256,
+    // bench_sha512,
+    // bench_sha512t256,
+    // bench_keccak256,
+    // bench_secp256k1recover,
+    // bench_secp256k1verify,
+    // bench_create_ft,    // g
+    // bench_mint_ft,      // g
+    // bench_ft_transfer,  // g
+    // bench_ft_balance,   // g
+    // bench_ft_supply,    // g
+    // bench_ft_burn,      // g
+    // bench_create_nft,   // g
+    // bench_nft_mint,     // g
+    // bench_nft_transfer, // g
+    // bench_nft_owner,    // g
+    // bench_nft_burn,     // g
+    // bench_is_none,
+    // bench_is_some,
+    // bench_is_ok,
+    // bench_is_err,
+    // bench_unwrap,
+    // bench_unwrap_ret,
+    // bench_unwrap_err,
+    // bench_unwrap_err_or_ret,
+    // bench_create_map, // g
+    // bench_create_var, // g
     bench_set_var,    // g
-    bench_fetch_var,  // g
-    bench_print,
-    bench_if,
-    bench_asserts,
-    bench_ok_cons,
-    bench_some_cons,
-    bench_err_cons,
-    bench_concat,
-    bench_as_max_len,
-    bench_begin,
-    bench_bind_name,
-    bench_default_to,
-    bench_try,
-    bench_int_cast,
-    bench_set_entry,   // g
-    bench_fetch_entry, // g
-    bench_match,
-    bench_let,
-    bench_index_of,
-    bench_element_at,
-    bench_len,
-    bench_list_cons,
-    bench_append,
-    bench_filter,
-    bench_fold,
-    bench_at_block,
-    bench_load_contract,
-    bench_map,
-    bench_block_info,
-    bench_lookup_variable_depth,
-    bench_lookup_variable_size,
-    bench_lookup_function,
-    bench_type_parse_step,
-    bench_analysis_option_cons,
-    bench_analysis_option_check,
-    bench_analysis_visit,
-    bench_analysis_bind_name,
-    bench_analysis_list_items_check,
-    bench_analysis_check_tuple_get,
-    bench_analysis_check_tuple_merge,
-    bench_analysis_check_tuple_cons,
-    bench_analysis_tuple_items_check,
-    bench_analysis_check_let,
-    bench_analysis_lookup_function,
-    bench_analysis_lookup_function_types,
-    bench_analysis_type_annotate,
-    bench_analysis_iterable_func,
-    bench_analysis_storage,
-    bench_analysis_type_check,
-    bench_analysis_lookup_variable_depth,
-    bench_analysis_type_lookup,
-    bench_analysis_lookup_variable_const,
-    bench_analysis_use_trait_entry,
-    bench_analysis_get_function_entry,
-    bench_inner_type_check_cost,
-    bench_user_function_application,
-    bench_ast_cycle_detection,
-    bench_ast_parse,
-    bench_contract_storage,
-    bench_principal_of,
-    bench_stx_transfer,
-    bench_stx_get_balance,
-    bench_analysis_pass_read_only,               // g
-    bench_analysis_pass_arithmetic_only_checker, // g
-    bench_analysis_pass_trait_checker,           // g
-    bench_analysis_pass_type_checker,            // g
-    bench_poison_microblock,
-    bench_contract_call,
-    bench_contract_of,
+    // bench_fetch_var,  // g
+    // bench_print,
+    // bench_if,
+    // bench_asserts,
+    // bench_ok_cons,
+    // bench_some_cons,
+    // bench_err_cons,
+    // bench_concat,
+    // bench_as_max_len,
+    // bench_begin,
+    // bench_bind_name,
+    // bench_default_to,
+    // bench_try,
+    // bench_int_cast,
+    // bench_set_entry,   // g
+    // bench_fetch_entry, // g
+    // bench_match,
+    // bench_let,
+    // bench_index_of,
+    // bench_element_at,
+    // bench_len,
+    // bench_list_cons,
+    // bench_append,
+    // bench_filter,
+    // bench_fold,
+    // bench_at_block,
+    // bench_load_contract,
+    // bench_map,
+    // bench_block_info,
+    // bench_lookup_variable_depth,
+    // bench_lookup_variable_size,
+    // bench_lookup_function,
+    // bench_type_parse_step,
+    // bench_analysis_option_cons,
+    // bench_analysis_option_check,
+    // bench_analysis_visit,
+    // bench_analysis_bind_name,
+    // bench_analysis_list_items_check,
+    // bench_analysis_check_tuple_get,
+    // bench_analysis_check_tuple_merge,
+    // bench_analysis_check_tuple_cons,
+    // bench_analysis_tuple_items_check,
+    // bench_analysis_check_let,
+    // bench_analysis_lookup_function,
+    // bench_analysis_lookup_function_types,
+    // bench_analysis_type_annotate,
+    // bench_analysis_iterable_func,
+    // bench_analysis_storage,
+    // bench_analysis_type_check,
+    // bench_analysis_lookup_variable_depth,
+    // bench_analysis_type_lookup,
+    // bench_analysis_lookup_variable_const,
+    // bench_analysis_use_trait_entry,
+    // bench_analysis_get_function_entry,
+    // bench_inner_type_check_cost,
+    // bench_user_function_application,
+    // bench_ast_cycle_detection,
+    // bench_ast_parse,
+    // bench_contract_storage,
+    // bench_principal_of,
+    // bench_stx_transfer,
+    // bench_stx_get_balance,
+    // bench_analysis_pass_read_only,               // g
+    // bench_analysis_pass_arithmetic_only_checker, // g
+    // bench_analysis_pass_trait_checker,           // g
+    // bench_analysis_pass_type_checker,            // g
+    // bench_poison_microblock,
+    // bench_contract_call,
+    // bench_contract_of,
 );
 
 criterion_main!(benches);
