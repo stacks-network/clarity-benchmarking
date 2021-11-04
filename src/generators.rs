@@ -807,6 +807,7 @@ fn helper_gen_clarity_value(
                 .map(|_| helper_gen_clarity_value(&list_type, num, 0, None).0)
                 .collect::<Vec<String>>()
                 .join(" ");
+
             let val = format!("(list {})", args);
             (val.clone(), size_of_value(val))
         }
@@ -2694,48 +2695,48 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         /// reviewed:
         ClarityCostFunction::InnerTypeCheckCost => gen_inner_type_check_cost(input_size),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::TypeParseStep => gen_type_parse_step(scale), // called by `parse_type_repr` in `signatures.rs` (takes in symbolic expression)
 
 
         /// Uncategorized ////////////////////////////////
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::If => gen_if("if", scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Asserts => gen_asserts("asserts!", scale),
 
         /// reviewed: @pavitthrap
         ClarityCostFunction::Concat => gen_concat("concat", scale, input_size),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::IntCast => gen_int_cast(scale),
 
         /// reviewed: @pavitthrap
         ClarityCostFunction::Let => gen_let(scale, input_size),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::Match => gen_match(scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::AsMaxLen => gen_as_max_len("as-max-len?", scale),
 
         /// reviewed:
         ClarityCostFunction::UserFunctionApplication => gen_analysis_get_function_entry(input_size),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::ContractCall => gen_contract_call(scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::ContractOf => gen_contract_of(scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::PrincipalOf => gen_principal_of(scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::AtBlock => gen_at_block(scale),
 
-        /// reviewed:
+        /// reviewed: @reedrosenbluth
         ClarityCostFunction::LoadContract => unimplemented!(), // called at start of execute_contract
     }
 }
