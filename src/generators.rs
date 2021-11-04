@@ -700,7 +700,7 @@ fn helper_gen_clarity_list_size(approx_size: u64) -> String {
 
     let uint_size = 17;
     let list_bytes = 5;
-    let len: u64 =  ((approx_size - list_bytes) / uint_size).max(1)
+    let len: u64 =  ((approx_size - list_bytes) / uint_size).max(1);
 
     let mut values = "".to_string();
     for _ in 0..len {
