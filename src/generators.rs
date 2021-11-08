@@ -716,7 +716,7 @@ fn helper_gen_clarity_list_size(approx_size: u64) -> String {
 }
 
 // generate list type of approximate size
-fn helper_gen_clarity_list_type(approx_size: u64) -> (String, u64) {
+pub fn helper_gen_clarity_list_type(approx_size: u64) -> (String, u64) {
     let uint_size = 17;
     let list_bytes = 5;
     let len: u64 =  (approx_size - list_bytes) / uint_size;
@@ -1338,15 +1338,49 @@ fn gen_fetch_entry(scale: u16, input_size: u64) -> GenOutput {
 }
 
 
-/// cost_function: FetchVar, SetVar
+/// cost_function: SetVar
 /// input_size: dynamic size of data being persisted
-fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool, input_size: u64) -> GenOutput {
+/// generates setup code for var-set benchmarking, with the
+/// function calls inside a function body. this allows the
+/// benchmarking function generate the the input value as
+/// code instead of parsing a large Clarity string (takes too long)
+fn gen_var_set(scale: u16, set: bool, input_size: u64) -> GenOutput {
+    let body = String::new();
+    let mut rng = rand::thread_rng();
+
+    let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
+
+    let (clarity_type, length) = helper_gen_clarity_list_type(input_size);
+
+    let clarity_value = helper_gen_clarity_value(
+        "list",
+        0,
+        length,
+        Some("uint"),
+    );
+
+    let mut setup = format!("(define-data-var {} {} {}) ", var_name, clarity_type, clarity_value.0);
+
+    setup.push_str(&*format!("(define-private (execute (input-value {})) (begin ", clarity_type));
+
+    for _ in 0..scale {
+        let args = format!("{} input-value", var_name);
+        setup.push_str(&*format!("(var-set {}) ", args));
+    }
+
+    setup.push_str("))");
+
+    GenOutput::new(Some(setup), body, length)
+}
+
+/// cost_function: SetVar
+/// input_size: dynamic size of data being persisted
+fn gen_var_get(scale: u16, set: bool, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
     let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
 
-    // let (clarity_type, length) = helper_gen_clarity_type(true, false, false);
     let (clarity_type, length) = helper_gen_clarity_list_type(input_size);
 
     let clarity_value = helper_gen_clarity_value(
@@ -1358,23 +1392,12 @@ fn gen_var_set_get(function_name: &'static str, scale: u16, set: bool, input_siz
 
     let setup = format!("(define-data-var {} {} {})", var_name, clarity_type, clarity_value.0);
 
-    let new_val = helper_gen_clarity_value(
-        "list",
-        0,
-        length,
-        Some("uint"),
-    );
-
     for _ in 0..scale {
-        let args = if set {
-            format!("{} {}", var_name, new_val.0)
-        } else {
-            format!("{}", var_name)
-        };
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        let args = format!("{}", var_name);
+        body.push_str(&*format!("(var-get {}) ", args));
     }
 
-    GenOutput::new(Some(setup), body, new_val.1)
+    GenOutput::new(Some(setup), body, clarity_value.1)
 }
 
 /// cost_function:
@@ -2599,10 +2622,10 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         ClarityCostFunction::CreateVar => unimplemented!(),
 
         /// reviewed: @reedrosenbluth
-        ClarityCostFunction::FetchVar => gen_var_set_get("var-get", scale, false, input_size),
+        ClarityCostFunction::FetchVar => gen_var_get(scale, false, input_size),
 
         /// reviewed: @reedrosenbluth
-        ClarityCostFunction::SetVar => gen_var_set_get("var-set", scale, true, input_size),
+        ClarityCostFunction::SetVar => gen_var_set(scale, true, input_size),
 
         /// reviewed: @reedrosenbluth
         ClarityCostFunction::BindName => gen_define_constant("define-constant-bench", scale), // used for define var and define function
