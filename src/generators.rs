@@ -1334,6 +1334,21 @@ fn gen_fetch_entry(scale: u16, input_size: u64) -> GenOutput {
     )
 }
 
+/// helper that wrapes a Clarity code string in a private function called execute.
+/// expects code_to_wrap to reference `input-value` variable.
+/// invokes code_to_wrap `scale` times.
+fn helper_gen_execute_fn(scale: u16, code_to_wrap: String, clarity_type: String) -> String {
+    let mut output = format!("(define-private (execute (input-value {})) (begin ", clarity_type);
+
+    for _ in 0..scale {
+        output.push_str(&code_to_wrap);
+    }
+
+    output.push_str("))");
+
+    output
+}
+
 
 /// cost_function: SetVar
 /// input_size: dynamic size of data being persisted
@@ -1341,7 +1356,7 @@ fn gen_fetch_entry(scale: u16, input_size: u64) -> GenOutput {
 /// function calls inside a function body. this allows the
 /// benchmarking function generate the the input value as
 /// code instead of parsing a large Clarity string (takes too long)
-fn gen_var_set(scale: u16, set: bool, input_size: u64) -> GenOutput {
+fn gen_var_set(scale: u16, input_size: u64) -> GenOutput {
     let body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -1358,21 +1373,15 @@ fn gen_var_set(scale: u16, set: bool, input_size: u64) -> GenOutput {
 
     let mut setup = format!("(define-data-var {} {} {}) ", var_name, clarity_type, clarity_value.0);
 
-    setup.push_str(&*format!("(define-private (execute (input-value {})) (begin ", clarity_type));
-
-    for _ in 0..scale {
-        let args = format!("{} input-value", var_name);
-        setup.push_str(&*format!("(var-set {}) ", args));
-    }
-
-    setup.push_str("))");
+    let var_set = format!("(var-set {} input-value) ", var_name);
+    setup.push_str(&helper_gen_execute_fn(scale, var_set, clarity_type));
 
     GenOutput::new(Some(setup), body, length)
 }
 
 /// cost_function: SetVar
 /// input_size: dynamic size of data being persisted
-fn gen_var_get(scale: u16, set: bool, input_size: u64) -> GenOutput {
+fn gen_var_get(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
@@ -1393,6 +1402,29 @@ fn gen_var_get(scale: u16, set: bool, input_size: u64) -> GenOutput {
         let args = format!("{}", var_name);
         body.push_str(&*format!("(var-get {}) ", args));
     }
+
+    GenOutput::new(Some(setup), body, clarity_value.1)
+}
+
+/// cost_function: Print
+/// input_size: dynamic size of data being printed
+fn gen_print(scale: u16, input_size: u64) -> GenOutput {
+    let body = String::new();
+    let mut setup = String::new();
+
+    let (clarity_type, length) = helper_gen_clarity_list_type(input_size);
+
+    let clarity_value = helper_gen_clarity_value(
+        "list",
+        0,
+        length,
+        Some("uint"),
+    );
+
+    let print = format!("(print input-value) ");
+    setup.push_str(&helper_gen_execute_fn(scale, print, clarity_type));
+
+    dbg!(&setup);
 
     GenOutput::new(Some(setup), body, clarity_value.1)
 }
@@ -2619,10 +2651,10 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         ClarityCostFunction::CreateVar => unimplemented!(),
 
         /// reviewed: @reedrosenbluth
-        ClarityCostFunction::FetchVar => gen_var_get(scale, false, input_size),
+        ClarityCostFunction::FetchVar => gen_var_get(scale, input_size),
 
         /// reviewed: @reedrosenbluth
-        ClarityCostFunction::SetVar => gen_var_set(scale, true, input_size),
+        ClarityCostFunction::SetVar => gen_var_set(scale, input_size),
 
         /// reviewed: @reedrosenbluth
         ClarityCostFunction::BindName => gen_define_constant("define-constant-bench", scale), // used for define var and define function
@@ -2630,7 +2662,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
 
         /// Functions with single clarity value input ////////////////////////////////
         /// reviewed: @reedrosenbluth
-        ClarityCostFunction::Print => gen_single_clar_value("print", scale, Some(input_size)),
+        ClarityCostFunction::Print => gen_print(scale, input_size),
 
         /// reviewed: @reedrosenbluth
         ClarityCostFunction::SomeCons => gen_single_clar_value("some", scale, None),

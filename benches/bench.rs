@@ -81,7 +81,7 @@ const INPUT_SIZES_ARITHMETIC: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
 const INPUT_SIZES_ANALYSIS_PASS: [u64; 6] = [1, 2, 8, 16, 32, 64];
 
 // scaling factor for code generators
-const SCALE: u16 = 100;
+const SCALE: u16 = 75;
 
 lazy_static! {
     pub static ref SIZED_VALUES: HashMap<u64, Value> = make_sized_values_map(INPUT_SIZES.to_vec());
@@ -2388,10 +2388,8 @@ fn bench_create_var(c: &mut Criterion) {
     }
 }
 
-fn bench_set_var(c: &mut Criterion) {
-    let mut group = c.benchmark_group(ClarityCostFunction::SetVar.to_string());
-
-    for input_size in INPUT_SIZES_DATA.iter() {
+fn bench_wrapped_data_function(mut group: BenchmarkGroup<WallTime>, cost_function: ClarityCostFunction, input_sizes: Vec<u64>, scale: u16) {
+    for input_size in input_sizes.iter() {
         let mut memory_backing_store = MemoryBackingStore::new();
         let clarity_db = memory_backing_store.as_clarity_db();
 
@@ -2402,7 +2400,7 @@ fn bench_set_var(c: &mut Criterion) {
             setup: pre_contract_opt,
             body: _,
             input_size: _,
-        } = gen(ClarityCostFunction::SetVar, SCALE.into(), *input_size);
+        } = gen(cost_function, scale, *input_size);
 
         let list_len = helper_gen_clarity_list_type(*input_size).1;
         let list_size = 5 + 17 * list_len;
@@ -2452,6 +2450,13 @@ fn bench_set_var(c: &mut Criterion) {
     }
 }
 
+fn bench_set_var(c: &mut Criterion) {
+    let cost_function = ClarityCostFunction::SetVar;
+    let mut group = c.benchmark_group(cost_function.to_string());
+    group.sample_size(50);
+    bench_wrapped_data_function(group, cost_function, INPUT_SIZES_DATA.into(), SCALE)
+}
+
 fn bench_fetch_var(c: &mut Criterion) {
     bench_with_input_sizes(
         c,
@@ -2464,14 +2469,9 @@ fn bench_fetch_var(c: &mut Criterion) {
 }
 
 fn bench_print(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Print,
-        SCALE.into(),
-        Some(INPUT_SIZES_DATA.into()),
-        false,
-        None,
-    )
+    let cost_function = ClarityCostFunction::Print;
+    let group = c.benchmark_group(cost_function.to_string());
+    bench_wrapped_data_function(group, cost_function, INPUT_SIZES_DATA.into(), SCALE)
 }
 
 fn bench_if(c: &mut Criterion) {
@@ -2928,56 +2928,56 @@ fn bench_contract_of(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_add,
-    bench_sub,
-    bench_mul,
-    bench_div,
-    bench_le,
-    bench_leq,
-    bench_ge,
-    bench_geq,
-    bench_and,
-    bench_or,
-    bench_xor,
-    bench_not,
-    bench_eq,
-    bench_mod,
-    bench_pow,
-    bench_sqrti,
-    bench_log2,
-    bench_tuple_get,
-    bench_tuple_merge,
-    bench_tuple_cons,
-    bench_hash160,
-    bench_sha256,
-    bench_sha512,
-    bench_sha512t256,
-    bench_keccak256,
-    bench_secp256k1recover,
-    bench_secp256k1verify,
-    bench_create_ft,    // g
-    bench_mint_ft,      // g
-    bench_ft_transfer,  // g
-    bench_ft_balance,   // g
-    bench_ft_supply,    // g
-    bench_ft_burn,      // g
-    bench_create_nft,   // g
-    bench_nft_mint,     // g
-    bench_nft_transfer, // g
-    bench_nft_owner,    // g
-    bench_nft_burn,     // g
-    bench_is_none,
-    bench_is_some,
-    bench_is_ok,
-    bench_is_err,
-    bench_unwrap,
-    bench_unwrap_ret,
-    bench_unwrap_err,
-    bench_unwrap_err_or_ret,
-    bench_create_map, // g
-    bench_create_var, // g
-    bench_set_var,    // g
-    bench_fetch_var,  // g
+    // bench_add,
+    // bench_sub,
+    // bench_mul,
+    // bench_div,
+    // bench_le,
+    // bench_leq,
+    // bench_ge,
+    // bench_geq,
+    // bench_and,
+    // bench_or,
+    // bench_xor,
+    // bench_not,
+    // bench_eq,
+    // bench_mod,
+    // bench_pow,
+    // bench_sqrti,
+    // bench_log2,
+    // bench_tuple_get,
+    // bench_tuple_merge,
+    // bench_tuple_cons,
+    // bench_hash160,
+    // bench_sha256,
+    // bench_sha512,
+    // bench_sha512t256,
+    // bench_keccak256,
+    // bench_secp256k1recover,
+    // bench_secp256k1verify,
+    // bench_create_ft,    // g
+    // bench_mint_ft,      // g
+    // bench_ft_transfer,  // g
+    // bench_ft_balance,   // g
+    // bench_ft_supply,    // g
+    // bench_ft_burn,      // g
+    // bench_create_nft,   // g
+    // bench_nft_mint,     // g
+    // bench_nft_transfer, // g
+    // bench_nft_owner,    // g
+    // bench_nft_burn,     // g
+    // bench_is_none,
+    // bench_is_some,
+    // bench_is_ok,
+    // bench_is_err,
+    // bench_unwrap,
+    // bench_unwrap_ret,
+    // bench_unwrap_err,
+    // bench_unwrap_err_or_ret,
+    // bench_create_map, // g
+    // bench_create_var, // g
+    // bench_set_var,    // g
+    // bench_fetch_var,  // g
     bench_print,
     bench_if,
     bench_asserts,
