@@ -1218,16 +1218,19 @@ fn helper_create_map(size: u64) -> DefineMap {
 /// cost_function: SetEntry
 /// input_size: sum of key type size and value type size
 fn gen_set_entry(scale: u16, input_size: u64) -> GenOutput {
-    let mut body = String::new();
+    let body = String::new();
 
     let DefineMap {
-        body: setup,
+        body: mut setup,
         map_name,
         key_name,
         key_type,
         value_name,
         value_type,
     } = helper_create_map(input_size);
+
+    let output = format!(" (define-private (execute (input-value {})) (begin ", value_type.0);
+    setup.push_str(&output);
 
     let curr_key = helper_gen_clarity_value(
         &key_type.0,
@@ -1264,8 +1267,10 @@ fn gen_set_entry(scale: u16, input_size: u64) -> GenOutput {
             }
             _ => unreachable!("should only gen numbers from 0 to 2 inclusive"),
         };
-        body.push_str(&statement);
+        setup.push_str(&statement);
     }
+
+    setup.push_str("))");
 
     GenOutput::new(Some(setup), body, curr_key.1 + curr_value.1)
 }
@@ -2177,14 +2182,13 @@ fn gen_analysis_lookup_function_types(input_size: u64) -> GenOutput {
 ///    `func_signature.total_type_size()` / `self.arguments.len()`
 fn gen_analysis_get_function_entry(input_size: u64) -> GenOutput {
     let mut body = String::new();
+
     let args = (0..input_size)
         .map(|i| format!(" (f{} uint) ", i))
         .collect::<String>();
     body.push_str(&*format!("(define-read-only (dummy-fn {}) (no-op)) ", args));
 
-    
-
-    GenOutput::new(None, body, 1)
+    GenOutput::new(None, body, input_size)
 }
 
 /// cost_function: InnerTypeCheckCost

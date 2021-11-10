@@ -1024,7 +1024,7 @@ fn bench_user_function_application(c: &mut Criterion) {
             input_size: computed_input_size,
         } = gen(function, 1, *input_size);
 
-        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
+        let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -1048,7 +1048,7 @@ fn bench_user_function_application(c: &mut Criterion) {
             |b, &_| {
                 b.iter(|| {
                     for _ in 0..SCALE {
-                        defined_fn.bench_execute_apply(&arg_list);
+                        defined_fn.bench_execute_apply(&arg_list).unwrap();
                     }
                 })
             },
@@ -2600,14 +2600,9 @@ fn bench_int_cast(c: &mut Criterion) {
 }
 
 fn bench_set_entry(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::SetEntry,
-        SCALE.into(),
-        Some(INPUT_SIZES_DATA.into()),
-        false,
-        None,
-    )
+    let cost_function = ClarityCostFunction::SetEntry;
+    let group = c.benchmark_group(cost_function.to_string());
+    bench_wrapped_data_function(group, cost_function, INPUT_SIZES_DATA.into(), SCALE)
 }
 
 fn bench_fetch_entry(c: &mut Criterion) {
@@ -2978,60 +2973,60 @@ criterion_group!(
     // bench_create_var, // g
     // bench_set_var,    // g
     // bench_fetch_var,  // g
-    bench_print,
-    bench_if,
-    bench_asserts,
-    bench_ok_cons,
-    bench_some_cons,
-    bench_err_cons,
-    bench_concat,
-    bench_as_max_len,
-    bench_begin,
-    bench_bind_name,
-    bench_default_to,
-    bench_try,
-    bench_int_cast,
-    bench_set_entry,   // g
-    bench_fetch_entry, // g
-    bench_match,
-    bench_let,
-    bench_index_of,
-    bench_element_at,
-    bench_len,
-    bench_list_cons,
-    bench_append,
-    bench_filter,
-    bench_fold,
-    bench_at_block,
-    bench_load_contract,
-    bench_map,
-    bench_block_info,
-    bench_lookup_variable_depth,
-    bench_lookup_variable_size,
-    bench_lookup_function,
-    bench_type_parse_step,
-    bench_analysis_option_cons,
-    bench_analysis_option_check,
-    bench_analysis_visit,
-    bench_analysis_bind_name,
-    bench_analysis_list_items_check,
-    bench_analysis_check_tuple_get,
-    bench_analysis_check_tuple_merge,
-    bench_analysis_check_tuple_cons,
-    bench_analysis_tuple_items_check,
-    bench_analysis_check_let,
-    bench_analysis_lookup_function,
-    bench_analysis_lookup_function_types,
-    bench_analysis_type_annotate,
-    bench_analysis_iterable_func,
-    bench_analysis_storage,
-    bench_analysis_type_check,
-    bench_analysis_lookup_variable_depth,
-    bench_analysis_type_lookup,
-    bench_analysis_lookup_variable_const,
-    bench_analysis_use_trait_entry,
-    bench_analysis_get_function_entry,
-    bench_inner_type_check_cost,
+    // bench_print,
+    // bench_if,
+    // bench_asserts,
+    // bench_ok_cons,
+    // bench_some_cons,
+    // bench_err_cons,
+    // bench_concat,
+    // bench_as_max_len,
+    // bench_begin,
+    // bench_bind_name,
+    // bench_default_to,
+    // bench_try,
+    // bench_int_cast,
+    // bench_set_entry,   // g
+    // bench_fetch_entry, // g
+    // bench_match,
+    // bench_let,
+    // bench_index_of,
+    // bench_element_at,
+    // bench_len,
+    // bench_list_cons,
+    // bench_append,
+    // bench_filter,
+    // bench_fold,
+    // bench_at_block,
+    // bench_load_contract,
+    // bench_map,
+    // bench_block_info,
+    // bench_lookup_variable_depth,
+    // bench_lookup_variable_size,
+    // bench_lookup_function,
+    // bench_type_parse_step,
+    // bench_analysis_option_cons,
+    // bench_analysis_option_check,
+    // bench_analysis_visit,
+    // bench_analysis_bind_name,
+    // bench_analysis_list_items_check,
+    // bench_analysis_check_tuple_get,
+    // bench_analysis_check_tuple_merge,
+    // bench_analysis_check_tuple_cons,
+    // bench_analysis_tuple_items_check,
+    // bench_analysis_check_let,
+    // bench_analysis_lookup_function,
+    // bench_analysis_lookup_function_types,
+    // bench_analysis_type_annotate,
+    // bench_analysis_iterable_func,
+    // bench_analysis_storage,
+    // bench_analysis_type_check,
+    // bench_analysis_lookup_variable_depth,
+    // bench_analysis_type_lookup,
+    // bench_analysis_lookup_variable_const,
+    // bench_analysis_use_trait_entry,
+    // bench_analysis_get_function_entry,
+    // bench_inner_type_check_cost,
     bench_user_function_application,
     bench_ast_cycle_detection,
     bench_ast_parse,
