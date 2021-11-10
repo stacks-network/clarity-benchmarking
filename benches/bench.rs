@@ -2636,7 +2636,7 @@ fn bench_index_of(c: &mut Criterion) {
         c,
         ClarityCostFunction::IndexOf,
         SCALE.into(),
-        Some(INPUT_SIZES_DATA.into()),
+        Some(INPUT_SIZES.into()),
         false,
         None,
     )
@@ -2941,7 +2941,7 @@ criterion_group!(
     // bench_sqrti,
     // bench_log2,
     // bench_tuple_get,
-    // bench_tuple_merge,
+    bench_tuple_merge,
     // bench_tuple_cons,
     // bench_hash160,
     // bench_sha256,
@@ -2990,7 +2990,7 @@ criterion_group!(
     // bench_fetch_entry, // g
     // bench_match,
     // bench_let,
-    bench_index_of,
+    // bench_index_of,
     // bench_element_at,
     // bench_len,
     // bench_list_cons,

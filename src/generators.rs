@@ -994,8 +994,7 @@ fn gen_tuple_get(scale: u16, input_size: u64) -> GenOutput {
 }
 
 /// cost_function: TupleMerge
-/// input_size: double arg function
-/// TODO - TupleMerge is not currently utilizing input size correctly in core codebase
+/// input_size: sum of serialized size of args
 fn gen_tuple_merge(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
 
@@ -1022,7 +1021,7 @@ fn gen_tuple_merge(scale: u16, input_size: u64) -> GenOutput {
             "(let ((tuple-a {}) (tuple-b {})) {})",
             tuple_a, tuple_b, body
         ),
-        input_size,
+        size_of_value(tuple_a) + size_of_value(tuple_b),
     )
 }
 
@@ -1713,15 +1712,15 @@ fn gen_index_of(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
-    let seq = helper_gen_clarity_list_size(input_size);
+    let seq = helper_gen_clarity_value("list", 17, input_size, Some("uint"));
     let item_val = helper_gen_clarity_value("uint", rng.gen_range(2..50), 0, None);
 
     for _ in 0..scale {
-        let statement = format!("(index-of {} {}) ", seq, item_val.0);
+        let statement = format!("(index-of {} {}) ", seq.0, item_val.0);
         body.push_str(&statement);
     }
 
-    GenOutput::new(None, body, size_of_value(seq) + size_of_value(item_val.0))
+    GenOutput::new(None, body, seq.1 + item_val.1)
 }
 
 /// cost_function: ElementAt
