@@ -1708,21 +1708,20 @@ fn helper_generate_random_sequence() -> (String, usize, String) {
 }
 
 /// cost_function: IndexOf
-/// input_size: double arg function
-fn gen_index_of(scale: u16) -> GenOutput {
+/// input_size: the
+fn gen_index_of(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
+
+    let seq = helper_gen_clarity_list_size(input_size);
+    let item_val = helper_gen_clarity_value("uint", rng.gen_range(2..50), 0, None);
+
     for _ in 0..scale {
-        let (seq, _, seq_inner_type) = helper_generate_random_sequence();
-        let item_len = if seq_inner_type == "buff" { 2 } else { 1 };
-        let item_val =
-            helper_gen_clarity_value(&seq_inner_type, rng.gen_range(2..50), item_len, None);
         let statement = format!("(index-of {} {}) ", seq, item_val.0);
         body.push_str(&statement);
     }
-    
 
-    GenOutput::new(None, body, 1)
+    GenOutput::new(None, body, size_of_value(seq) + size_of_value(item_val.0))
 }
 
 /// cost_function: ElementAt
@@ -2515,7 +2514,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         ClarityCostFunction::ElementAt => gen_element_at(scale),
 
         /// reviewed: @reedrosenbluth
-        ClarityCostFunction::IndexOf => gen_index_of(scale),
+        ClarityCostFunction::IndexOf => gen_index_of(scale, input_size),
 
         /// reviewed: @reedrosenbluth
         ClarityCostFunction::ListCons => gen_list_cons(scale, input_size),

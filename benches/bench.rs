@@ -2636,7 +2636,7 @@ fn bench_index_of(c: &mut Criterion) {
         c,
         ClarityCostFunction::IndexOf,
         SCALE.into(),
-        None,
+        Some(INPUT_SIZES_DATA.into()),
         false,
         None,
     )
@@ -2990,7 +2990,7 @@ criterion_group!(
     // bench_fetch_entry, // g
     // bench_match,
     // bench_let,
-    // bench_index_of,
+    bench_index_of,
     // bench_element_at,
     // bench_len,
     // bench_list_cons,
@@ -3029,18 +3029,18 @@ criterion_group!(
     // bench_inner_type_check_cost,
     // bench_user_function_application,
     // bench_ast_cycle_detection,
-    bench_ast_parse,
-    bench_contract_storage,
-    bench_principal_of,
-    bench_stx_transfer,
-    bench_stx_get_balance,
-    bench_analysis_pass_read_only,               // g
-    bench_analysis_pass_arithmetic_only_checker, // g
-    bench_analysis_pass_trait_checker,           // g
-    bench_analysis_pass_type_checker,            // g
-    bench_poison_microblock,
-    bench_contract_call,
-    bench_contract_of,
+    // bench_ast_parse,
+    // bench_contract_storage,
+    // bench_principal_of,
+    // bench_stx_transfer,
+    // bench_stx_get_balance,
+    // bench_analysis_pass_read_only,               // g
+    // bench_analysis_pass_arithmetic_only_checker, // g
+    // bench_analysis_pass_trait_checker,           // g
+    // bench_analysis_pass_type_checker,            // g
+    // bench_poison_microblock,
+    // bench_contract_call,
+    // bench_contract_of,
 );
 
 criterion_main!(benches);
