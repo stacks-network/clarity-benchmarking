@@ -2065,8 +2065,8 @@ fn gen_ast_cycle_detection(input_size: u64) -> GenOutput {
 
 /// cost_function: AstParse, AnalysisTypeCheck
 /// input_size: `source_code.len()` / `return_type.type_size()`
-fn gen_empty() -> GenOutput {
-    GenOutput::new(None, "".to_string(), 1)
+fn gen_empty(input_size: u64) -> GenOutput {
+    GenOutput::new(None, "".to_string(), input_size)
 }
 
 /// cost_function: ContractStorage
@@ -2408,11 +2408,11 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
 
         /// reviewed: @pavitthrap
         /// input_size: 0
-        ClarityCostFunction::AnalysisOptionCons => gen_empty(),
+        ClarityCostFunction::AnalysisOptionCons => gen_empty(input_size),
 
         /// reviewed: @pavitthrap
         /// input_size: 0
-        ClarityCostFunction::AnalysisOptionCheck => gen_empty(),
+        ClarityCostFunction::AnalysisOptionCheck => gen_empty(input_size),
 
         /// reviewed: @pavitthrap
         /// TODO: super slow, get second review
@@ -2478,7 +2478,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
 
         /// Ast ////////////////////////////////
         /// reviewed: @reedrosenbluth
-        ClarityCostFunction::AstParse => gen_empty(),
+        ClarityCostFunction::AstParse => gen_empty(input_size),
 
         /// reviewed: @reedrosenbluth
         ClarityCostFunction::AstCycleDetection => gen_ast_cycle_detection(input_size),
