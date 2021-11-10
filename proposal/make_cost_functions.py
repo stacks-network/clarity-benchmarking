@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 import csv
+from collections import OrderedDict
 
 to_skip = [
     # these were measured with MARF operations, but they shouldn't get penalized
@@ -26,6 +27,21 @@ to_skip = [
     'cost_analysis_iterable_func',
     'cost_analysis_type_check',
 ]
+
+matched_functions = [
+    ('cost_ft_burn', 'cost_ft_transfer'),
+    ('cost_nft_transfer', 'cost_nft_burn'),
+    ('cost_le', 'cost_ge', 'cost_geq', 'cost_leq'),
+    ('cost_add', 'cost_sub'),
+    ('cost_mul', 'cost_div'),
+    ('cost_ok_cons', 'cost_err_cons', 'cost_some_cons'),
+    ('cost_or', 'cost_and'),
+]
+
+matched_functions_lookup = {}
+for (ix, matched_function_group) in enumerate(matched_functions):
+    for f in matched_function_group:
+        matched_functions_lookup[f] = ix
 
 function_name_to_type = {}
 
@@ -363,6 +379,38 @@ def make_clarity_cost_function(function_name, a_const, b_const):
             print("Unhandled special case: %s" % function_name)
             return None
 
+def write_clar_header(f):
+    f.write("""
+;; the .costs-2 contract
+
+;; Helper Functions
+
+;; Return a Cost Specification with just a runtime cost
+(define-private (runtime (r uint))
+    {
+        runtime: r,
+        write_length: u0,
+        write_count: u0,
+        read_count: u0,
+        read_length: u0,
+    })
+
+;; Linear cost-assessment function
+(define-private (linear (n uint) (a uint) (b uint))
+    (+ (* a n) b))
+
+;; LogN cost-assessment function
+(define-private (logn (n uint) (a uint) (b uint))
+    (+ (* a (log2 n)) b))
+
+;; NLogN cost-assessment function
+(define-private (nlogn (n uint) (a uint) (b uint))
+    (+ (* a (* n (log2 n))) b))
+
+
+;; Cost Functions
+""")
+
 def make_clarity_cost_table_row(function_name, a_const, b_const):
     a_float = float(a_const)
     b_float = float(b_const)
@@ -426,27 +474,28 @@ def main():
     clarity_functions = []
     table_rows = []
 
+    analysis_dict = OrderedDict()
     with open('./estimated_constants.csv', 'r') as raw_file:
         csv_reader = csv.DictReader(raw_file, delimiter=',')
         for row in csv_reader:
-            result = make_clarity_cost_function(
-                row["function"].strip(),
-                row["a"].strip(),
-                row["b"].strip()
-            )
+            analysis_dict[row["function"].strip()] = (row["a"].strip(), row["b"].strip())
 
-            row_result = make_clarity_cost_table_row(
-                row["function"].strip(),
-                row["a"].strip(),
-                row["b"].strip()
-            )
+    for (function, (a, b)) in analysis_dict.items():
+        if function in matched_functions_lookup:
+            matched_group = matched_functions[matched_functions_lookup[function]]
+            a = max(map(lambda f: analysis_dict[f][0], matched_group))
+            b = max(map(lambda f: analysis_dict[f][1], matched_group))
 
-            if result != None:
-                clarity_functions.append(result)
-            if row_result != None:
-                table_rows.append(row_result)
+        result = make_clarity_cost_function(function, a, b)
+        row_result = make_clarity_cost_table_row(function, a, b)
+
+        if result != None:
+            clarity_functions.append(result)
+        if row_result != None:
+            table_rows.append(row_result)
 
     with open('new_costs.clar', 'w') as out_file:
+        write_clar_header(out_file)
         for clarity_function in clarity_functions:
             out_file.write(clarity_function)
             out_file.write('\n')
