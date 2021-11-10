@@ -1329,6 +1329,7 @@ fn bench_analysis_bind_name(c: &mut Criterion) {
         input_size: u64,
         _c: &mut T,
     ) {
+        type_checker.contract_context.clear_variable_types();
         let type_sig = SIZED_TYPE_SIG.get(&input_size).unwrap();
         for _ in 0..SCALE {
             type_checker.bench_analysis_bind_name_helper(type_sig.clone());
