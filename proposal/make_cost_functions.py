@@ -15,17 +15,17 @@ to_skip = [
     # 'cost_contract_storage', 'cost_nft_mint', 'cost_nft_transfer', 'cost_nft_owner',
     # 'cost_nft_burn',
     # these should be linear regressions, but got measured as a const
-    'cost_list_cons',
-    'cost_index_of',
-    'cost_hash160',
-    'cost_sha256',
-    'cost_sha512',
-    'cost_sha512t256',
-    'cost_keccak256',
-    'cost_print',
+    # 'cost_list_cons',
+    # 'cost_index_of',
+    # 'cost_hash160',
+    # 'cost_sha256',
+    # 'cost_sha512',
+    # 'cost_sha512t256',
+    # 'cost_keccak256',
+    # 'cost_print',
     # these need further analysis
-    'cost_analysis_iterable_func',
-    'cost_analysis_type_check',
+    # 'cost_analysis_iterable_func',
+    # 'cost_analysis_type_check',
 ]
 
 matched_functions = [
@@ -48,7 +48,7 @@ function_name_to_type = {}
 # How to scale from a runtime dimension of nanoseconds
 # into the unitless runtime dimension used by the block limit
 SCALE_NUMERATOR = 5e9
-SCALE_DENOMINATOR = 3e10 * 100
+SCALE_DENOMINATOR = 3e10 * 75
 SCALE = SCALE_NUMERATOR / SCALE_DENOMINATOR
 
 # special functions that use linear scaling on one constant factors
