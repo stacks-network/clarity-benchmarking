@@ -343,6 +343,8 @@ def make_clarity_cost_function(function_name, a_const, b_const):
         func_type = function_name_to_type[function_name]
         if func_type == "constant":
             b_int = int(b_float * SCALE)
+            if b_int == 0:
+                b_int = 1
             return """(define-read-only (%s (n uint))
     (runtime u%s))
 """ % (function_name, b_int)
@@ -431,6 +433,8 @@ def make_clarity_cost_table_row(function_name, a_const, b_const):
         func_type = function_name_to_type[function_name]
         if func_type == "constant":
             arg_count = 1
+            if b_int == 0:
+                b_int = 1
             func_format = "f(x) := {}"
         elif func_type == "linear":
             func_format = "f(x) := {}*x + {}"

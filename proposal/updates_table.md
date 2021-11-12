@@ -3,7 +3,7 @@
 | cost_analysis_type_annotate | f(x) := 1*x + 9 | f(x) := 1000*x + 1000 |
 | cost_analysis_type_check | f(x) := 113*x + 0 | f(x) := 1000*x + 1000 |
 | cost_analysis_type_lookup | f(x) := 1*x + 6 | f(x) := 1000*x + 1000 |
-| cost_analysis_visit | f(x) := 0 | f(x) := 1000 |
+| cost_analysis_visit | f(x) := 1 | f(x) := 1000 |
 | cost_analysis_iterable_func | f(x) := 2*x + 14 | f(x) := 1000*x + 1000 |
 | cost_analysis_option_cons | f(x) := 6 | f(x) := 1000 |
 | cost_analysis_option_check | f(x) := 3 | f(x) := 1000 |

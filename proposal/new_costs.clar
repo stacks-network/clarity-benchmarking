@@ -37,7 +37,7 @@
     (runtime (linear n u1 u6)))
 
 (define-read-only (cost_analysis_visit (n uint))
-    (runtime u0))
+    (runtime u1))
 
 (define-read-only (cost_analysis_iterable_func (n uint))
     (runtime (linear n u2 u14)))
