@@ -584,9 +584,10 @@ fn gen_create_ft(_function_name: &'static str, scale: u16) -> GenOutput {
 }
 
 fn helper_create_principal_in_hex() -> String {
-    let privk = Secp256k1PrivateKey::new().to_hex();
+    let privk = Secp256k1PrivateKey::new();
+    let pubk = Secp256k1PublicKey::from_private(&privk).to_hex();
 
-    format!("0x{} ", privk)
+    format!("0x{} ", pubk)
 }
 
 /// Creates a random principal to use in a clarity contract. The output includes the prefixing tick mark.
@@ -1861,7 +1862,7 @@ fn gen_map(scale: u16, input_size: u64) -> GenOutput {
         let statement = format!("(map no-op {}) ", lists);
         body.push_str(&statement);
     }
-    
+
 
     GenOutput::new(None, body, input_size)
 }

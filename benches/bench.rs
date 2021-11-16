@@ -765,14 +765,15 @@ fn bench_principal_of(c: &mut Criterion) {
     global_context.begin();
 
     let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-    let mut contract_context = ContractContext::new(contract_identifier.clone());
+    let contract_context = ContractContext::new(contract_identifier.clone());
+
     let GenOutput {
         setup: _,
         body: contract,
         input_size: _,
     } = gen(function, SCALE, 1);
 
-    let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
+    let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut ()) {
         Ok(res) => res,
         Err(error) => {
             panic!("Parsing error: {}", error.diagnostic.message);
@@ -787,7 +788,7 @@ fn bench_principal_of(c: &mut Criterion) {
         None,
         None,
     );
-    let mut local_context = LocalContext::new();
+    let local_context = LocalContext::new();
 
     group.throughput(Throughput::Bytes(0));
     group.bench_with_input(BenchmarkId::from_parameter(0), &0, |b, &_| {
@@ -2943,7 +2944,7 @@ criterion_group!(
     // bench_tuple_get,
     // bench_tuple_merge,
     // bench_tuple_cons,
-    bench_hash160,
+    // bench_hash160,
     // bench_sha256,
     // bench_sha512,
     // bench_sha512t256,
@@ -3031,7 +3032,7 @@ criterion_group!(
     // bench_ast_cycle_detection,
     // bench_ast_parse,
     // bench_contract_storage,
-    // bench_principal_of,
+    bench_principal_of,
     // bench_stx_transfer,
     // bench_stx_get_balance,
     // bench_analysis_pass_read_only,               // g
