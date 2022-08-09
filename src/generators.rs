@@ -23,6 +23,8 @@ use blockstack_lib::vm::{execute, ClarityName, Value};
 use lazy_static::lazy_static;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
+use blockstack_lib::clarity::vm::ClarityVersion;
+use blockstack_lib::clarity::vm::types::StacksAddressExtensions;
 
 lazy_static! {
     pub static ref TUPLE_NAMES: Vec<String> = create_tuple_names(16);
@@ -2054,6 +2056,7 @@ fn gen_ast_cycle_detection(input_size: u64) -> GenOutput {
         &QualifiedContractIdentifier::transient(),
         &body,
         &mut cost_tracker,
+        ClarityVersion::latest(),
     ).unwrap();
 
     let mut definition_sorter = DefinitionSorter::new();
@@ -2338,6 +2341,28 @@ fn gen_contract_of(scale: u16) -> GenOutput {
             "(contract-call? .use-trait-contract bench-contract-of .impl-trait-contract) ",
         );
     }
+
+    GenOutput::new(None, body, 1)
+}
+
+fn gen_buff_to_numeric_type(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut body = String::new();
+    for _ in 0..scale {
+        let buff = helper_gen_clarity_value("buff", 0, 32, None);
+        body.push_str(&*format!("({} {}) ", function_name, buff.0));
+    }
+    println!("{}", body);
+
+    GenOutput::new(None, body, 1)
+}
+
+fn gen_is_standard(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut body = String::new();
+    for _ in 0..scale {
+        let buff = helper_gen_clarity_value("buff", 0, 32, None);
+        body.push_str(&*format!("({} {}) ", function_name, buff.0));
+    }
+    println!("{}", body);
 
     GenOutput::new(None, body, 1)
 }
@@ -2729,6 +2754,24 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
 
         /// reviewed: @reedrosenbluth
         ClarityCostFunction::LoadContract => unimplemented!(), // called at start of execute_contract
+        ClarityCostFunction::Unimplemented => unimplemented!(),
+        ClarityCostFunction::BuffToIntLe => gen_buff_to_numeric_type("buff-to-int-le", scale),
+        ClarityCostFunction::BuffToUIntLe => gen_buff_to_numeric_type("buff-to-uint-le", scale),
+        ClarityCostFunction::BuffToIntBe => gen_buff_to_numeric_type("buff-to-int-be", scale),
+        ClarityCostFunction::BuffToUIntBe => gen_buff_to_numeric_type("buff-to-uint-be", scale),
+        ClarityCostFunction::IsStandard => gen_is_standard("is-standard", scale),
+        ClarityCostFunction::PrincipalDestruct => {}
+        ClarityCostFunction::PrincipalConstruct => {}
+        ClarityCostFunction::StringToInt => {}
+        ClarityCostFunction::StringToUInt => {}
+        ClarityCostFunction::IntToAscii => {}
+        ClarityCostFunction::IntToUtf8 => {}
+        ClarityCostFunction::GetBurnBlockInfo => {}
+        ClarityCostFunction::StxGetAccount => {}
+        ClarityCostFunction::Slice => {}
+        ClarityCostFunction::ToConsensusBuff => {}
+        ClarityCostFunction::FromConsensusBuff => {}
+        ClarityCostFunction::StxTransferMemo => {}
     }
 }
 
