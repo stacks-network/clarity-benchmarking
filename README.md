@@ -3,6 +3,12 @@ Benchmarking suite to determine constants for usage in the Clarity Cost Function
 
 ## Usage
 
+### Setup 
+
+Ensure that the `blockstack-core` dependency is set currently. This library 
+relies on a modified version of the repository. The branch it currently depends on is called 
+[TODO].
+
 ### Running the benchmark suite
 
 Running the benchmarking suite can be done via the cargo `bench` command:

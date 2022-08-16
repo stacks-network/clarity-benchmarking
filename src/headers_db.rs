@@ -4,13 +4,16 @@ use blockstack_lib::{
     chainstate::stacks::db::{MinerPaymentSchedule, StacksHeaderInfo},
     types::{
         chainstate::{BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, VRFSeed},
-        proof::ClarityMarfTrieId,
     },
-    util::{db::FromRow, hash::Hash160},
     vm::database::HeadersDB,
 };
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
+use blockstack_lib::chainstate::burn::ConsensusHash;
+use blockstack_lib::chainstate::stacks::index::ClarityMarfTrieId;
+use blockstack_lib::clarity_vm::database::get_matured_reward;
+use blockstack_lib::util_lib::db::{FromRow, FromColumn};
+use blockstack_lib::clarity::util::hash::Hash160;
 
 pub struct TestHeadersDB;
 
@@ -27,6 +30,11 @@ impl HeadersDB for TestHeadersDB {
         id_bhh: &StacksBlockId,
     ) -> Option<BurnchainHeaderHash> {
         Some(BurnchainHeaderHash(id_bhh.0.clone()))
+    }
+
+    fn get_consensus_hash_for_block(&self, id_bhh: &StacksBlockId) -> Option<ConsensusHash> {
+        let hash_bytes = Hash160::from_data(&id_bhh.0);
+        Some(ConsensusHash(hash_bytes.0))
     }
 
     fn get_vrf_seed_for_block(&self, _id_bhh: &StacksBlockId) -> Option<VRFSeed> {
@@ -51,6 +59,18 @@ impl HeadersDB for TestHeadersDB {
     fn get_miner_address(&self, _id_bhh: &StacksBlockId) -> Option<StacksAddress> {
         Some(StacksAddress::new(0, Hash160([0u8; 20])))
     }
+
+    fn get_burnchain_tokens_spent_for_block(&self, id_bhh: &StacksBlockId) -> Option<u128> {
+        Some(0)
+    }
+
+    fn get_burnchain_tokens_spent_for_winning_block(&self, id_bhh: &StacksBlockId) -> Option<u128> {
+        Some(0)
+    }
+
+    fn get_tokens_earned_for_block(&self, id_bhh: &StacksBlockId) -> Option<u128> {
+        Some(0)
+    }
 }
 
 pub struct SimHeadersDB {
@@ -59,7 +79,7 @@ pub struct SimHeadersDB {
 
 impl SimHeadersDB {
     pub fn new() -> Self {
-        let db_path = "./chainstate.sqlite";
+        let db_path = "./new-db/index.sqlite";
 
         Self::new_with_path(db_path)
     }
@@ -118,6 +138,22 @@ impl HeadersDB for SimHeadersDB {
 
     fn get_miner_address(&self, id_bhh: &StacksBlockId) -> Option<StacksAddress> {
         get_miner_info(&self.conn, id_bhh).map(|x| x.address)
+    }
+
+    fn get_consensus_hash_for_block(&self, id_bhh: &StacksBlockId) -> Option<ConsensusHash> {
+        get_stacks_header_info(&self.conn, id_bhh).map(|x| x.consensus_hash)
+    }
+
+    fn get_burnchain_tokens_spent_for_block(&self, id_bhh: &StacksBlockId) -> Option<u128> {
+        get_miner_info(&self.conn, id_bhh).map(|x| x.burnchain_sortition_burn.into())
+    }
+
+    fn get_burnchain_tokens_spent_for_winning_block(&self, id_bhh: &StacksBlockId) -> Option<u128> {
+        get_miner_info(&self.conn, id_bhh).map(|x| x.burnchain_commit_burn.into())
+    }
+
+    fn get_tokens_earned_for_block(&self, id_bhh: &StacksBlockId) -> Option<u128> {
+        get_matured_reward(&self.conn, id_bhh).map(|x| x.total().into())
     }
 }
 

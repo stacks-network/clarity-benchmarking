@@ -9,9 +9,10 @@ criterion = "0.3.4"
 
 [dependencies]
 #blockstack-core = { git = "https://github.com/blockstack/stacks-blockchain", branch = "dev/clarity-benchmarking" }
- blockstack-core = { path = "../stacks-blockchain" }
+blockstack-core = { path = "../stacks-blockchain", features = ["testing"] }
 rand = "0.8.3"
 lazy_static = "1.4.0"
+clarity = { path = "../stacks-blockchain/clarity", features = ["default", "testing"] }
 
 [dependencies.secp256k1]
 version = "0.19.0"

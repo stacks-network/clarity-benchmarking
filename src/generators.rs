@@ -19,19 +19,22 @@ use blockstack_lib::vm::types::signatures::TypeSignature::{
     BoolType, IntType, PrincipalType, TupleType, UIntType,
 };
 use blockstack_lib::vm::types::{ASCIIData, CharType, OptionalData, QualifiedContractIdentifier, SequenceData, TupleData, TupleTypeSignature, TypeSignature};
-use blockstack_lib::vm::{execute, ClarityName, Value};
+use blockstack_lib::vm::{ClarityName, Value};
 use lazy_static::lazy_static;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use blockstack_lib::clarity::vm::ClarityVersion;
+use blockstack_lib::clarity::vm::execute;
 use blockstack_lib::clarity::vm::types::StacksAddressExtensions;
+use blockstack_lib::clarity::codec::StacksMessageCodec;
 
 lazy_static! {
     pub static ref TUPLE_NAMES: Vec<String> = create_tuple_names(16);
 }
 
 fn string_to_value(s: String) -> Value {
-    execute(s.as_str()).unwrap().unwrap()
+    // execute(s.as_str()).unwrap().unwrap()
+    Value::Bool(true)
 }
 
 fn size_of_value(s: String) -> u64 {
@@ -450,6 +453,14 @@ fn helper_generate_rand_hex_string(n: usize) -> String {
         .sample_iter(&hex_range)
         .take(n)
         .map(|x| hex_chars[x])
+        .collect::<String>()
+}
+
+/// This function generates a random numeric string of size n.
+pub fn helper_generate_rand_numeric_string(n: usize) -> String {
+    let mut rng = rand::thread_rng();
+    (0..n)
+        .map(|_| rng.gen_range(b'0'..b'9') as char)
         .collect::<String>()
 }
 
@@ -1441,7 +1452,7 @@ fn gen_print(scale: u16, input_size: u64) -> GenOutput {
 /// cost_function:
 /// input_size:
 /// print: size of given Value for print
-/// SomeCons/OkCons/ErrCons: single arg function
+/// SomeCons/OkCons/ErrCons/ToConsensusBuff: single arg function
 /// begin: multi arg function
 fn gen_single_clar_value(function_name: &'static str, scale: u16, input_size: Option<u64>) -> GenOutput {
     let mut body = String::new();
@@ -1886,8 +1897,9 @@ fn gen_get_block_info(scale: u16) -> GenOutput {
 
     // must use block 5 here b/c it has a hardcoded id_bhh
     // TODO: consider hardcoding more id_bhhs and making this random
+    // TODO: switch back
     for _ in 0..scale {
-        body.push_str(format!("(get-block-info? {} u5) ", props.choose(&mut rng).unwrap()).as_str())
+        body.push_str(&*format!("(get-block-info? header-hash u5) "));
     }
 
     GenOutput::new(None, body, 1)
@@ -2060,7 +2072,7 @@ fn gen_ast_cycle_detection(input_size: u64) -> GenOutput {
     ).unwrap();
 
     let mut definition_sorter = DefinitionSorter::new();
-    definition_sorter.run(&mut ast, &mut cost_tracker).unwrap();
+    definition_sorter.run(&mut ast, &mut cost_tracker, ClarityVersion::Clarity2).unwrap();
 
     let edges = definition_sorter.graph.edges_count().unwrap();
 
@@ -2345,24 +2357,233 @@ fn gen_contract_of(scale: u16) -> GenOutput {
     GenOutput::new(None, body, 1)
 }
 
+/// cost_function: BuffToNumber
+/// input_size: 0
 fn gen_buff_to_numeric_type(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let buff = helper_gen_clarity_value("buff", 0, 32, None);
         body.push_str(&*format!("({} {}) ", function_name, buff.0));
     }
+
+    GenOutput::new(None, body, 1)
+}
+
+/// cost_function: IsStandard
+/// input_size: 0
+fn gen_is_standard(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut body = String::new();
+    for _ in 0..scale {
+        let principal = helper_create_principal();
+        body.push_str(&*format!("({} {}) ", function_name, principal));
+    }
+
+    GenOutput::new(None, body, 1)
+}
+
+/// cost_function: PrincipalDestruct
+/// input_size: 0
+fn gen_principal_destruct(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut rng = rand::thread_rng();
+    let mut body = String::new();
+    for _ in 0..scale {
+        let principal = match rng.gen_bool(0.5) {
+            true => {
+                helper_create_principal()
+            }
+            false => {
+                format!("{}.{}", helper_create_principal(), helper_generate_rand_char_string(8))
+            }
+        };
+        body.push_str(&*format!("({} {}) ", function_name, principal));
+    }
+
+    GenOutput::new(None, body, 1)
+}
+
+/// cost_function: PrincipalConstruct
+/// input_size: 0
+fn gen_principal_construct(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut rng = rand::thread_rng();
+    let mut body = String::new();
+    for _ in 0..scale {
+        let version_byte = helper_gen_clarity_value("buff", 0, 2, None);
+        let pub_key_hash = helper_gen_clarity_value("buff", 0, 40, None);
+        let args = match rng.gen_bool(0.5) {
+            true => {
+                format!("{} {}", version_byte.0, pub_key_hash.0)
+            }
+            false => {
+                format!("{} {} \"{}\"", version_byte.0, pub_key_hash.0, helper_generate_rand_char_string(8))
+            }
+        };
+        body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+
+    GenOutput::new(None, body, 1)
+}
+
+/// cost_function: StringToNumber
+/// input_size: 0
+fn gen_string_to_number(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut rng = rand::thread_rng();
+    let mut body = String::new();
+    for _ in 0..scale {
+        let rand_str = match rng.gen_bool(0.5) {
+            true => {
+                helper_generate_rand_numeric_string(8)
+            }
+            false => {
+                helper_generate_rand_char_string(8)
+            }
+        };
+        let formatted_str = match rng.gen_bool(0.5) {
+            true => {
+                format!("\"{}\"", rand_str)
+            }
+            false => {
+                format!("u\"{}\"", rand_str)
+            }
+        };
+        body.push_str(&*format!("({} {}) ", function_name, formatted_str));
+    }
     println!("{}", body);
 
     GenOutput::new(None, body, 1)
 }
 
-fn gen_is_standard(function_name: &'static str, scale: u16) -> GenOutput {
+/// cost_function: NumberToString
+/// input_size: 0
+fn gen_number_to_string(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut rng = rand::thread_rng();
     let mut body = String::new();
     for _ in 0..scale {
-        let buff = helper_gen_clarity_value("buff", 0, 32, None);
-        body.push_str(&*format!("({} {}) ", function_name, buff.0));
+        let num = rng.gen_range(0..10000);
+        let formatted_num = match rng.gen_bool(0.5) {
+            true => {
+                format!("{}", num)
+            }
+            false => {
+                format!("u{}", num)
+            }
+        };
+        body.push_str(&*format!("({} {}) ", function_name, formatted_num));
     }
     println!("{}", body);
+
+    GenOutput::new(None, body, 1)
+}
+
+/// cost_function: StxTransferMemo
+/// input_size: 0
+pub fn gen_stx_transfer_memo(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut rng = rand::thread_rng();
+    let mut body = String::new();
+
+    for _ in 0..scale {
+        let len = rng.gen_range(1..15)*2;
+        let memo = helper_gen_clarity_value("buff", 0, len, None);
+        body.push_str(&*format!("({} u1 tx-sender 'S0G0000000000000000000000000000015XM0F7 {}) ", function_name, memo.0));
+    }
+
+    GenOutput::new(None, body, 1)
+}
+
+/// cost_function: Slice
+/// input_size: 0
+pub fn gen_slice(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut rng = rand::thread_rng();
+    let mut body = String::new();
+
+    for _ in 0..scale {
+        let (seq, seq_len, _) = helper_generate_random_sequence();
+        let (left, right) = match rng.gen_bool(0.8) {
+            true => {
+                // valid range
+                let left_pos = rng.gen_range(0..seq_len-2);
+                let right_pos = rng.gen_range(left_pos..seq_len);
+                (left_pos, right_pos)
+            }
+            false => {
+                match rng.gen_range(0..=2) {
+                    0 => {
+                        // right < left
+                        let right_pos = rng.gen_range(0..seq_len-3);
+                        let left_pos = rng.gen_range(right_pos+1..seq_len);
+                        (left_pos, right_pos)
+                    }
+                    1 => {
+                        // right > len
+                        let left_pos = rng.gen_range(0..seq_len-2);
+                        let right_pos = seq_len + 3;
+                        (left_pos, right_pos)
+                    }
+                    2 => {
+                        // left > len
+                        let left_pos = seq_len + 3;
+                        let right_pos = rng.gen_range(0..seq_len-2);
+                        (left_pos, right_pos)
+                    }
+                    _ => {
+                        unreachable!("should only be generating numbers in the range 0..=2.")
+                    }
+                }
+            }
+        };
+
+        body.push_str(&*format!("({} {} u{} u{}) ", function_name, seq, left, right));
+    }
+    println!("{}", body);
+
+    GenOutput::new(None, body, 1)
+}
+
+/// cost_function: FromConsensusBuff
+/// input_size: number of bytes in the input buffer
+pub fn gen_from_consensus_buff(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
+    let mut rng = rand::thread_rng();
+    let mut body = String::new();
+
+    let clar_value = helper_make_value_for_sized_type_sig(input_size).serialize_to_vec();
+    let len = clar_value.len();
+
+    for _ in 0..scale {
+        let clar_value = helper_make_value_for_sized_type_sig(input_size).serialize_to_vec();
+        let clar_buff_serialized = match Value::buff_from(clar_value) {
+            Ok(x) => x,
+            Err(_) => panic!()
+        };
+        body.push_str(&*format!("({} {}) ", function_name, clar_buff_serialized));
+    }
+    println!("{}", body);
+
+    GenOutput::new(None, body, len as u64)
+}
+
+/// cost_function: StxGetAccount
+/// input_size: 0
+pub fn gen_stx_get_account(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut body = String::new();
+
+    for _ in 0..scale {
+        body.push_str(&*format!("({} 'S1G2081040G2081040G2081040G208105NK8PE5) ", function_name));
+    }
+
+    GenOutput::new(None, body, 1)
+}
+
+/// cost_function: BlockInfo
+/// input_size: 0
+fn gen_get_burn_block_info(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut body = String::new();
+
+    // must use block 5 here b/c it has a hardcoded id_bhh
+    // TODO: consider hardcoding more id_bhhs and making this random
+    // NOTE: the property is hardcoded here since this function currently only supports
+    // querying the property `header-hash`.
+    for _ in 0..scale {
+        body.push_str(&*format!("({} header-hash u6) ", function_name))
+    }
 
     GenOutput::new(None, body, 1)
 }
@@ -2755,23 +2976,25 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         /// reviewed: @reedrosenbluth
         ClarityCostFunction::LoadContract => unimplemented!(), // called at start of execute_contract
         ClarityCostFunction::Unimplemented => unimplemented!(),
+
+        /// Clarity 2 functions
         ClarityCostFunction::BuffToIntLe => gen_buff_to_numeric_type("buff-to-int-le", scale),
         ClarityCostFunction::BuffToUIntLe => gen_buff_to_numeric_type("buff-to-uint-le", scale),
         ClarityCostFunction::BuffToIntBe => gen_buff_to_numeric_type("buff-to-int-be", scale),
         ClarityCostFunction::BuffToUIntBe => gen_buff_to_numeric_type("buff-to-uint-be", scale),
         ClarityCostFunction::IsStandard => gen_is_standard("is-standard", scale),
-        ClarityCostFunction::PrincipalDestruct => {}
-        ClarityCostFunction::PrincipalConstruct => {}
-        ClarityCostFunction::StringToInt => {}
-        ClarityCostFunction::StringToUInt => {}
-        ClarityCostFunction::IntToAscii => {}
-        ClarityCostFunction::IntToUtf8 => {}
-        ClarityCostFunction::GetBurnBlockInfo => {}
-        ClarityCostFunction::StxGetAccount => {}
-        ClarityCostFunction::Slice => {}
-        ClarityCostFunction::ToConsensusBuff => {}
-        ClarityCostFunction::FromConsensusBuff => {}
-        ClarityCostFunction::StxTransferMemo => {}
+        ClarityCostFunction::PrincipalDestruct => gen_principal_destruct("principal-destruct", scale),
+        ClarityCostFunction::PrincipalConstruct => gen_principal_construct("principal-construct", scale),
+        ClarityCostFunction::StringToInt => gen_string_to_number("string-to-int", scale),
+        ClarityCostFunction::StringToUInt => gen_string_to_number("string-to-uint", scale),
+        ClarityCostFunction::IntToAscii => gen_number_to_string("int-to-ascii", scale),
+        ClarityCostFunction::IntToUtf8 => gen_number_to_string("int-to-utf8", scale),
+        ClarityCostFunction::GetBurnBlockInfo => gen_get_burn_block_info("get-burn-block-info?", scale),
+        ClarityCostFunction::StxGetAccount => gen_stx_get_account("stx-account", scale),
+        ClarityCostFunction::Slice => gen_slice("slice", scale),
+        ClarityCostFunction::ToConsensusBuff => gen_single_clar_value("to-consensus-buff", scale, Some(input_size)),
+        ClarityCostFunction::FromConsensusBuff => gen_from_consensus_buff("from-consensus-buff", scale, input_size),
+        ClarityCostFunction::StxTransferMemo => gen_stx_transfer_memo("stx-transfer-memo?", scale),
     }
 }
 
