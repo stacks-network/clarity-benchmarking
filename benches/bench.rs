@@ -182,9 +182,15 @@ fn run_bench<F>(
     // 17b05c9754d7c12a6f355b217d83c4cf7a84a23e29204a9dcc4118396c98b46a
 
     // from unit test (db-3)
-    // b84334cc1d73f88d4c685f5520d02622a312fa1be423a16c074c9bd8abea569d (height 7)
-    // 3789517e3e9a9603e998254b35e86eacfc9cc68157f7c5d36301bfaf7d5027a9 (height 6)
-    let read_tip = StacksBlockId::from_hex("3789517e3e9a9603e998254b35e86eacfc9cc68157f7c5d36301bfaf7d5027a9").unwrap();
+    // make databases:
+    // BITCOIND_TEST=1 cargo test --workspace --bin=stacks-node -- --ignored --nocapture neon_integrations::pox
+    // cp -r /tmp/stacks-node-tests/integrations-neon/../neon/burnchain/sortition .
+    // cp -r /tmp/stacks-node-tests/integrations-neon/../neon/chainstate/vm/clarity .
+    // cp /tmp/stacks-node-tests/integrations-neon/../neon/chainstate/vm/index.sqlite* .
+    // echo "select * from marf_data" | sqlite3 db-3/clarity/marf.sqlite
+    // pick second to last block hash as block id.
+    //
+    let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
     let miner_tip = StacksBlockHeader::make_index_block_hash(
         &MINER_BLOCK_CONSENSUS_HASH,
         &MINER_BLOCK_HEADER_HASH,
