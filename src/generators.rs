@@ -33,8 +33,7 @@ lazy_static! {
 }
 
 fn string_to_value(s: String) -> Value {
-    // execute(s.as_str()).unwrap().unwrap()
-    Value::Bool(true)
+    execute(s.as_str()).unwrap().unwrap()
 }
 
 fn size_of_value(s: String) -> u64 {
@@ -1444,8 +1443,6 @@ fn gen_print(scale: u16, input_size: u64) -> GenOutput {
     let print = format!("(print input-value) ");
     setup.push_str(&helper_gen_execute_fn(scale, print, clarity_type));
 
-    dbg!(&setup);
-
     GenOutput::new(Some(setup), body, clarity_value.1)
 }
 
@@ -1897,9 +1894,8 @@ fn gen_get_block_info(scale: u16) -> GenOutput {
 
     // must use block 5 here b/c it has a hardcoded id_bhh
     // TODO: consider hardcoding more id_bhhs and making this random
-    // TODO: switch back
     for _ in 0..scale {
-        body.push_str(&*format!("(get-block-info? header-hash u5) "));
+        body.push_str(format!("(get-block-info? {} u5) ", props.choose(&mut rng).unwrap()).as_str())
     }
 
     GenOutput::new(None, body, 1)
@@ -1907,11 +1903,12 @@ fn gen_get_block_info(scale: u16) -> GenOutput {
 
 /// cost_function: AtBlock
 /// input_size: 0
+/// NOTE: Need to provide a index_block_hash from the chainstate DB (index.sqlite)
 fn gen_at_block(scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str("(at-block 0x0000000000000000000000000000000000000000000000000000000000000000 (no-op)) ");
+        body.push_str("(at-block 0xbffb33593b67d502fa2e0ec0d8db200aa265054f638908c6cbc726a6e1854fa1 (no-op)) ");
     }
 
     GenOutput::new(None, body, 1)
@@ -2423,7 +2420,7 @@ fn gen_principal_construct(function_name: &'static str, scale: u16) -> GenOutput
     GenOutput::new(None, body, 1)
 }
 
-/// cost_function: StringToNumber
+/// cost_function: StringToInt / StringToUInt
 /// input_size: 0
 fn gen_string_to_number(function_name: &'static str, scale: u16) -> GenOutput {
     let mut rng = rand::thread_rng();
@@ -2447,12 +2444,11 @@ fn gen_string_to_number(function_name: &'static str, scale: u16) -> GenOutput {
         };
         body.push_str(&*format!("({} {}) ", function_name, formatted_str));
     }
-    println!("{}", body);
 
     GenOutput::new(None, body, 1)
 }
 
-/// cost_function: NumberToString
+/// cost_function: IntToAscii / IntToUtf8
 /// input_size: 0
 fn gen_number_to_string(function_name: &'static str, scale: u16) -> GenOutput {
     let mut rng = rand::thread_rng();
@@ -2469,7 +2465,6 @@ fn gen_number_to_string(function_name: &'static str, scale: u16) -> GenOutput {
         };
         body.push_str(&*format!("({} {}) ", function_name, formatted_num));
     }
-    println!("{}", body);
 
     GenOutput::new(None, body, 1)
 }
@@ -2533,7 +2528,6 @@ pub fn gen_slice(function_name: &'static str, scale: u16) -> GenOutput {
 
         body.push_str(&*format!("({} {} u{} u{}) ", function_name, seq, left, right));
     }
-    println!("{}", body);
 
     GenOutput::new(None, body, 1)
 }

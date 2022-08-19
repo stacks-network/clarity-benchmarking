@@ -1,4 +1,4 @@
-use std::fs::{self, File};
+use std::fs::{self, File, read};
 use std::io::Write;
 use std::num::ParseIntError;
 
@@ -62,6 +62,9 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use blockstack_lib::clarity::types::{StacksEpochId, Address};
 use blockstack_lib::chainstate::burn::db::sortdb::SortitionDB;
+use blockstack_lib::clarity_vm::database::marf::ReadOnlyMarfStore;
+use clarity::vm::tests::BurnStateDB;
+use blockstack_lib::clarity::vm::database::ClarityBackingStore;
 // use secp256k1::serde::Serialize;
 
 // for when input size is the number of elements
@@ -113,15 +116,13 @@ fn eval(
 /// * `function` - the Clarity cost function that is being benchmarked
 /// * `scale` - a scaling parameter used by the Clarity function code generator
 /// * `input_sizes` - an optional list of input sizes. a separate benchmark will be run for each size provided. If None, will be benchmarked as constant size.
-/// * `use_headers_db` - if true, use a sim headers db instead of a null one
-/// * `maybe_make_store` - an optional closure returning a `MemoryBackingStore`. useful if you want to run a benchmark with pre-loaded state.
-fn bench_with_input_sizes(
+/// * `maybe_make_store` - an optional closure taking in a reference to OwnedEnvironment. useful if you want to run a benchmark with pre-loaded state.
+fn bench_with_input_sizes<'a>(
     c: &mut Criterion,
     function: ClarityCostFunction,
     scale: u16,
     input_sizes: Option<Vec<u64>>,
-    use_headers_db: bool,
-    maybe_make_store: Option<Box<dyn Fn() -> MemoryBackingStore>>,
+    maybe_make_store: Option<Box<dyn Fn(&mut OwnedEnvironment) -> () > >,
 ) {
     let mut group = c.benchmark_group(function.to_string());
 
@@ -133,7 +134,6 @@ fn bench_with_input_sizes(
                     function,
                     scale,
                     *input_size,
-                    use_headers_db,
                     &maybe_make_store,
                     eval,
                 )
@@ -144,7 +144,6 @@ fn bench_with_input_sizes(
             function,
             scale,
             1,
-            use_headers_db,
             &maybe_make_store,
             eval,
         ),
@@ -153,63 +152,59 @@ fn bench_with_input_sizes(
 
 /// Runs a benchmark for a Clarity function
 ///
+/// Make databases:
+//      BITCOIND_TEST=1 cargo test --workspace --bin=stacks-node -- --ignored --nocapture neon_integrations::pox
+//      cp -r /tmp/stacks-node-tests/integrations-neon/../neon/burnchain/sortition .
+//      cp -r /tmp/stacks-node-tests/integrations-neon/../neon/chainstate/vm/clarity .
+//      cp /tmp/stacks-node-tests/integrations-neon/../neon/chainstate/vm/index.sqlite* .
+//      echo "select * from marf_data" | sqlite3 db-3/clarity/marf.sqlite
+//      pick second to last block hash as block id.
 /// # Arguments
 ///
 /// * `group` - Criterion benchmark group.
 /// * `function` - the Clarity cost function that is being benchmarked
 /// * `scale` - a scaling parameter used by the Clarity function code generator
 /// * `input_size` - The input size to pass in to the code generator. Pass in 1 if constant.
-/// * `use_headers_db` - if true, use a sim headers db instead of a null one
-/// * `maybe_make_store` - an optional closure returning a `MemoryBackingStore`. useful if you want to run a benchmark with pre-loaded state.
+/// * `maybe_make_store` - an optional closure taking in a reference to OwnedEnvironment. useful if you want to run a benchmark with pre-loaded state.
 /// * `code_to_bench` - a function that will run the generated Clarity code
-fn run_bench<F>(
+fn run_bench<'a, F>(
     group: &mut BenchmarkGroup<WallTime>,
     function: ClarityCostFunction,
     scale: u16,
     input_size: u64,
-    use_headers_db: bool,
-    maybe_make_store: &Option<Box<dyn Fn() -> MemoryBackingStore>>,
+    maybe_make_store: &Option<Box<dyn Fn(&mut OwnedEnvironment) -> ()>>,
     code_to_bench: F,
 ) where
     F: Fn(&ContractAST, &mut GlobalContext, &mut ContractContext),
 {
-    let mut memory_backing_store = match maybe_make_store {
-        Some(ref make_store) => make_store(),
-        None => MemoryBackingStore::new(),
-    };
-    // from pox_sortition (db-2)
-    // 17: 19518b1354996ba08ee2f4f73a5325416c3c609251b4c071348f856f11cb9b34
-    // 17b05c9754d7c12a6f355b217d83c4cf7a84a23e29204a9dcc4118396c98b46a
 
-    // from unit test (db-3)
-    // make databases:
-    // BITCOIND_TEST=1 cargo test --workspace --bin=stacks-node -- --ignored --nocapture neon_integrations::pox
-    // cp -r /tmp/stacks-node-tests/integrations-neon/../neon/burnchain/sortition .
-    // cp -r /tmp/stacks-node-tests/integrations-neon/../neon/chainstate/vm/clarity .
-    // cp /tmp/stacks-node-tests/integrations-neon/../neon/chainstate/vm/index.sqlite* .
-    // echo "select * from marf_data" | sqlite3 db-3/clarity/marf.sqlite
-    // pick second to last block hash as block id.
-    //
-    let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
     let miner_tip = StacksBlockHeader::make_index_block_hash(
         &MINER_BLOCK_CONSENSUS_HASH,
         &MINER_BLOCK_HEADER_HASH,
     );
-    let mut marfed_kv = MarfedKV::open("./db-3/clarity/", Some(&miner_tip), None).unwrap();
-    let mut read_only_marf_store = marfed_kv.begin_read_only(Some(&read_tip));
+    let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
 
+    // Set up Clarity Backing Store
+    let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+    let new_tip = StacksBlockId::from([5;32]);
+    let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+    // Set up BurnStateDB
     let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
-    let sort_db = SortitionDB::open("./db-3/sortition/", false, pox_constants).unwrap();
+    let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
-    // let headers_db = SimHeadersDB::new();
-    let headers_db = StacksChainState::open_db(false, 2147483648, "./db-3/index.sqlite").unwrap();
+    // Set up HeaderDB
+    let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
 
-    let clarity_db = ClarityDatabase::new(&mut read_only_marf_store, &headers_db, &sort_tx);
-    //     match use_headers_db {
-    //     true => ClarityDatabase::new(&mut read_only_marf_store, &headers_db, &sort_tx),
-    //     false => memory_backing_store.as_clarity_db(),
-    // };
+    // Set up data if necessary
+    if let Some(ref make_store) = maybe_make_store {
+        let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
+        let mut env = OwnedEnvironment::new_free(false, 0, clarity_db, StacksEpochId::Epoch21);
+        make_store(&mut env);
+    }
+
+    let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
     let mut global_context = GlobalContext::new(false, 0,clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
     global_context.begin();
@@ -1884,7 +1879,6 @@ fn bench_add(c: &mut Criterion) {
         ClarityCostFunction::Add,
         SCALE,
         Some(INPUT_SIZES_ARITHMETIC.into()),
-        false,
         None,
     )
 }
@@ -1895,7 +1889,6 @@ fn bench_sub(c: &mut Criterion) {
         ClarityCostFunction::Sub,
         SCALE,
         Some(INPUT_SIZES_ARITHMETIC.into()),
-        false,
         None,
     )
 }
@@ -1906,7 +1899,6 @@ fn bench_mul(c: &mut Criterion) {
         ClarityCostFunction::Mul,
         SCALE,
         Some(INPUT_SIZES_ARITHMETIC.into()),
-        false,
         None,
     )
 }
@@ -1917,25 +1909,24 @@ fn bench_div(c: &mut Criterion) {
         ClarityCostFunction::Div,
         SCALE,
         Some(INPUT_SIZES_ARITHMETIC.into()),
-        false,
         None,
     )
 }
 
 fn bench_le(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Le, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Le, SCALE, None, None)
 }
 
 fn bench_leq(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Leq, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Leq, SCALE, None, None)
 }
 
 fn bench_ge(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Ge, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Ge, SCALE, None, None)
 }
 
 fn bench_geq(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Geq, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Geq, SCALE, None, None)
 }
 
 // boolean functions
@@ -1945,7 +1936,6 @@ fn bench_and(c: &mut Criterion) {
         ClarityCostFunction::And,
         SCALE,
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -1956,17 +1946,16 @@ fn bench_or(c: &mut Criterion) {
         ClarityCostFunction::Or,
         SCALE,
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
 
 fn bench_xor(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Xor, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Xor, SCALE, None, None)
 }
 
 fn bench_not(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Not, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Not, SCALE, None, None)
 }
 
 // note: only testing is-eq when the values are bools; could try doing it with ints?
@@ -1976,25 +1965,24 @@ fn bench_eq(c: &mut Criterion) {
         ClarityCostFunction::Eq,
         SCALE,
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
 
 fn bench_mod(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Mod, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Mod, SCALE, None, None)
 }
 
 fn bench_pow(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Pow, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Pow, SCALE, None, None)
 }
 
 fn bench_sqrti(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sqrti, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sqrti, SCALE, None, None)
 }
 
 fn bench_log2(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Log2, SCALE, None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Log2, SCALE, None, None)
 }
 
 fn bench_tuple_get(c: &mut Criterion) {
@@ -2003,7 +1991,6 @@ fn bench_tuple_get(c: &mut Criterion) {
         ClarityCostFunction::TupleGet,
         SCALE,
         Some(MORE_INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -2014,7 +2001,6 @@ fn bench_tuple_merge(c: &mut Criterion) {
         ClarityCostFunction::TupleMerge,
         SCALE,
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -2025,30 +2011,29 @@ fn bench_tuple_cons(c: &mut Criterion) {
         ClarityCostFunction::TupleCons,
         SCALE,
         Some(MORE_INPUT_SIZES.into()),
-        false,
         None,
     )
 }
 
 // hash functions
 fn bench_hash160(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, Some(INPUT_SIZES_DATA.into()), false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, Some(INPUT_SIZES_DATA.into()), None)
 }
 
 fn bench_sha256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, Some(INPUT_SIZES_DATA.into()), false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, Some(INPUT_SIZES_DATA.into()), None)
 }
 
 fn bench_sha512(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, Some(INPUT_SIZES_DATA.into()), false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, Some(INPUT_SIZES_DATA.into()), None)
 }
 
 fn bench_sha512t256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, Some(INPUT_SIZES_DATA.into()), false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, Some(INPUT_SIZES_DATA.into()), None)
 }
 
 fn bench_keccak256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, Some(INPUT_SIZES_DATA.into()), false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, Some(INPUT_SIZES_DATA.into()), None)
 }
 
 fn bench_secp256k1recover(c: &mut Criterion) {
@@ -2057,7 +2042,6 @@ fn bench_secp256k1recover(c: &mut Criterion) {
         ClarityCostFunction::Secp256k1recover,
         SCALE,
         None,
-        false,
         None,
     )
 }
@@ -2068,7 +2052,6 @@ fn bench_secp256k1verify(c: &mut Criterion) {
         ClarityCostFunction::Secp256k1verify,
         SCALE,
         None,
-        false,
         None,
     )
 }
@@ -2079,7 +2062,6 @@ fn bench_create_ft_old(c: &mut Criterion) {
         ClarityCostFunction::CreateFt,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2117,7 +2099,6 @@ fn bench_mint_ft(c: &mut Criterion) {
         ClarityCostFunction::FtMint,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2128,7 +2109,6 @@ fn bench_ft_transfer(c: &mut Criterion) {
         ClarityCostFunction::FtTransfer,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2139,7 +2119,6 @@ fn bench_ft_balance(c: &mut Criterion) {
         ClarityCostFunction::FtBalance,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2150,7 +2129,6 @@ fn bench_ft_supply(c: &mut Criterion) {
         ClarityCostFunction::FtSupply,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2161,7 +2139,6 @@ fn bench_ft_burn(c: &mut Criterion) {
         ClarityCostFunction::FtBurn,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2212,7 +2189,6 @@ fn bench_nft_mint(c: &mut Criterion) {
         ClarityCostFunction::NftMint,
         SCALE.into(),
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -2223,7 +2199,6 @@ fn bench_nft_transfer(c: &mut Criterion) {
         ClarityCostFunction::NftTransfer,
         SCALE.into(),
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -2234,7 +2209,6 @@ fn bench_nft_owner(c: &mut Criterion) {
         ClarityCostFunction::NftOwner,
         SCALE.into(),
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -2245,7 +2219,6 @@ fn bench_nft_burn(c: &mut Criterion) {
         ClarityCostFunction::NftBurn,
         SCALE.into(),
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -2256,7 +2229,6 @@ fn bench_is_none(c: &mut Criterion) {
         ClarityCostFunction::IsNone,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2267,7 +2239,6 @@ fn bench_is_some(c: &mut Criterion) {
         ClarityCostFunction::IsSome,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2278,7 +2249,6 @@ fn bench_is_ok(c: &mut Criterion) {
         ClarityCostFunction::IsOkay,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2289,7 +2259,6 @@ fn bench_is_err(c: &mut Criterion) {
         ClarityCostFunction::IsErr,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2300,7 +2269,6 @@ fn bench_unwrap(c: &mut Criterion) {
         ClarityCostFunction::Unwrap,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2311,7 +2279,6 @@ fn bench_unwrap_ret(c: &mut Criterion) {
         ClarityCostFunction::UnwrapRet,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2322,7 +2289,6 @@ fn bench_unwrap_err(c: &mut Criterion) {
         ClarityCostFunction::UnwrapErr,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2333,7 +2299,6 @@ fn bench_unwrap_err_or_ret(c: &mut Criterion) {
         ClarityCostFunction::UnwrapErrOrRet,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2503,7 +2468,6 @@ fn bench_fetch_var(c: &mut Criterion) {
         ClarityCostFunction::FetchVar,
         SCALE.into(),
         Some(INPUT_SIZES_DATA.into()),
-        false,
         None,
     )
 }
@@ -2515,7 +2479,7 @@ fn bench_print(c: &mut Criterion) {
 }
 
 fn bench_if(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::If, SCALE.into(), None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::If, SCALE.into(), None, None)
 }
 
 fn bench_asserts(c: &mut Criterion) {
@@ -2524,7 +2488,6 @@ fn bench_asserts(c: &mut Criterion) {
         ClarityCostFunction::Asserts,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2535,7 +2498,6 @@ fn bench_ok_cons(c: &mut Criterion) {
         ClarityCostFunction::OkCons,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2546,7 +2508,6 @@ fn bench_err_cons(c: &mut Criterion) {
         ClarityCostFunction::ErrCons,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2557,7 +2518,6 @@ fn bench_some_cons(c: &mut Criterion) {
         ClarityCostFunction::SomeCons,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2568,7 +2528,6 @@ fn bench_concat(c: &mut Criterion) {
         ClarityCostFunction::Concat,
         SCALE.into(),
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -2579,7 +2538,6 @@ fn bench_as_max_len(c: &mut Criterion) {
         ClarityCostFunction::AsMaxLen,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2590,7 +2548,6 @@ fn bench_begin(c: &mut Criterion) {
         ClarityCostFunction::Begin,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2601,7 +2558,6 @@ fn bench_bind_name(c: &mut Criterion) {
         ClarityCostFunction::BindName,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2612,7 +2568,6 @@ fn bench_default_to(c: &mut Criterion) {
         ClarityCostFunction::DefaultTo,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2623,7 +2578,6 @@ fn bench_try(c: &mut Criterion) {
         ClarityCostFunction::TryRet,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2634,7 +2588,6 @@ fn bench_int_cast(c: &mut Criterion) {
         ClarityCostFunction::IntCast,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2651,7 +2604,6 @@ fn bench_fetch_entry(c: &mut Criterion) {
         ClarityCostFunction::FetchEntry,
         SCALE.into(),
         Some(INPUT_SIZES_DATA.into()),
-        false,
         None,
     )
 }
@@ -2662,13 +2614,12 @@ fn bench_match(c: &mut Criterion) {
         ClarityCostFunction::Match,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
 
 fn bench_let(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Let, SCALE.into(), Some(INPUT_SIZES.into()), false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Let, SCALE.into(), Some(INPUT_SIZES.into()), None)
 }
 
 fn bench_index_of(c: &mut Criterion) {
@@ -2677,7 +2628,6 @@ fn bench_index_of(c: &mut Criterion) {
         ClarityCostFunction::IndexOf,
         SCALE.into(),
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -2688,13 +2638,12 @@ fn bench_element_at(c: &mut Criterion) {
         ClarityCostFunction::ElementAt,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
 
 fn bench_len(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Len, SCALE.into(), None, false, None)
+    bench_with_input_sizes(c, ClarityCostFunction::Len, SCALE.into(), None, None)
 }
 
 fn bench_list_cons(c: &mut Criterion) {
@@ -2703,7 +2652,6 @@ fn bench_list_cons(c: &mut Criterion) {
         ClarityCostFunction::ListCons,
         SCALE.into(),
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -2714,7 +2662,6 @@ fn bench_append(c: &mut Criterion) {
         ClarityCostFunction::Append,
         SCALE.into(),
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -2725,7 +2672,6 @@ fn bench_filter(c: &mut Criterion) {
         ClarityCostFunction::Filter,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2737,7 +2683,6 @@ fn bench_map(c: &mut Criterion) {
         ClarityCostFunction::Map,
         SCALE.into(),
         Some(INPUT_SIZES.into()),
-        false,
         None,
     )
 }
@@ -2748,7 +2693,6 @@ fn bench_fold(c: &mut Criterion) {
         ClarityCostFunction::Fold,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -2759,7 +2703,6 @@ fn bench_block_info(c: &mut Criterion) {
         ClarityCostFunction::BlockInfo,
         SCALE.into(),
         None,
-        true,
         None,
     )
 }
@@ -2770,7 +2713,6 @@ fn bench_at_block(c: &mut Criterion) {
         ClarityCostFunction::AtBlock,
         SCALE.into(),
         None,
-        true,
         None,
     )
 }
@@ -2841,19 +2783,13 @@ fn bench_type_parse_step(c: &mut Criterion) {
 }
 
 fn bench_stx_transfer(c: &mut Criterion) {
-    let make_store = || {
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db = memory_backing_store.as_clarity_db();
-
-        let mut env = OwnedEnvironment::new_free(false, 0, clarity_db, StacksEpochId::Epoch21);
+    let make_store = |env: &mut OwnedEnvironment| {
         let principal_data = env.eval_raw("tx-sender").unwrap().0;
         if let Value::Principal(pd) = principal_data {
             env.stx_faucet(&pd, 100000000000);
         } else {
             panic!();
         }
-
-        memory_backing_store
     };
 
     bench_with_input_sizes(
@@ -2861,23 +2797,15 @@ fn bench_stx_transfer(c: &mut Criterion) {
         ClarityCostFunction::StxTransfer,
         SCALE.into(),
         None,
-        false,
         Some(Box::new(make_store)),
     )
 }
 
 fn bench_stx_get_balance(c: &mut Criterion) {
-    let make_store = || {
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db = memory_backing_store.as_clarity_db();
-
-        let mut env = OwnedEnvironment::new_free(false, 0, clarity_db, StacksEpochId::Epoch21);
-
+    let make_store = |env: &mut OwnedEnvironment| {
         let addr = StacksAddress::from_string("S1G2081040G2081040G2081040G208105NK8PE5").unwrap();
         let principal = PrincipalData::from(addr);
         env.stx_faucet(&principal, 1000);
-
-        memory_backing_store
     };
 
     bench_with_input_sizes(
@@ -2885,7 +2813,6 @@ fn bench_stx_get_balance(c: &mut Criterion) {
         ClarityCostFunction::StxBalance,
         SCALE.into(),
         None,
-        false,
         Some(Box::new(make_store)),
     )
 }
@@ -2948,18 +2875,12 @@ fn bench_contract_call(c: &mut Criterion) {
         ClarityCostFunction::ContractCall,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
 
 fn bench_contract_of(c: &mut Criterion) {
-    let make_store = || {
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db = memory_backing_store.as_clarity_db();
-
-        let mut env = OwnedEnvironment::new_free(false, 0, clarity_db, StacksEpochId::Epoch21);
-
+    let make_store = |env: &mut OwnedEnvironment| {
         let define_identifier =
             QualifiedContractIdentifier::local("define-trait-contract").unwrap();
         let define_contract = "(define-trait trait-1 ((get-1 (uint) (response uint uint))))";
@@ -2978,8 +2899,6 @@ fn bench_contract_of(c: &mut Criterion) {
                 (ok (contract-of contract)))";
         env.initialize_contract(use_identifier, use_contract, None)
             .unwrap();
-
-        memory_backing_store
     };
 
     bench_with_input_sizes(
@@ -2987,7 +2906,6 @@ fn bench_contract_of(c: &mut Criterion) {
         ClarityCostFunction::ContractOf,
         SCALE.into(),
         None,
-        false,
         Some(Box::new(make_store)),
     )
 }
@@ -2997,17 +2915,10 @@ fn bench_contract_of(c: &mut Criterion) {
 /////////////////////////////////
 
 fn bench_stx_get_account(c: &mut Criterion) {
-    let make_store = || {
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db = memory_backing_store.as_clarity_db();
-
-        let mut env = OwnedEnvironment::new_free(false, 0, clarity_db, StacksEpochId::Epoch21);
-
+    let make_store = |env: &mut OwnedEnvironment| {
         let addr = StacksAddress::from_string("S1G2081040G2081040G2081040G208105NK8PE5").unwrap();
         let principal = PrincipalData::from(addr);
         env.stx_faucet(&principal, 1000);
-
-        memory_backing_store
     };
 
     bench_with_input_sizes(
@@ -3015,7 +2926,6 @@ fn bench_stx_get_account(c: &mut Criterion) {
         ClarityCostFunction::StxGetAccount,
         SCALE.into(),
         None,
-        false,
         Some(Box::new(make_store)),
     )
 }
@@ -3026,7 +2936,6 @@ fn bench_buff_to_int_le(c: &mut Criterion) {
         ClarityCostFunction::BuffToIntLe,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3037,7 +2946,6 @@ fn bench_buff_to_uint_le(c: &mut Criterion) {
         ClarityCostFunction::BuffToUIntLe,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3048,7 +2956,6 @@ fn bench_buff_to_int_be(c: &mut Criterion) {
         ClarityCostFunction::BuffToIntBe,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3059,7 +2966,6 @@ fn bench_buff_to_uint_be(c: &mut Criterion) {
         ClarityCostFunction::BuffToUIntBe,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3070,7 +2976,6 @@ fn bench_is_standard(c: &mut Criterion) {
         ClarityCostFunction::IsStandard,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3081,7 +2986,6 @@ fn bench_principal_destruct(c: &mut Criterion) {
         ClarityCostFunction::PrincipalDestruct,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3092,7 +2996,6 @@ fn bench_principal_construct(c: &mut Criterion) {
         ClarityCostFunction::PrincipalConstruct,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3103,7 +3006,6 @@ fn bench_string_to_int(c: &mut Criterion) {
         ClarityCostFunction::StringToInt,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3114,7 +3016,6 @@ fn bench_string_to_uint(c: &mut Criterion) {
         ClarityCostFunction::StringToUInt,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3125,7 +3026,6 @@ fn bench_int_to_ascii(c: &mut Criterion) {
         ClarityCostFunction::IntToAscii,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3136,7 +3036,6 @@ fn bench_int_to_utf8(c: &mut Criterion) {
         ClarityCostFunction::IntToUtf8,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3147,7 +3046,6 @@ fn bench_slice(c: &mut Criterion) {
         ClarityCostFunction::Slice,
         SCALE.into(),
         None,
-        false,
         None,
     )
 }
@@ -3158,7 +3056,6 @@ fn bench_to_consensus_buff(c: &mut Criterion) {
         ClarityCostFunction::ToConsensusBuff,
         SCALE.into(),
         Some(INPUT_SIZES_DATA.into()),
-        false,
         None,
     )
 }
@@ -3169,25 +3066,18 @@ fn bench_from_consensus_buff(c: &mut Criterion) {
         ClarityCostFunction::FromConsensusBuff,
         SCALE.into(),
         Some(INPUT_SIZES_DATA.into()),
-        false,
         None,
     )
 }
 
 fn bench_stx_transfer_memo(c: &mut Criterion) {
-    let make_store = || {
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db = memory_backing_store.as_clarity_db();
-
-        let mut env = OwnedEnvironment::new_free(false, 0, clarity_db, StacksEpochId::Epoch21);
+    let make_store = |env: &mut OwnedEnvironment| {
         let principal_data = env.eval_raw("tx-sender").unwrap().0;
         if let Value::Principal(pd) = principal_data {
             env.stx_faucet(&pd, 100000000000);
         } else {
             panic!();
         }
-
-        memory_backing_store
     };
 
     bench_with_input_sizes(
@@ -3195,7 +3085,6 @@ fn bench_stx_transfer_memo(c: &mut Criterion) {
         ClarityCostFunction::StxTransferMemo,
         SCALE.into(),
         None,
-        false,
         Some(Box::new(make_store)),
     )
 }
@@ -3206,7 +3095,6 @@ fn bench_get_burn_block_info(c: &mut Criterion) {
         ClarityCostFunction::GetBurnBlockInfo,
         SCALE.into(),
         None,
-        true,
         None,
     )
 }
@@ -3263,7 +3151,7 @@ criterion_group!(
     // bench_create_var, // g
     // bench_set_var,    // g
     // bench_fetch_var,  // g
-    // bench_print,
+    bench_print,
     // bench_if,
     // bench_asserts,
     // bench_ok_cons,
@@ -3290,7 +3178,7 @@ criterion_group!(
     // bench_at_block,
     // bench_load_contract,
     // bench_map,
-    bench_block_info,
+    // bench_block_info,
     // bench_lookup_variable_depth,
     // bench_lookup_variable_size,
     // bench_lookup_function,
@@ -3344,7 +3232,7 @@ criterion_group!(
     // bench_int_to_utf8,
     // bench_stx_get_account,
     // bench_stx_transfer_memo,
-    bench_get_burn_block_info,
+    // bench_get_burn_block_info,
 );
 
 criterion_main!(benches);
