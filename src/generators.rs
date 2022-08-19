@@ -41,6 +41,11 @@ fn size_of_value(s: String) -> u64 {
     v.serialize().len() as u64 / 2
 }
 
+fn serialized_size(s: String) -> u64 {
+    let v = string_to_value(s);
+    v.serialized_size() as u64
+}
+
 #[derive(Debug)]
 pub struct GenOutput {
     pub setup: Option<String>,
@@ -78,21 +83,25 @@ fn make_tuple_pair(pairs: u64) -> Value {
     Value::Tuple(td)
 }
 
+pub fn make_sized_value(input_size: u64) -> Value{
+    match input_size {
+        1 => Value::Bool(true),
+        2 => Value::some(Value::Bool(true)).unwrap(),
+        8 => Value::Sequence(SequenceData::String(CharType::ASCII(ASCIIData {
+            data: vec![5, 9, 10, 6],
+        }))),
+        n => {
+            // assuming n is a multiple of 16
+            let mult = n / 16;
+            make_tuple_pair(mult)
+        }
+    }
+}
+
 pub fn make_sized_values_map(input_sizes: Vec<u64>) -> HashMap<u64, Value> {
     let mut ret_map = HashMap::new();
     for i in input_sizes {
-        let val = match i {
-            1 => Value::Bool(true),
-            2 => Value::some(Value::Bool(true)).unwrap(),
-            8 => Value::Sequence(SequenceData::String(CharType::ASCII(ASCIIData {
-                data: vec![5, 9, 10, 6],
-            }))),
-            n => {
-                // assuming n is a multiple of 16
-                let mult = n / 16;
-                make_tuple_pair(mult)
-            }
-        };
+        let val = make_sized_value(i);
         ret_map.insert(i, val);
     }
     ret_map
@@ -512,7 +521,7 @@ fn gen_hash(function_name: &'static str, scale: u16, input_size: u64) -> GenOutp
         body.push_str(&*format!("({} {}) ", function_name, arg));
     }
 
-    GenOutput::new(None, body, size_of_value(arg))
+    GenOutput::new(None, body, serialized_size(arg))
 }
 
 
@@ -1036,7 +1045,7 @@ fn gen_tuple_merge(scale: u16, input_size: u64) -> GenOutput {
             "(let ((tuple-a {}) (tuple-b {})) {})",
             tuple_a, tuple_b, body
         ),
-        size_of_value(tuple_a) + size_of_value(tuple_b),
+        serialized_size(tuple_a) + serialized_size(tuple_b),
     )
 }
 
@@ -1395,7 +1404,7 @@ fn gen_var_set(scale: u16, input_size: u64) -> GenOutput {
     let var_set = format!("(var-set {} input-value) ", var_name);
     setup.push_str(&helper_gen_execute_fn(scale, var_set, clarity_type));
 
-    GenOutput::new(Some(setup), body, length)
+    GenOutput::new(Some(setup), body, clarity_value.1)
 }
 
 /// cost_function: SetVar
@@ -1427,6 +1436,7 @@ fn gen_var_get(scale: u16, input_size: u64) -> GenOutput {
 
 /// cost_function: Print
 /// input_size: dynamic size of data being printed
+///    `TypeSignature::type_of(self).size()`
 fn gen_print(scale: u16, input_size: u64) -> GenOutput {
     let body = String::new();
     let mut setup = String::new();
@@ -1439,11 +1449,12 @@ fn gen_print(scale: u16, input_size: u64) -> GenOutput {
         length,
         Some("uint"),
     );
+    let size = string_to_value(clarity_value.0).size();
 
     let print = format!("(print input-value) ");
     setup.push_str(&helper_gen_execute_fn(scale, print, clarity_type));
 
-    GenOutput::new(Some(setup), body, clarity_value.1)
+    GenOutput::new(Some(setup), body, size as u64)
 }
 
 /// cost_function:
@@ -1455,7 +1466,7 @@ fn gen_single_clar_value(function_name: &'static str, scale: u16, input_size: Op
     let mut body = String::new();
 
     let l = helper_gen_clarity_list_size(input_size.unwrap_or(20));
-    let l_size = size_of_value(l.clone());
+    let l_size = serialized_size(l.clone());
 
     for _ in 0..scale {
         let arg = match input_size {
@@ -1720,7 +1731,7 @@ fn helper_generate_random_sequence() -> (String, usize, String) {
 }
 
 /// cost_function: IndexOf
-/// input_size: the
+/// input_size: the sum of the len of the serialized versions of the args
 fn gen_index_of(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
@@ -1733,7 +1744,9 @@ fn gen_index_of(scale: u16, input_size: u64) -> GenOutput {
         body.push_str(&statement);
     }
 
-    GenOutput::new(None, body, seq.1 + item_val.1)
+    let size = string_to_value(seq.0).serialized_size() + string_to_value(item_val.0).serialized_size();
+
+    GenOutput::new(None, body, size as u64)
 }
 
 /// cost_function: ElementAt
@@ -1944,20 +1957,10 @@ fn gen_type_sig_size(input_size: u64) -> GenOutput {
 /// cost_function: AnalysisListItemsCheck
 /// input_size: type signature size of item
 ///     `type_arg.type_size()`
-fn gen_analysis_list_items_check(scale: u16, input_size: u64) -> GenOutput {
-    let mut body = String::new();
-    for i in 0..scale {
-        let (base_type, _) = helper_gen_clarity_type(true, false, true);
-        body.push_str("(");
-        for _ in 0..input_size {
-            let base_val = helper_gen_clarity_value(&base_type, i, 0, None);
-            body.push_str(&*format!("{} ", base_val.0));
-        }
-        body.push_str(") ");
-    }
-    
+fn gen_analysis_list_items_check(_scale: u16, input_size: u64) -> GenOutput {
+    let type_size = make_sized_type_sig(input_size).type_size().unwrap();
 
-    GenOutput::new(None, body, input_size)
+    GenOutput::new(None, String::new(), type_size as u64)
 }
 
 /// cost_function: AnalysisCheckTupleGet
@@ -2538,16 +2541,18 @@ pub fn gen_from_consensus_buff(function_name: &'static str, scale: u16, input_si
     let mut rng = rand::thread_rng();
     let mut body = String::new();
 
-    let clar_value = helper_make_value_for_sized_type_sig(input_size).serialize_to_vec();
+    let clar_value = make_sized_value(input_size).serialize_to_vec();
     let len = clar_value.len();
 
     for _ in 0..scale {
-        let clar_value = helper_make_value_for_sized_type_sig(input_size).serialize_to_vec();
+        // let clar_value = helper_make_value_for_sized_type_sig(input_size).serialize_to_vec();
+        let clar_value = make_sized_value(input_size).serialize_to_vec();
+        let clar_type = make_clarity_type_for_sized_value(input_size);
         let clar_buff_serialized = match Value::buff_from(clar_value) {
             Ok(x) => x,
             Err(_) => panic!()
         };
-        body.push_str(&*format!("({} {}) ", function_name, clar_buff_serialized));
+        body.push_str(&*format!("({} {} {}) ", function_name, clar_type, clar_buff_serialized));
     }
     println!("{}", body);
 

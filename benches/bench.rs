@@ -3065,7 +3065,7 @@ fn bench_from_consensus_buff(c: &mut Criterion) {
         c,
         ClarityCostFunction::FromConsensusBuff,
         SCALE.into(),
-        Some(INPUT_SIZES_DATA.into()),
+        Some(INPUT_SIZES.into()),
         None,
     )
 }
@@ -3151,7 +3151,7 @@ criterion_group!(
     // bench_create_var, // g
     // bench_set_var,    // g
     // bench_fetch_var,  // g
-    bench_print,
+    // bench_print,
     // bench_if,
     // bench_asserts,
     // bench_ok_cons,
@@ -3233,6 +3233,9 @@ criterion_group!(
     // bench_stx_get_account,
     // bench_stx_transfer_memo,
     // bench_get_burn_block_info,
+    // bench_slice,
+    // bench_to_consensus_buff,
+    bench_from_consensus_buff,
 );
 
 criterion_main!(benches);

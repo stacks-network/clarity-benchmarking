@@ -36,6 +36,8 @@ matched_functions = [
     ('cost_mul', 'cost_div'),
     ('cost_ok_cons', 'cost_err_cons', 'cost_some_cons'),
     ('cost_or', 'cost_and'),
+    ('cost_buff_to_int_le', 'cost_buff_to_uint_le', 'cost_buff_to_int_be', 'cost_buff_to_uint_be'),
+    ('cost_string_to_int', 'cost_string_to_uint')
 ]
 
 matched_functions_lookup = {}

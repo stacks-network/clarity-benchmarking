@@ -230,7 +230,6 @@ def main():
     estimate_plot(df, 'cost_buff_to_int_le', output)
     estimate_plot(df, 'cost_buff_to_uint_le', output)
     estimate_plot(df, 'cost_buff_to_int_be', output)
-    estimate_plot(df, 'cost_buff_to_int_le', output)
     estimate_plot(df, 'cost_buff_to_uint_be', output)
     estimate_plot(df, 'cost_is_standard', output)
     estimate_plot(df, 'cost_principal_destruct', output)
@@ -243,7 +242,7 @@ def main():
     estimate_plot(df, 'cost_stx_account', output)
     estimate_plot(df, 'cost_slice', output)
     estimate_plot(df, 'cost_to_consensus_buff', output)
-    estimate_plot(df, 'cost_from_consensus_buff', output)
+    estimate_plot(df, 'cost_from_consensus_buff', output, nlogn)
     estimate_plot(df, 'cost_stx_transfer_memo', output)
 
     os.makedirs("analysis_target", exist_ok=True)
