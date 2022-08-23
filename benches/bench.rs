@@ -60,6 +60,7 @@ use rand::{thread_rng, Rng};
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::time::Duration;
 use blockstack_lib::clarity::types::{StacksEpochId, Address};
 use blockstack_lib::chainstate::burn::db::sortdb::SortitionDB;
 use blockstack_lib::clarity_vm::database::marf::ReadOnlyMarfStore;
@@ -177,7 +178,7 @@ fn run_bench<'a, F>(
 ) where
     F: Fn(&ContractAST, &mut GlobalContext, &mut ContractContext),
 {
-
+    // Set up MarfedKV
     let miner_tip = StacksBlockHeader::make_index_block_hash(
         &MINER_BLOCK_CONSENSUS_HASH,
         &MINER_BLOCK_HEADER_HASH,
@@ -185,6 +186,7 @@ fn run_bench<'a, F>(
     let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
 
     // Set up Clarity Backing Store
+    // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
     let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
     let new_tip = StacksBlockId::from([5;32]);
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
@@ -295,11 +297,19 @@ fn bench_analysis<F, G>(
             }
         };
 
-        let mut memory_backing_store = MemoryBackingStore::new();
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         let mut local_context = TypingContext::new();
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut analysis_db = memory_backing_store.as_analysis_db();
+        let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &ClarityVersion::Clarity2);
 
         group.throughput(Throughput::Bytes(computed_input_size as u64));
@@ -354,8 +364,20 @@ where
             ClarityVersion::Clarity2
         );
 
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let mut analysis_db = memory_backing_store.as_analysis_db();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
 
         analysis_db.execute::<_, _, ()>(|db| {
             group.throughput(Throughput::Bytes(contract_size as u64));
@@ -452,8 +474,20 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             ClarityVersion::Clarity2
         );
 
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let mut analysis_db = memory_backing_store.as_analysis_db();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
 
         // add defined traits to pre contract analysis
         let mut cost_tracker = LimitedCostTracker::new_free();
@@ -555,8 +589,21 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             ClarityVersion::Clarity2
         );
 
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let mut analysis_db = memory_backing_store.as_analysis_db();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
+
 
         // add defined traits to pre contract analysis
         let mut cost_tracker = LimitedCostTracker::new_free();
@@ -601,8 +648,21 @@ fn helper_deepen_typing_context(
         helper_deepen_typing_context(i - 1, input_size, &context.extend().unwrap(), group);
     } else {
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let mut analysis_db = memory_backing_store.as_analysis_db();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
+
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &ClarityVersion::Clarity2);
 
         group.throughput(Throughput::Bytes(input_size as u64));
@@ -639,8 +699,29 @@ fn helper_deepen_local_context(
     if i != 0 {
         helper_deepen_local_context(i - 1, input_size, &context.extend().unwrap(), group);
     } else {
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db = memory_backing_store.as_clarity_db();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        // Set up BurnStateDB
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+        let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+        let sort_tx = sort_db.index_conn();
+
+        // Set up HeaderDB
+        let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+        let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
+
         let mut global_context =
             GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
         global_context.begin();
@@ -725,10 +806,28 @@ fn bench_contract_storage(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
     for input_size in &INPUT_SIZES {
-        let headers_db = SimHeadersDB::new();
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db =
-            ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        // Set up BurnStateDB
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+        let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+        let sort_tx = sort_db.index_conn();
+
+        // Set up HeaderDB
+        let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+        let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
         let mut global_context =
             GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
@@ -788,8 +887,28 @@ fn bench_principal_of(c: &mut Criterion) {
     let function = ClarityCostFunction::PrincipalOf;
     let mut group = c.benchmark_group(function.to_string());
 
-    let mut memory_backing_store = MemoryBackingStore::new();
-    let clarity_db = memory_backing_store.as_clarity_db();
+    // Set up MarfedKV
+    let miner_tip = StacksBlockHeader::make_index_block_hash(
+        &MINER_BLOCK_CONSENSUS_HASH,
+        &MINER_BLOCK_HEADER_HASH,
+    );
+    let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+    // Set up Clarity Backing Store
+    // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+    let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+    let new_tip = StacksBlockId::from([5;32]);
+    let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+    // Set up BurnStateDB
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+    let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+    let sort_tx = sort_db.index_conn();
+
+    // Set up HeaderDB
+    let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+    let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
+
     let mut global_context = GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
     global_context.begin();
 
@@ -835,9 +954,20 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let mut memory_backing_store = MemoryBackingStore::new();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
 
-        let mut analysis_db = memory_backing_store.as_analysis_db();
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+        let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
+
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &ClarityVersion::Clarity2);
 
@@ -912,9 +1042,20 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let mut memory_backing_store = MemoryBackingStore::new();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
 
-        let mut analysis_db = memory_backing_store.as_analysis_db();
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &ClarityVersion::Clarity2);
 
@@ -992,8 +1133,28 @@ fn bench_inner_type_check_cost(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db = memory_backing_store.as_clarity_db();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        // Set up BurnStateDB
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+        let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+        let sort_tx = sort_db.index_conn();
+
+        // Set up HeaderDB
+        let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+        let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
+
         let mut global_context =
             GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
         global_context.begin();
@@ -1042,8 +1203,29 @@ fn bench_user_function_application(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
     for input_size in &INPUT_SIZES {
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db = memory_backing_store.as_clarity_db();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        // Set up BurnStateDB
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+        let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+        let sort_tx = sort_db.index_conn();
+
+        // Set up HeaderDB
+        let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+        let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
+
         let mut global_context =
             GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
         global_context.begin();
@@ -1094,8 +1276,28 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db = memory_backing_store.as_clarity_db();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        // Set up BurnStateDB
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+        let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+        let sort_tx = sort_db.index_conn();
+
+        // Set up HeaderDB
+        let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+        let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
+
         let mut global_context =
             GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
         global_context.begin();
@@ -1162,10 +1364,28 @@ fn bench_lookup_function(c: &mut Criterion) {
     let function = ClarityCostFunction::LookupFunction;
     let mut group = c.benchmark_group(function.to_string());
 
-    let headers_db = SimHeadersDB::new();
-    let mut memory_backing_store = MemoryBackingStore::new();
-    let clarity_db =
-        ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
+    // Set up MarfedKV
+    let miner_tip = StacksBlockHeader::make_index_block_hash(
+        &MINER_BLOCK_CONSENSUS_HASH,
+        &MINER_BLOCK_HEADER_HASH,
+    );
+    let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+    // Set up Clarity Backing Store
+    // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+    let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+    let new_tip = StacksBlockId::from([5;32]);
+    let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+    // Set up BurnStateDB
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+    let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+    let sort_tx = sort_db.index_conn();
+
+    // Set up HeaderDB
+    let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+    let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
     let mut global_context = GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
     global_context.begin();
@@ -1225,8 +1445,29 @@ fn bench_lookup_variable_size(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db = memory_backing_store.as_clarity_db();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        // Set up BurnStateDB
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+        let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+        let sort_tx = sort_db.index_conn();
+
+        // Set up HeaderDB
+        let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+        let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
+
         let mut global_context =
             GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
         global_context.begin();
@@ -1700,8 +1941,20 @@ fn bench_analysis_storage(c: &mut Criterion) {
 
         // use warmed up marf
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let mut analysis_db = memory_backing_store.as_analysis_db();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &ClarityVersion::Clarity2);
 
         let mut contract_analyses = Vec::new();
@@ -2071,11 +2324,28 @@ fn bench_create_ft(c: &mut Criterion) {
     let function = ClarityCostFunction::CreateFt;
     let mut group = c.benchmark_group(function.to_string());
 
-    let headers_db = SimHeadersDB::new();
-    let mut memory_backing_store = MemoryBackingStore::new();
+    // Set up MarfedKV
+    let miner_tip = StacksBlockHeader::make_index_block_hash(
+        &MINER_BLOCK_CONSENSUS_HASH,
+        &MINER_BLOCK_HEADER_HASH,
+    );
+    let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
 
-    let clarity_db =
-        ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
+    // Set up Clarity Backing Store
+    // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+    let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+    let new_tip = StacksBlockId::from([5;32]);
+    let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+    // Set up BurnStateDB
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+    let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+    let sort_tx = sort_db.index_conn();
+
+    // Set up HeaderDB
+    let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+    let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
     let mut global_context = GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
     global_context.begin();
@@ -2149,11 +2419,28 @@ fn bench_create_nft(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let mut memory_backing_store = MemoryBackingStore::new();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
 
-        let headers_db = SimHeadersDB::new();
-        let clarity_db =
-            ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        // Set up BurnStateDB
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+        let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+        let sort_tx = sort_db.index_conn();
+
+        // Set up HeaderDB
+        let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+        let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
         let mut global_context =
             GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
@@ -2310,11 +2597,28 @@ fn bench_create_map(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let headers_db = SimHeadersDB::new();
-        let mut memory_backing_store = MemoryBackingStore::new();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
 
-        let clarity_db =
-            ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        // Set up BurnStateDB
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+        let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+        let sort_tx = sort_db.index_conn();
+
+        // Set up HeaderDB
+        let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+        let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
         let mut global_context =
             GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
@@ -2354,11 +2658,28 @@ fn bench_create_var(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let headers_db = SimHeadersDB::new();
-        let mut memory_backing_store = MemoryBackingStore::new();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
 
-        let clarity_db =
-            ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        // Set up BurnStateDB
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+        let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+        let sort_tx = sort_db.index_conn();
+
+        // Set up HeaderDB
+        let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+        let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
         let mut global_context =
             GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
@@ -2395,8 +2716,29 @@ fn bench_create_var(c: &mut Criterion) {
 
 fn bench_wrapped_data_function(mut group: BenchmarkGroup<WallTime>, cost_function: ClarityCostFunction, input_sizes: Vec<u64>, scale: u16) {
     for input_size in input_sizes.iter() {
-        let mut memory_backing_store = MemoryBackingStore::new();
-        let clarity_db = memory_backing_store.as_clarity_db();
+        // Set up MarfedKV
+        let miner_tip = StacksBlockHeader::make_index_block_hash(
+            &MINER_BLOCK_CONSENSUS_HASH,
+            &MINER_BLOCK_HEADER_HASH,
+        );
+        let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+        // Set up Clarity Backing Store
+        // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+        let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+        let new_tip = StacksBlockId::from([5;32]);
+        let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+        // Set up BurnStateDB
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+        let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+        let sort_tx = sort_db.index_conn();
+
+        // Set up HeaderDB
+        let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+        let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
+
 
         let mut global_context = GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
         global_context.begin();
@@ -2720,10 +3062,28 @@ fn bench_at_block(c: &mut Criterion) {
 fn bench_load_contract(c: &mut Criterion) {
     let mut group = c.benchmark_group(ClarityCostFunction::LoadContract.to_string());
 
-    let headers_db = SimHeadersDB::new();
-    let mut memory_backing_store = MemoryBackingStore::new();
-    let clarity_db =
-        ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
+    // Set up MarfedKV
+    let miner_tip = StacksBlockHeader::make_index_block_hash(
+        &MINER_BLOCK_CONSENSUS_HASH,
+        &MINER_BLOCK_HEADER_HASH,
+    );
+    let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+    // Set up Clarity Backing Store
+    // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+    let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+    let new_tip = StacksBlockId::from([5;32]);
+    let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+    // Set up BurnStateDB
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+    let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+    let sort_tx = sort_db.index_conn();
+
+    // Set up HeaderDB
+    let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+    let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
     let mut owned_env = OwnedEnvironment::new_free(true,  0,clarity_db, StacksEpochId::Epoch21);
     owned_env.begin();
@@ -2820,10 +3180,28 @@ fn bench_stx_get_balance(c: &mut Criterion) {
 fn bench_poison_microblock(c: &mut Criterion) {
     let mut group = c.benchmark_group(ClarityCostFunction::PoisonMicroblock.to_string());
 
-    let headers_db = SimHeadersDB::new();
-    let mut memory_backing_store = MemoryBackingStore::new();
-    let clarity_db =
-        ClarityDatabase::new(&mut memory_backing_store, &headers_db, &NULL_BURN_STATE_DB);
+    // Set up MarfedKV
+    let miner_tip = StacksBlockHeader::make_index_block_hash(
+        &MINER_BLOCK_CONSENSUS_HASH,
+        &MINER_BLOCK_HEADER_HASH,
+    );
+    let mut marfed_kv = MarfedKV::open("./db/clarity/", Some(&miner_tip), None).unwrap();
+
+    // Set up Clarity Backing Store
+    // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
+    let read_tip = StacksBlockId::from_hex("70c108deda11bba2ef07644a095e249d042b97bee47733426dccc0e88e3687b1").unwrap();
+    let new_tip = StacksBlockId::from([5;32]);
+    let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
+
+    // Set up BurnStateDB
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u32::max_value());
+    let sort_db = SortitionDB::open("./db/sortition/", false, pox_constants).unwrap();
+    let sort_tx = sort_db.index_conn();
+
+    // Set up HeaderDB
+    let headers_db = StacksChainState::open_db(false, 2147483648, "./db/index.sqlite").unwrap();
+
+    let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
     let mut owned_env = OwnedEnvironment::new_free(true, 0, clarity_db, StacksEpochId::Epoch21);
     owned_env.begin();
@@ -3100,7 +3478,9 @@ fn bench_get_burn_block_info(c: &mut Criterion) {
 }
 
 criterion_group!(
-    benches,
+    name = benches;
+    config = Criterion::default().measurement_time(Duration::from_secs(10));
+    targets =
     bench_add,
     bench_sub,
     bench_mul,
@@ -3179,7 +3559,7 @@ criterion_group!(
     bench_load_contract,
     bench_map,
     bench_block_info,
-    bench_lookup_variable_depth,
+    bench_lookup_variable_depth, *****
     bench_lookup_variable_size,
     bench_lookup_function,
     bench_type_parse_step,

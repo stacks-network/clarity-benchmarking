@@ -2576,12 +2576,11 @@ pub fn gen_stx_get_account(function_name: &'static str, scale: u16) -> GenOutput
 fn gen_get_burn_block_info(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
 
-    // must use block 5 here b/c it has a hardcoded id_bhh
-    // TODO: consider hardcoding more id_bhhs and making this random
     // NOTE: the property is hardcoded here since this function currently only supports
     // querying the property `header-hash`.
-    for _ in 0..scale {
-        body.push_str(&*format!("({} header-hash u6) ", function_name))
+    for i in 0..scale {
+        let height = i % 2 + 5;
+        body.push_str(&*format!("({} header-hash u{}) ", function_name, height))
     }
 
     GenOutput::new(None, body, 1)
