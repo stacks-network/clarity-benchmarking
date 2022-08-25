@@ -211,6 +211,7 @@ fn run_bench<'a, F>(
     let mut global_context = GlobalContext::new(false, 0,clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
     global_context.begin();
 
+
     let GenOutput {
         setup: pre_contract_opt,
         body: contract,
@@ -2812,12 +2813,6 @@ fn bench_fetch_var(c: &mut Criterion) {
         Some(INPUT_SIZES_DATA.into()),
         None,
     )
-}
-
-fn bench_print_v1(c: &mut Criterion) {
-    let cost_function = ClarityCostFunction::Print;
-    let group = c.benchmark_group(cost_function.to_string());
-    bench_wrapped_data_function(group, cost_function, INPUT_SIZES_DATA.into(), SCALE)
 }
 
 fn bench_print(c: &mut Criterion) {

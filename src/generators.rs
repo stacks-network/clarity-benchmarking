@@ -1439,25 +1439,13 @@ fn gen_var_get(scale: u16, input_size: u64) -> GenOutput {
 ///    `TypeSignature::type_of(self).size()`
 fn gen_print(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
-    // let mut setup = String::new();
 
-    let (clarity_type, length) = helper_gen_clarity_list_type(input_size);
+    let clar_val = helper_make_clarity_value_for_sized_type_sig(input_size);
 
-    let clarity_value = helper_gen_clarity_value(
-        "list",
-        0,
-        length,
-        Some("uint"),
-    );
-
-
-    // let print = format!("(print input-value) ");
     for _ in 0..scale {
-        body.push_str(&* format!("(print {}) ", clarity_value.0));
+        body.push_str(&* format!("(print {}) ", clar_val));
     }
-    // setup.push_str(&helper_gen_execute_fn(scale, print, clarity_type));
-    println!("{}", body);
-    let size = string_to_value(clarity_value.0).size();
+    let size = string_to_value(clar_val).size();
 
     GenOutput::new(None, body, size as u64)
 }
@@ -1558,8 +1546,8 @@ fn helper_generate_sequences(list_type: &str, output: u16) -> Vec<String> {
 fn gen_concat(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
 
-    let value_size = make_sized_type_sig(input_size).size();
-    assert!(value_size < u16::MAX as u32);
+    let size = string_to_value(helper_make_clarity_value_for_sized_type_sig(input_size)).size() * 2;
+    assert!(size < u16::MAX as u32);
     for _ in 0..scale {
         let first_val = helper_make_clarity_value_for_sized_type_sig(input_size);
         let second_val = helper_make_clarity_value_for_sized_type_sig(input_size);
@@ -1568,9 +1556,8 @@ fn gen_concat(function_name: &'static str, scale: u16, input_size: u64) -> GenOu
             function_name, first_val, second_val
         ));
     }
-    
 
-    GenOutput::new(None, body, value_size as u64)
+    GenOutput::new(None, body, size as u64)
 }
 
 /// cost_function: AsMaxLen
