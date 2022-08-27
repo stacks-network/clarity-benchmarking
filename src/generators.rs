@@ -1897,10 +1897,9 @@ fn gen_get_block_info(scale: u16) -> GenOutput {
         "vrf-seed",
     ];
 
-    // must use block 5 here b/c it has a hardcoded id_bhh
-    // TODO: consider hardcoding more id_bhhs and making this random
-    for _ in 0..scale {
-        body.push_str(format!("(get-block-info? {} u5) ", props.choose(&mut rng).unwrap()).as_str())
+    for i in 0..scale {
+        let height = i % 2 + 5;
+        body.push_str(format!("(get-block-info? {} u{}) ", props.choose(&mut rng).unwrap(), height).as_str())
     }
 
     GenOutput::new(None, body, 1)
@@ -1913,7 +1912,7 @@ fn gen_at_block(scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str("(at-block 0xbffb33593b67d502fa2e0ec0d8db200aa265054f638908c6cbc726a6e1854fa1 (no-op)) ");
+        body.push_str("(at-block 0xb25a3acac74ff29c5d0608c7ddb33c6b96fa20eab6ef90dac404d12be071d1f6 (no-op)) ");
     }
 
     GenOutput::new(None, body, 1)
@@ -2563,16 +2562,23 @@ pub fn gen_stx_get_account(function_name: &'static str, scale: u16) -> GenOutput
     GenOutput::new(None, body, 1)
 }
 
-/// cost_function: BlockInfo
+/// cost_function: GetBurnBlockInfo
 /// input_size: 0
 fn gen_get_burn_block_info(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
+    let mut rng = rand::thread_rng();
 
-    // NOTE: the property is hardcoded here since this function currently only supports
-    // querying the property `header-hash`.
+    let props = [
+        "header-hash",
+        "pox-addrs"
+    ];
     for i in 0..scale {
         let height = i % 2 + 5;
-        body.push_str(&*format!("({} header-hash u{}) ", function_name, height))
+        body.push_str(
+            &*format!("({} {} u{}) ",
+                      function_name,
+                      props.choose(&mut rng).unwrap(), height)
+        )
     }
 
     GenOutput::new(None, body, 1)
