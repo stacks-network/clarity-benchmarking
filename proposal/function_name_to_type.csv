@@ -96,9 +96,6 @@ cost_string_to_int, constant
 cost_string_to_uint, constant
 cost_int_to_ascii, constant
 cost_int_to_utf8, constant
-cost_burn_block_info, constant
-cost_stx_account, constant
 cost_slice, constant
 cost_to_consensus_buff, linear
 cost_from_consensus_buff, nlogn
-cost_stx_transfer_memo, constant

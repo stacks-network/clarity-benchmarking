@@ -1438,16 +1438,24 @@ fn gen_var_get(scale: u16, input_size: u64) -> GenOutput {
 /// input_size: dynamic size of data being printed
 ///    `TypeSignature::type_of(self).size()`
 fn gen_print(scale: u16, input_size: u64) -> GenOutput {
-    let mut body = String::new();
+    let body = String::new();
+    let mut setup = String::new();
 
-    let clar_val = helper_make_clarity_value_for_sized_type_sig(input_size);
+    let (clarity_type, length) = helper_gen_clarity_list_type(input_size);
 
-    for _ in 0..scale {
-        body.push_str(&* format!("(print {}) ", clar_val));
-    }
-    let size = string_to_value(clar_val).size();
+    let clarity_value = helper_gen_clarity_value(
+        "list",
+        0,
+        length,
+        Some("uint"),
+    );
 
-    GenOutput::new(None, body, size as u64)
+    let print = format!("(print input-value) ");
+    setup.push_str(&helper_gen_execute_fn(scale, print, clarity_type));
+
+    dbg!(&setup);
+
+    GenOutput::new(Some(setup), body, clarity_value.1)
 }
 
 /// cost_function:

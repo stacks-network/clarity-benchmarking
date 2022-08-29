@@ -28,13 +28,13 @@
 
 ;; Cost Functions
 (define-read-only (cost_analysis_type_annotate (n uint))
-    (runtime (linear n u1 u9)))
+    (runtime (linear n u1 u10)))
 
 (define-read-only (cost_analysis_type_check (n uint))
-    (runtime (linear n u113 u0)))
+    (runtime (linear n u115 u0)))
 
 (define-read-only (cost_analysis_type_lookup (n uint))
-    (runtime (linear n u1 u6)))
+    (runtime (linear n u1 u4)))
 
 (define-read-only (cost_analysis_visit (n uint))
     (runtime u1))
@@ -43,50 +43,50 @@
     (runtime (linear n u2 u14)))
 
 (define-read-only (cost_analysis_option_cons (n uint))
-    (runtime u6))
+    (runtime u5))
 
 (define-read-only (cost_analysis_option_check (n uint))
-    (runtime u3))
+    (runtime u4))
 
 (define-read-only (cost_analysis_bind_name (n uint))
-    (runtime (linear n u2 u176)))
+    (runtime (linear n u1 u59)))
 
 (define-read-only (cost_analysis_list_items_check (n uint))
-    (runtime (linear n u2 u4)))
+    (runtime (linear n u2 u8)))
 
 (define-read-only (cost_analysis_check_tuple_get (n uint))
     (runtime (logn n u1 u2)))
 
 (define-read-only (cost_analysis_check_tuple_cons (n uint))
-    (runtime (nlogn n u3 u5)))
+    (runtime (nlogn n u3 u142)))
 
 (define-read-only (cost_analysis_tuple_items_check (n uint))
-    (runtime (linear n u1 u59)))
+    (runtime (linear n u2 u52)))
 
 (define-read-only (cost_analysis_check_let (n uint))
-    (runtime (linear n u1 u12)))
+    (runtime (linear n u1 u10)))
 
 (define-read-only (cost_analysis_lookup_function (n uint))
-    (runtime u20))
+    (runtime u18))
 
 (define-read-only (cost_analysis_lookup_function_types (n uint))
-    (runtime (linear n u1 u28)))
+    (runtime (linear n u1 u26)))
 
 (define-read-only (cost_analysis_lookup_variable_const (n uint))
-    (runtime u15))
+    (runtime u16))
 
 (define-read-only (cost_analysis_lookup_variable_depth (n uint))
-    (runtime (nlogn n u1 u34)))
+    (runtime (nlogn n u1 u12)))
 
 (define-read-only (cost_ast_parse (n uint))
-    (runtime (linear n u172 u287441)))
+    (runtime (linear n u27 u81)))
 
 (define-read-only (cost_ast_cycle_detection (n uint))
-    (runtime (linear n u141 u72)))
+    (runtime (linear n u156 u23)))
 
 (define-read-only (cost_analysis_storage (n uint))
     {
-        runtime: (linear n u2 u100),
+        runtime: (linear n u2 u94),
         write_length: (linear n u1 u1),
         write_count: u1,
         read_count: u1,
@@ -95,7 +95,7 @@
 
 (define-read-only (cost_analysis_use_trait_entry (n uint))
     {
-        runtime: (linear n u9 u723),
+        runtime: (linear n u9 u698),
         write_length: (linear n u1 u1),
         write_count: u0,
         read_count: u1,
@@ -105,7 +105,7 @@
 
 (define-read-only (cost_analysis_get_function_entry (n uint))
     {
-        runtime: (linear n u81 u1303),
+        runtime: (linear n u78 u1307),
         write_length: u0,
         write_count: u0,
         read_count: u1,
@@ -113,210 +113,210 @@
     })
 
 (define-read-only (cost_lookup_variable_depth (n uint))
-    (runtime (linear n u2 u14)))
+    (runtime (linear n u1 u1)))
 
 (define-read-only (cost_lookup_variable_size (n uint))
-    (runtime (linear n u2 u0)))
+    (runtime (linear n u2 u18)))
 
 (define-read-only (cost_lookup_function (n uint))
     (runtime u16))
 
 (define-read-only (cost_bind_name (n uint))
-    (runtime u256))
+    (runtime u216))
 
 (define-read-only (cost_inner_type_check_cost (n uint))
-    (runtime (linear n u2 u9)))
+    (runtime (linear n u2 u5)))
 
 (define-read-only (cost_user_function_application (n uint))
-    (runtime (linear n u26 u140)))
+    (runtime (linear n u27 u5)))
 
 (define-read-only (cost_let (n uint))
-    (runtime (linear n u146 u862)))
+    (runtime (linear n u117 u178)))
 
 (define-read-only (cost_if (n uint))
-    (runtime u200))
-
-(define-read-only (cost_asserts (n uint))
-    (runtime u158))
-
-(define-read-only (cost_map (n uint))
-    (runtime (linear n u1210 u3314)))
-
-(define-read-only (cost_filter (n uint))
-    (runtime u460))
-
-(define-read-only (cost_len (n uint))
-    (runtime u486))
-
-(define-read-only (cost_element_at (n uint))
-    (runtime u619))
-
-(define-read-only (cost_index_of (n uint))
-    (runtime (linear n u1 u243)))
-
-(define-read-only (cost_fold (n uint))
-    (runtime u483))
-
-(define-read-only (cost_list_cons (n uint))
-    (runtime (linear n u14 u198)))
-
-(define-read-only (cost_type_parse_step (n uint))
-    (runtime u5))
-
-(define-read-only (cost_tuple_get (n uint))
-    (runtime (nlogn n u4 u1780)))
-
-(define-read-only (cost_tuple_merge (n uint))
-    (runtime (linear n u4 u646)))
-
-(define-read-only (cost_tuple_cons (n uint))
-    (runtime (nlogn n u11 u1101)))
-
-(define-read-only (cost_add (n uint))
-    (runtime (linear n u12 u156)))
-
-(define-read-only (cost_sub (n uint))
-    (runtime (linear n u12 u156)))
-
-(define-read-only (cost_mul (n uint))
-    (runtime (linear n u14 u157)))
-
-(define-read-only (cost_div (n uint))
-    (runtime (linear n u14 u157)))
-
-(define-read-only (cost_geq (n uint))
-    (runtime u166))
-
-(define-read-only (cost_leq (n uint))
-    (runtime u166))
-
-(define-read-only (cost_le (n uint))
-    (runtime u166))
-
-(define-read-only (cost_ge (n uint))
-    (runtime u166))
-
-(define-read-only (cost_int_cast (n uint))
-    (runtime u164))
-
-(define-read-only (cost_mod (n uint))
     (runtime u168))
 
+(define-read-only (cost_asserts (n uint))
+    (runtime u128))
+
+(define-read-only (cost_map (n uint))
+    (runtime (linear n u1198 u3067)))
+
+(define-read-only (cost_filter (n uint))
+    (runtime u407))
+
+(define-read-only (cost_len (n uint))
+    (runtime u429))
+
+(define-read-only (cost_element_at (n uint))
+    (runtime u498))
+
+(define-read-only (cost_index_of (n uint))
+    (runtime (linear n u1 u211)))
+
+(define-read-only (cost_fold (n uint))
+    (runtime u460))
+
+(define-read-only (cost_list_cons (n uint))
+    (runtime (linear n u14 u164)))
+
+(define-read-only (cost_type_parse_step (n uint))
+    (runtime u4))
+
+(define-read-only (cost_tuple_get (n uint))
+    (runtime (nlogn n u4 u1736)))
+
+(define-read-only (cost_tuple_merge (n uint))
+    (runtime (linear n u5 u408)))
+
+(define-read-only (cost_tuple_cons (n uint))
+    (runtime (nlogn n u10 u1876)))
+
+(define-read-only (cost_add (n uint))
+    (runtime (linear n u11 u125)))
+
+(define-read-only (cost_sub (n uint))
+    (runtime (linear n u11 u125)))
+
+(define-read-only (cost_mul (n uint))
+    (runtime (linear n u13 u125)))
+
+(define-read-only (cost_div (n uint))
+    (runtime (linear n u13 u125)))
+
+(define-read-only (cost_geq (n uint))
+    (runtime u126))
+
+(define-read-only (cost_leq (n uint))
+    (runtime u126))
+
+(define-read-only (cost_le (n uint))
+    (runtime u126))
+
+(define-read-only (cost_ge (n uint))
+    (runtime u126))
+
+(define-read-only (cost_int_cast (n uint))
+    (runtime u135))
+
+(define-read-only (cost_mod (n uint))
+    (runtime u141))
+
 (define-read-only (cost_pow (n uint))
-    (runtime u170))
+    (runtime u143))
 
 (define-read-only (cost_sqrti (n uint))
-    (runtime u167))
+    (runtime u142))
 
 (define-read-only (cost_log2 (n uint))
-    (runtime u161))
+    (runtime u133))
 
 (define-read-only (cost_xor (n uint))
-    (runtime u167))
+    (runtime u139))
 
 (define-read-only (cost_not (n uint))
-    (runtime u162))
+    (runtime u138))
 
 (define-read-only (cost_eq (n uint))
-    (runtime (linear n u7 u172)))
+    (runtime (linear n u8 u151)))
 
 (define-read-only (cost_begin (n uint))
-    (runtime u202))
+    (runtime u151))
 
 (define-read-only (cost_hash160 (n uint))
-    (runtime (linear n u1 u201)))
-
-(define-read-only (cost_sha256 (n uint))
-    (runtime (linear n u1 u100)))
-
-(define-read-only (cost_sha512 (n uint))
-    (runtime (linear n u1 u176)))
-
-(define-read-only (cost_sha512t256 (n uint))
     (runtime (linear n u1 u188)))
 
+(define-read-only (cost_sha256 (n uint))
+    (runtime (linear n u1 u180)))
+
+(define-read-only (cost_sha512 (n uint))
+    (runtime (linear n u1 u216)))
+
+(define-read-only (cost_sha512t256 (n uint))
+    (runtime (linear n u1 u56)))
+
 (define-read-only (cost_keccak256 (n uint))
-    (runtime (linear n u1 u221)))
+    (runtime (linear n u1 u127)))
 
 (define-read-only (cost_secp256k1recover (n uint))
-    (runtime u14344))
+    (runtime u8655))
 
 (define-read-only (cost_secp256k1verify (n uint))
-    (runtime u13540))
+    (runtime u8349))
 
 (define-read-only (cost_print (n uint))
-    (runtime (linear n u3 u1413)))
+    (runtime (linear n u15 u1458)))
 
 (define-read-only (cost_some_cons (n uint))
-    (runtime u219))
+    (runtime u199))
 
 (define-read-only (cost_ok_cons (n uint))
-    (runtime u219))
+    (runtime u199))
 
 (define-read-only (cost_err_cons (n uint))
-    (runtime u219))
+    (runtime u199))
 
 (define-read-only (cost_default_to (n uint))
-    (runtime u249))
+    (runtime u268))
 
 (define-read-only (cost_unwrap_ret (n uint))
-    (runtime u299))
+    (runtime u274))
 
 (define-read-only (cost_unwrap_err_or_ret (n uint))
-    (runtime u339))
+    (runtime u302))
 
 (define-read-only (cost_is_okay (n uint))
-    (runtime u287))
+    (runtime u258))
 
 (define-read-only (cost_is_none (n uint))
-    (runtime u212))
+    (runtime u214))
 
 (define-read-only (cost_is_err (n uint))
-    (runtime u282))
+    (runtime u245))
 
 (define-read-only (cost_is_some (n uint))
-    (runtime u223))
+    (runtime u195))
 
 (define-read-only (cost_unwrap (n uint))
-    (runtime u284))
+    (runtime u252))
 
 (define-read-only (cost_unwrap_err (n uint))
-    (runtime u264))
+    (runtime u248))
 
 (define-read-only (cost_try_ret (n uint))
-    (runtime u256))
+    (runtime u240))
 
 (define-read-only (cost_match (n uint))
-    (runtime u286))
+    (runtime u264))
 
 (define-read-only (cost_or (n uint))
-    (runtime (linear n u3 u149)))
+    (runtime (linear n u3 u120)))
 
 (define-read-only (cost_and (n uint))
-    (runtime (linear n u3 u149)))
+    (runtime (linear n u3 u120)))
 
 (define-read-only (cost_append (n uint))
-    (runtime (linear n u71 u176)))
+    (runtime (linear n u73 u285)))
 
 (define-read-only (cost_concat (n uint))
-    (runtime (linear n u75 u244)))
+    (runtime (linear n u37 u220)))
 
 (define-read-only (cost_as_max_len (n uint))
-    (runtime u475))
+    (runtime u518))
 
 (define-read-only (cost_contract_call (n uint))
-    (runtime u153))
+    (runtime u134))
 
 (define-read-only (cost_contract_of (n uint))
-    (runtime u13400))
+    (runtime u19002))
 
 (define-read-only (cost_principal_of (n uint))
-    (runtime u39))
+    (runtime u984))
 
 
 (define-read-only (cost_at_block (n uint))
     {
-        runtime: u210,
+        runtime: u2821,
         write_length: u0,
         write_count: u0,
         read_count: u1,
@@ -326,7 +326,7 @@
 
 (define-read-only (cost_load_contract (n uint))
     {
-        runtime: (linear n u1 u157),
+        runtime: (linear n u1 u80),
         write_length: u0,
         write_count: u0,
         ;; set to 3 because of the associated metadata loads
@@ -337,7 +337,7 @@
 
 (define-read-only (cost_create_map (n uint))
     {
-        runtime: (linear n u1 u1631),
+        runtime: (linear n u1 u1564),
         write_length: (linear n u1 u1),
         write_count: u1,
         read_count: u0,
@@ -347,7 +347,7 @@
 
 (define-read-only (cost_create_var (n uint))
     {
-        runtime: (linear n u7 u2152),
+        runtime: (linear n u7 u2025),
         write_length: (linear n u1 u1),
         write_count: u2,
         read_count: u0,
@@ -357,7 +357,7 @@
 
 (define-read-only (cost_create_nft (n uint))
     {
-        runtime: (linear n u1 u1610),
+        runtime: (linear n u1 u1570),
         write_length: (linear n u1 u1),
         write_count: u1,
         read_count: u0,
@@ -367,7 +367,7 @@
 
 (define-read-only (cost_create_ft (n uint))
     {
-        runtime: u1972,
+        runtime: u1831,
         write_length: u1,
         write_count: u2,
         read_count: u0,
@@ -377,7 +377,7 @@
 
 (define-read-only (cost_fetch_entry (n uint))
     {
-        runtime: (linear n u1 u1539),
+        runtime: (linear n u1 u1025),
         write_length: u0,
         write_count: u0,
         read_count: u1,
@@ -387,7 +387,7 @@
 
 (define-read-only (cost_set_entry (n uint))
     {
-        runtime: (linear n u4 u2204),
+        runtime: (linear n u4 u1899),
         write_length: (linear n u1 u1),
         write_count: u1,
         read_count: u1,
@@ -397,7 +397,7 @@
 
 (define-read-only (cost_fetch_var (n uint))
     {
-        runtime: (linear n u1 u543),
+        runtime: (linear n u1 u468),
         write_length: u0,
         write_count: u0,
         read_count: u1,
@@ -407,7 +407,7 @@
 
 (define-read-only (cost_set_var (n uint))
     {
-        runtime: (linear n u5 u691),
+        runtime: (linear n u5 u655),
         write_length: (linear n u1 u1),
         write_count: u1,
         read_count: u1,
@@ -417,7 +417,7 @@
 
 (define-read-only (cost_contract_storage (n uint))
     {
-        runtime: (linear n u13 u7982),
+        runtime: (linear n u11 u7165),
         write_length: (linear n u1 u1),
         write_count: u1,
         read_count: u0,
@@ -427,7 +427,7 @@
 
 (define-read-only (cost_block_info (n uint))
     {
-        runtime: u6321,
+        runtime: u7841,
         write_length: u0,
         write_count: u0,
         read_count: u1,
@@ -437,7 +437,7 @@
 
 (define-read-only (cost_stx_balance (n uint))
     {
-        runtime: u1385,
+        runtime: u9626,
         write_length: u0,
         write_count: u0,
         read_count: u1,
@@ -447,7 +447,7 @@
 
 (define-read-only (cost_stx_transfer (n uint))
     {
-        runtime: u1430,
+        runtime: u9983,
         write_length: u1,
         write_count: u1,
         read_count: u1,
@@ -457,7 +457,7 @@
 
 (define-read-only (cost_ft_mint (n uint))
     {
-        runtime: u1645,
+        runtime: u1479,
         write_length: u1,
         write_count: u2,
         read_count: u2,
@@ -467,7 +467,7 @@
 
 (define-read-only (cost_ft_transfer (n uint))
     {
-        runtime: u612,
+        runtime: u549,
         write_length: u1,
         write_count: u2,
         read_count: u2,
@@ -477,7 +477,7 @@
 
 (define-read-only (cost_ft_balance (n uint))
     {
-        runtime: u547,
+        runtime: u479,
         write_length: u0,
         write_count: u0,
         read_count: u1,
@@ -487,7 +487,7 @@
 
 (define-read-only (cost_nft_mint (n uint))
     {
-        runtime: (linear n u9 u636),
+        runtime: (linear n u9 u575),
         write_length: u1,
         write_count: u1,
         read_count: u1,
@@ -497,7 +497,7 @@
 
 (define-read-only (cost_nft_transfer (n uint))
     {
-        runtime: (linear n u9 u647),
+        runtime: (linear n u9 u572),
         write_length: u1,
         write_count: u1,
         read_count: u1,
@@ -507,7 +507,7 @@
 
 (define-read-only (cost_nft_owner (n uint))
     {
-        runtime: (linear n u9 u795),
+        runtime: (linear n u10 u741),
         write_length: u0,
         write_count: u0,
         read_count: u1,
@@ -517,7 +517,7 @@
 
 (define-read-only (cost_ft_get_supply (n uint))
     {
-        runtime: u483,
+        runtime: u420,
         write_length: u0,
         write_count: u0,
         read_count: u1,
@@ -527,7 +527,7 @@
 
 (define-read-only (cost_ft_burn (n uint))
     {
-        runtime: u612,
+        runtime: u549,
         write_length: u1,
         write_count: u2,
         read_count: u2,
@@ -537,7 +537,7 @@
 
 (define-read-only (cost_nft_burn (n uint))
     {
-        runtime: (linear n u9 u647),
+        runtime: (linear n u9 u572),
         write_length: u1,
         write_count: u1,
         read_count: u1,
@@ -547,7 +547,79 @@
 
 (define-read-only (poison_microblock (n uint))
     {
-        runtime: u29568,
+        runtime: u17485,
+        write_length: u1,
+        write_count: u1,
+        read_count: u1,
+        read_length: u1
+    })
+
+(define-read-only (cost_buff_to_int_le (n uint))
+    (runtime u141))
+
+(define-read-only (cost_buff_to_uint_le (n uint))
+    (runtime u141))
+
+(define-read-only (cost_buff_to_int_be (n uint))
+    (runtime u141))
+
+(define-read-only (cost_buff_to_uint_be (n uint))
+    (runtime u141))
+
+(define-read-only (cost_is_standard (n uint))
+    (runtime u127))
+
+(define-read-only (cost_principal_destruct (n uint))
+    (runtime u314))
+
+(define-read-only (cost_principal_construct (n uint))
+    (runtime u398))
+
+(define-read-only (cost_string_to_int (n uint))
+    (runtime u168))
+
+(define-read-only (cost_string_to_uint (n uint))
+    (runtime u168))
+
+(define-read-only (cost_int_to_ascii (n uint))
+    (runtime u147))
+
+(define-read-only (cost_int_to_utf8 (n uint))
+    (runtime u181))
+
+
+(define-read-only (cost_burn_block_info (n uint))
+    {
+        runtime: u105877,
+        write_length: u0,
+        write_count: u0,
+        read_count: u1,
+        read_length: u1
+    })
+
+
+(define-read-only (cost_stx_account (n uint))
+    {
+        runtime: u10028,
+        write_length: u0,
+        write_count: u0,
+        read_count: u1,
+        read_length: u1
+    })
+
+(define-read-only (cost_slice (n uint))
+    (runtime u523))
+
+(define-read-only (cost_to_consensus_buff (n uint))
+    (runtime (linear n u1 u233)))
+
+(define-read-only (cost_from_consensus_buff (n uint))
+    (runtime (nlogn n u3 u185)))
+
+
+(define-read-only (cost_stx_transfer_memo (n uint))
+    {
+        runtime: u11281,
         write_length: u1,
         write_count: u1,
         read_count: u1,

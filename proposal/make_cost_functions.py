@@ -165,6 +165,36 @@ special_functions_lin_scale_1 = {
         read_length: u1
     }})
 """,
+    "cost_stx_transfer_memo": """
+(define-read-only (cost_stx_transfer_memo (n uint))
+    {{
+        runtime: u{},
+        write_length: u1,
+        write_count: u1,
+        read_count: u1,
+        read_length: u1
+    }})
+""",
+    "cost_stx_account": """
+(define-read-only (cost_stx_account (n uint))
+    {{
+        runtime: u{},
+        write_length: u0,
+        write_count: u0,
+        read_count: u1,
+        read_length: u1
+    }})
+""",
+    "cost_burn_block_info": """
+(define-read-only (cost_burn_block_info (n uint))
+    {{
+        runtime: u{},
+        write_length: u0,
+        write_count: u0,
+        read_count: u1,
+        read_length: u1
+    }})
+""",
 }
 # special functions that use linear scaling on two constant factors
 special_functions_lin_scale_2 = {

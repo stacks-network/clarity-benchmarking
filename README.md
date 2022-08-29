@@ -7,7 +7,7 @@ Benchmarking suite to determine constants for usage in the Clarity Cost Function
 
 Ensure that the `blockstack-core` dependency is set currently. This library 
 relies on a modified version of the repository. The branch it currently depends on is called 
-[TODO].
+`clarity-benchmarking-stacks-2.1`.
 
 ### Running the benchmark suite
 
@@ -19,6 +19,15 @@ cargo bench
 
 Benchmarking results will be outputted to the `target/criterion/` directory.
 
+To obtain the costs-2 and costs-3 contract, we ran the benchmarks on a machine 
+with the following specs on Google Cloud Platform:
+- CPUs (4)
+- CPU Platform (Intel Cascade Lake)
+- GCP Machine type (n2-standard-4)
+- Memory (16GB)
+- Hard Drive size (500GB)
+- Hard Drive type (Standard persistent disk)
+- GCP Network Tier (Premium)
 
 ### Running regression analysis
 
@@ -55,7 +64,11 @@ script performs that scaling and formats output appropriate for a new
 costs contract (i.e., Clarity language formatted) and for inclusion in
 markdown proposals (a markdown-formatted table).
 
-To run this script:
+To run this script, you will need to copy over the computed runtime
+data. Before doing so, you will want to remove the 4 lines associated with
+the various analysis passes (those do not go into the costs contract):
+cost_arithmetic_only_checker, cost_read_only, cost_trait_checker, and
+cost_type_checker. 
 
 ```
 cd ./proposal
