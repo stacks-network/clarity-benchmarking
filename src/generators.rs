@@ -720,14 +720,8 @@ fn gen_ft_burn(function_name: &'static str, scale: u16) -> GenOutput {
     GenOutput::new(Some(template), body, 1)
 }
 
-// size of argument is in bytes
-fn helper_gen_clarity_list_size(approx_size: u64) -> String {
+fn helper_gen_clarity_list_with_len(len: u64) -> String {
     let mut rng = rand::thread_rng();
-
-    let uint_size = 17;
-    let list_bytes = 5;
-    let len: u64 =  ((approx_size - list_bytes) / uint_size).max(1);
-
     let mut values = "".to_string();
     for _ in 0..len {
         let num: u128 = rng.gen();
@@ -735,6 +729,15 @@ fn helper_gen_clarity_list_size(approx_size: u64) -> String {
     }
 
     format!("(list {})", values)
+}
+
+// size of argument is in bytes
+fn helper_gen_clarity_list_size(approx_size: u64) -> String {
+    let uint_size = 17;
+    let list_bytes = 5;
+    let len: u64 =  ((approx_size - list_bytes) / uint_size).max(1);
+
+    helper_gen_clarity_list_with_len(len)
 }
 
 // generate list type of approximate size
@@ -1554,18 +1557,17 @@ fn helper_generate_sequences(list_type: &str, output: u16) -> Vec<String> {
 fn gen_concat(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
 
-    let size = string_to_value(helper_make_clarity_value_for_sized_type_sig(input_size)).size() * 2;
-    assert!(size < u16::MAX as u32);
     for _ in 0..scale {
-        let first_val = helper_make_clarity_value_for_sized_type_sig(input_size);
-        let second_val = helper_make_clarity_value_for_sized_type_sig(input_size);
+        let first_val = helper_gen_clarity_list_with_len(input_size);
+        let second_val = helper_gen_clarity_list_with_len(input_size);
         body.push_str(&*format!(
             "({} (list {}) (list {})) ",
             function_name, first_val, second_val
         ));
     }
+    let total_len = input_size*2;
 
-    GenOutput::new(None, body, size as u64)
+    GenOutput::new(None, body, total_len)
 }
 
 /// cost_function: AsMaxLen

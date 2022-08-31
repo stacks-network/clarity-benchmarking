@@ -3488,62 +3488,62 @@ criterion_group!(
     name = benches;
     config = Criterion::default().measurement_time(Duration::from_secs(10));
     targets =
-    bench_add,
-    bench_sub,
-    bench_mul,
-    bench_div,
-    bench_le,
-    bench_leq,
-    bench_ge,
-    bench_geq,
-    bench_and,
-    bench_or,
-    bench_xor,
-    bench_not,
-    bench_eq,
-    bench_mod,
-    bench_pow,
-    bench_sqrti,
-    bench_log2,
-    bench_tuple_get,
-    bench_tuple_merge,
-    bench_tuple_cons,
-    bench_hash160,
-    bench_sha256,
-    bench_sha512,
-    bench_sha512t256,
-    bench_keccak256,
-    bench_secp256k1recover,
-    bench_secp256k1verify,
-    bench_create_ft,    // g
-    bench_mint_ft,      // g
-    bench_ft_transfer,  // g
-    bench_ft_balance,   // g
-    bench_ft_supply,    // g
-    bench_ft_burn,      // g
-    bench_create_nft,   // g
-    bench_nft_mint,     // g
-    bench_nft_transfer, // g
-    bench_nft_owner,    // g
-    bench_nft_burn,     // g
-    bench_is_none,
-    bench_is_some,
-    bench_is_ok,
-    bench_is_err,
-    bench_unwrap,
-    bench_unwrap_ret,
-    bench_unwrap_err,
-    bench_unwrap_err_or_ret,
-    bench_create_map, // g
-    bench_create_var, // g
-    bench_set_var,    // g
-    bench_fetch_var,  // g
-    bench_print,
-    bench_if,
-    bench_asserts,
-    bench_ok_cons,
-    bench_some_cons,
-    bench_err_cons,
+    // bench_add,
+    // bench_sub,
+    // bench_mul,
+    // bench_div,
+    // bench_le,
+    // bench_leq,
+    // bench_ge,
+    // bench_geq,
+    // bench_and,
+    // bench_or,
+    // bench_xor,
+    // bench_not,
+    // bench_eq,
+    // bench_mod,
+    // bench_pow,
+    // bench_sqrti,
+    // bench_log2,
+    // bench_tuple_get,
+    // bench_tuple_merge,
+    // bench_tuple_cons,
+    // bench_hash160,
+    // bench_sha256,
+    // bench_sha512,
+    // bench_sha512t256,
+    // bench_keccak256,
+    // bench_secp256k1recover,
+    // bench_secp256k1verify,
+    // bench_create_ft,    // g
+    // bench_mint_ft,      // g
+    // bench_ft_transfer,  // g
+    // bench_ft_balance,   // g
+    // bench_ft_supply,    // g
+    // bench_ft_burn,      // g
+    // bench_create_nft,   // g
+    // bench_nft_mint,     // g
+    // bench_nft_transfer, // g
+    // bench_nft_owner,    // g
+    // bench_nft_burn,     // g
+    // bench_is_none,
+    // bench_is_some,
+    // bench_is_ok,
+    // bench_is_err,
+    // bench_unwrap,
+    // bench_unwrap_ret,
+    // bench_unwrap_err,
+    // bench_unwrap_err_or_ret,
+    // bench_create_map, // g
+    // bench_create_var, // g
+    // bench_set_var,    // g
+    // bench_fetch_var,  // g
+    // bench_print,
+    // bench_if,
+    // bench_asserts,
+    // bench_ok_cons,
+    // bench_some_cons,
+    // bench_err_cons,
     bench_concat,
     bench_as_max_len,
     bench_begin,
