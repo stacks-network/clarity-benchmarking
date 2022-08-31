@@ -1452,13 +1452,14 @@ fn gen_print(scale: u16, input_size: u64) -> GenOutput {
         length,
         Some("uint"),
     );
+    let size = string_to_value(clarity_value.0).size();
 
     let print = format!("(print input-value) ");
     setup.push_str(&helper_gen_execute_fn(scale, print, clarity_type));
 
     dbg!(&setup);
 
-    GenOutput::new(Some(setup), body, clarity_value.1)
+    GenOutput::new(Some(setup), body, size as u64)
 }
 
 /// cost_function:
