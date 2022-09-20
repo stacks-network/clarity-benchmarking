@@ -2,7 +2,7 @@ use std::fs::{self, File, read};
 use std::io::Write;
 use std::num::ParseIntError;
 
-use benchmarking_lib::generators::{GenOutput, define_dummy_trait, gen, gen_analysis_pass, gen_read_only_func, helper_gen_clarity_list_type, helper_generate_rand_char_string, helper_make_value_for_sized_type_sig, make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map, make_sized_values_map, make_type_sig_list_of_size};
+use benchmarking_lib::generators::{GenOutput, define_dummy_trait, gen, gen_analysis_pass, gen_read_only_func, helper_gen_clarity_list_type, helper_generate_rand_char_string, helper_make_value_for_sized_type_sig, make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map, make_sized_values_map, make_type_sig_list_of_size, READ_TIP};
 use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
 use blockstack_lib::address::AddressHashMode;
 use blockstack_lib::burnchains::PoxConstants;
@@ -66,7 +66,6 @@ use blockstack_lib::chainstate::burn::db::sortdb::SortitionDB;
 use blockstack_lib::clarity_vm::database::marf::ReadOnlyMarfStore;
 use clarity::vm::tests::BurnStateDB;
 use blockstack_lib::clarity::vm::database::ClarityBackingStore;
-// use secp256k1::serde::Serialize;
 
 // for when input size is the number of elements
 const INPUT_SIZES: [u64; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
@@ -89,7 +88,6 @@ const SCALE: u16 = 75;
 const SORTITION_MARF_PATH: &str = "./db/sortition/";
 const CLARITY_MARF_PATH: &str = "./db/vm/clarity/";
 const CHAINSTATE_PATH: &str = "./db/vm/index.sqlite";
-const READ_TIP: &str = "9ba37ed8a1f802f1b0ce04739bc29b896ffdfb20b2cba8cd7b7493ddeef52113";
 
 lazy_static! {
     pub static ref SIZED_VALUES: HashMap<u64, Value> = make_sized_values_map(INPUT_SIZES.to_vec());
@@ -3488,62 +3486,62 @@ criterion_group!(
     name = benches;
     config = Criterion::default().measurement_time(Duration::from_secs(10));
     targets =
-    // bench_add,
-    // bench_sub,
-    // bench_mul,
-    // bench_div,
-    // bench_le,
-    // bench_leq,
-    // bench_ge,
-    // bench_geq,
-    // bench_and,
-    // bench_or,
-    // bench_xor,
-    // bench_not,
-    // bench_eq,
-    // bench_mod,
-    // bench_pow,
-    // bench_sqrti,
-    // bench_log2,
-    // bench_tuple_get,
-    // bench_tuple_merge,
-    // bench_tuple_cons,
-    // bench_hash160,
-    // bench_sha256,
-    // bench_sha512,
-    // bench_sha512t256,
-    // bench_keccak256,
-    // bench_secp256k1recover,
-    // bench_secp256k1verify,
-    // bench_create_ft,    // g
-    // bench_mint_ft,      // g
-    // bench_ft_transfer,  // g
-    // bench_ft_balance,   // g
-    // bench_ft_supply,    // g
-    // bench_ft_burn,      // g
-    // bench_create_nft,   // g
-    // bench_nft_mint,     // g
-    // bench_nft_transfer, // g
-    // bench_nft_owner,    // g
-    // bench_nft_burn,     // g
-    // bench_is_none,
-    // bench_is_some,
-    // bench_is_ok,
-    // bench_is_err,
-    // bench_unwrap,
-    // bench_unwrap_ret,
-    // bench_unwrap_err,
-    // bench_unwrap_err_or_ret,
-    // bench_create_map, // g
-    // bench_create_var, // g
-    // bench_set_var,    // g
-    // bench_fetch_var,  // g
+    bench_add,
+    bench_sub,
+    bench_mul,
+    bench_div,
+    bench_le,
+    bench_leq,
+    bench_ge,
+    bench_geq,
+    bench_and,
+    bench_or,
+    bench_xor,
+    bench_not,
+    bench_eq,
+    bench_mod,
+    bench_pow,
+    bench_sqrti,
+    bench_log2,
+    bench_tuple_get,
+    bench_tuple_merge,
+    bench_tuple_cons,
+    bench_hash160,
+    bench_sha256,
+    bench_sha512,
+    bench_sha512t256,
+    bench_keccak256,
+    bench_secp256k1recover,
+    bench_secp256k1verify,
+    bench_create_ft,    // g
+    bench_mint_ft,      // g
+    bench_ft_transfer,  // g
+    bench_ft_balance,   // g
+    bench_ft_supply,    // g
+    bench_ft_burn,      // g
+    bench_create_nft,   // g
+    bench_nft_mint,     // g
+    bench_nft_transfer, // g
+    bench_nft_owner,    // g
+    bench_nft_burn,     // g
+    bench_is_none,
+    bench_is_some,
+    bench_is_ok,
+    bench_is_err,
+    bench_unwrap,
+    bench_unwrap_ret,
+    bench_unwrap_err,
+    bench_unwrap_err_or_ret,
+    bench_create_map, // g
+    bench_create_var, // g
+    bench_set_var,    // g
+    bench_fetch_var,  // g
     // bench_print,
-    // bench_if,
-    // bench_asserts,
-    // bench_ok_cons,
-    // bench_some_cons,
-    // bench_err_cons,
+    bench_if,
+    bench_asserts,
+    bench_ok_cons,
+    bench_some_cons,
+    bench_err_cons,
     bench_concat,
     bench_as_max_len,
     bench_begin,

@@ -32,6 +32,9 @@ lazy_static! {
     pub static ref TUPLE_NAMES: Vec<String> = create_tuple_names(16);
 }
 
+// This index_block_hash corresponds to block height 7 in the chainstate DB
+pub const READ_TIP: &str = "df3d88b6d70cecc1d94442c4dc23ccc5a4466101454002d26620f972f0b30299";
+
 fn string_to_value(s: String) -> Value {
     execute(s.as_str()).unwrap().unwrap()
 }
@@ -1554,7 +1557,7 @@ fn helper_generate_sequences(list_type: &str, output: u16) -> Vec<String> {
 
 /// cost_function: Concat
 /// input_size: sum of Value size of input sequences
-///     `u64::from(wrapped_seq.size()).cost_overflow_add(u64::from(other_wrapped_seq.size())`
+///     len() of Value::Sequence
 fn gen_concat(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
 
@@ -1566,9 +1569,14 @@ fn gen_concat(function_name: &'static str, scale: u16, input_size: u64) -> GenOu
             function_name, first_val, second_val
         ));
     }
-    let total_len = input_size*2;
+    let val = string_to_value(helper_gen_clarity_list_with_len(input_size));
+    let total_len = if let Value::Sequence(data) = val {
+        data.len()*2
+    } else {
+        panic!("value should be a sequence.")
+    };
 
-    GenOutput::new(None, body, total_len)
+    GenOutput::new(None, body, total_len as u64)
 }
 
 /// cost_function: AsMaxLen
@@ -1923,7 +1931,7 @@ fn gen_at_block(scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str("(at-block 0xb25a3acac74ff29c5d0608c7ddb33c6b96fa20eab6ef90dac404d12be071d1f6 (no-op)) ");
+        body.push_str(&*format!("(at-block 0x{} (no-op)) ", READ_TIP));
     }
 
     GenOutput::new(None, body, 1)
