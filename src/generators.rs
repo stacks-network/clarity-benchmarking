@@ -2220,6 +2220,17 @@ fn gen_analysis_get_function_entry(input_size: u64) -> GenOutput {
     GenOutput::new(None, body, input_size)
 }
 
+/// cost_function: AnalysisFetchContractEntry
+/// input_size: count of public and read-only functions in contract
+///     `contract_analysis_size(&contract)`
+fn gen_analysis_fetch_contract_entry(input_size: u64) -> GenOutput {
+    let dummy_fns = (0..input_size)
+        .map(|i| format!("(define-public (dummy-fn-{} (a uint) (b uint))", i))
+        .collect();
+
+    GenOutput::new(None, dummy_fns, input_size)
+}
+
 /// cost_function: InnerTypeCheckCost
 /// input_size: type signature size of argument
 ///     `arg_type.size()`
@@ -2737,8 +2748,9 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         }
 
         
-        // This cost function is not used anywhere.
-        ClarityCostFunction::AnalysisFetchContractEntry => unimplemented!(), // not used anywhere
+        ClarityCostFunction::AnalysisFetchContractEntry => {
+            gen_analysis_fetch_contract_entry(input_size)
+        }
 
 
         // Ast ////////////////////////////////
