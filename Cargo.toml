@@ -29,3 +29,7 @@ path = "src/lib.rs"
 [[bench]]
 name = "bench"
 harness = false
+
+[profile.bench]
+opt-level = 3
+debug = true
