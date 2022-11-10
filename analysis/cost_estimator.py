@@ -134,8 +134,7 @@ def main():
     estimate_plot(df, 'cost_analysis_storage', output)
     estimate_plot(df, 'cost_analysis_use_trait_entry', output)
     estimate_plot(df, 'cost_analysis_get_function_entry', output)
-    # do we have a benchmark for this?
-    # estimate_plot(df, 'cost_analysis_fetch_contract_entry', output)
+    estimate_plot(df, 'cost_analysis_fetch_contract_entry', output)
     estimate_plot(df, 'cost_lookup_variable_depth', output)
     estimate_plot(df, 'cost_lookup_variable_size', output)
     estimate_plot(df, 'cost_lookup_function', output)
@@ -244,6 +243,8 @@ def main():
     estimate_plot(df, 'cost_to_consensus_buff', output)
     estimate_plot(df, 'cost_from_consensus_buff', output, nlogn)
     estimate_plot(df, 'cost_stx_transfer_memo', output)
+    estimate_plot(df, 'cost_replace_at', output)
+    estimate_plot(df, 'cost_as_contract', output)
 
     os.makedirs("analysis_target", exist_ok=True)
     output.to_csv("analysis_target/cost_constants.csv", index_label="function")
