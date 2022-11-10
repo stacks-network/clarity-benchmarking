@@ -1,5 +1,6 @@
 #[allow(unused_variables)]
 #[allow(unused_imports)]
+use std::cmp;
 use blockstack_lib::burnchains::PrivateKey;
 use blockstack_lib::util::secp256k1::{Secp256k1PrivateKey, Secp256k1PublicKey};
 use blockstack_lib::vm::ast::build_ast_pre;
@@ -388,18 +389,35 @@ fn gen_pow(scale: u16) -> GenOutput {
 }
 
 /// cost_function: Le, Leq, Ge, Geq
-/// input_size: double arg function
-fn gen_cmp(function_name: &'static str, scale: u16) -> GenOutput {
+/// input_size: number of machine words (word size is 128 bits)
+fn gen_cmp(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
 
     for _ in 0..scale {
-        let n1: u128 = rng.gen();
-        let n2: u128 = rng.gen();
-        body.push_str(&*format!("({} u{} u{}) ", function_name, n1, n2));
+        if input_size < 16 {
+            let n1: u128 = rng.gen();
+            let n2: u128 = rng.gen();
+            let code = format!("({} u{} u{}) ", function_name, n1, n2);
+            eprintln!("{}", &code);
+            body.push_str(&*code);
+        }
+        else {
+            loop {
+                let (val_1, type_1) = helper_generate_random_sequence_fixed_len(input_size);
+                if val_1.find("list").is_some() {
+                    continue;
+                }
+                let val_2 = helper_generate_random_sequence_fixed_len_fixed_type(input_size, &type_1);
+                let code = format!("({} {} {}) ", function_name, val_1, val_2);
+                eprintln!("{}", &code);
+                body.push_str(&*code);
+                break;
+            }
+        }
     }
 
-    GenOutput::new(None, body, 2)
+    GenOutput::new(None, body, input_size)
 }
 
 /// cost_function: And, Or, Not, Eq
@@ -819,6 +837,10 @@ fn helper_gen_clarity_value(
         "buff" => {
             let mut buff = "0x".to_string();
             buff.push_str(&helper_generate_rand_hex_string(value_len as usize));
+            if value_len == 1 {
+                // buffers of 1 byte have 2 chars
+                buff.push_str(&helper_generate_rand_hex_string(value_len as usize));
+            }
             (buff.clone(), size_of_value(buff))
         }
         "string-ascii" => {
@@ -1726,21 +1748,40 @@ fn gen_let(scale: u16, input_size: u64) -> GenOutput {
 fn helper_generate_random_sequence() -> (String, usize, String) {
     let mut rng = rand::thread_rng();
     let value_len = rng.gen_range(2..50) * 2;
+    let (value_str, type_str) = helper_generate_random_sequence_fixed_len(value_len);
+    (value_str, value_len as usize, type_str)
+}
+
+fn helper_generate_random_sequence_fixed_len(value_len: u64) -> (String, String) {
+    let mut rng = rand::thread_rng();
     match rng.gen_bool(0.75) {
         true => {
             // non-list case
             let (clarity_type, _) = helper_gen_clarity_type(true, true, false);
             let value =
                 helper_gen_clarity_value(&clarity_type, rng.gen_range(2..50), value_len, None);
-            (value.0, value_len as usize, clarity_type)
+            (value.0, clarity_type)
         }
         false => {
             // list case
             let (list_type, _) = helper_gen_clarity_type(true, false, true);
             let value =
                 helper_gen_clarity_value("list", rng.gen_range(2..50), value_len, Some(&list_type));
-            (value.0, value_len as usize, list_type)
+            (value.0, list_type)
         }
+    }
+}
+
+fn helper_generate_random_sequence_fixed_len_fixed_type(value_len: u64, type_str: &str) -> String {
+    if type_str != "list" { 
+        // non-list case
+        let (clarity_value, _) = helper_gen_clarity_value(type_str, 1, value_len, None);
+        clarity_value
+    }
+    else {
+        // list case
+        let (clarity_value, _) = helper_gen_clarity_value(type_str, 1, value_len, Some(type_str));
+        clarity_value
     }
 }
 
@@ -2221,11 +2262,10 @@ fn gen_analysis_get_function_entry(input_size: u64) -> GenOutput {
 }
 
 /// cost_function: AnalysisFetchContractEntry
-/// input_size: count of public and read-only functions in contract
-///     `contract_analysis_size(&contract)`
-fn gen_analysis_fetch_contract_entry(input_size: u64) -> GenOutput {
+/// input_size: size of serialized analysis data, in bytes
+pub fn gen_analysis_fetch_contract_entry(input_size: u64) -> GenOutput {
     let dummy_fns = (0..input_size)
-        .map(|i| format!("(define-public (dummy-fn-{} (a uint) (b uint))", i))
+        .map(|i| format!("(define-public (dummy-fn-{} (a uint) (b uint)) (ok true))", i))
         .collect();
 
     GenOutput::new(None, dummy_fns, input_size)
@@ -2375,6 +2415,20 @@ fn gen_contract_of(scale: u16) -> GenOutput {
     for _ in 0..scale {
         body.push_str(
             "(contract-call? .use-trait-contract bench-contract-of .impl-trait-contract) ",
+        );
+    }
+
+    GenOutput::new(None, body, 1)
+}
+
+/// cost_function: AsContract
+/// input_size: 0
+fn gen_as_contract(scale: u16) -> GenOutput {
+    let mut body = String::new();
+
+    for _ in 0..scale {
+        body.push_str(
+            "(contract-call? .as-contract-contract bench-as-contract)"
         );
     }
 
@@ -2559,6 +2613,35 @@ pub fn gen_slice(function_name: &'static str, scale: u16) -> GenOutput {
     GenOutput::new(None, body, 1)
 }
 
+/// cost_function: ReplaceAt
+/// input_size: the size of the item being inserted
+pub fn gen_replace_at(function_name: &'static str, scale: u16) -> GenOutput {
+    let mut rng = rand::thread_rng();
+    let mut body = String::new();
+    let mut sz = 0;
+
+    for _ in 0..scale {
+        let (seq, seq_len, seq_type) = helper_generate_random_sequence();
+        let (replace_val, replace_val_sz) = helper_gen_clarity_value(&seq_type, rng.gen_range(2..50), 1, None);
+        let index = if rng.gen_bool(0.8) {
+            // index is in range
+            rng.gen_range(0..seq_len)
+        }
+        else {
+            // index is not in range 
+            rng.gen_range(seq_len..(seq_len * 2))
+        };
+
+        let stmt = format!("(replace-at? {} u{} {})", &seq, index, &replace_val);
+        eprintln!("{}", &stmt);
+        body.push_str(&stmt);
+
+        sz += replace_val_sz;
+    }
+    GenOutput::new(None, body, sz)
+}
+
+
 /// cost_function: FromConsensusBuff
 /// input_size: number of bytes in the input buffer
 pub fn gen_from_consensus_buff(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
@@ -2638,10 +2721,10 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
 
         // Logic /////////////////////////////
         
-        ClarityCostFunction::Le => gen_cmp("<", scale),
-        ClarityCostFunction::Leq => gen_cmp("<=", scale),
-        ClarityCostFunction::Ge => gen_cmp(">", scale),
-        ClarityCostFunction::Geq => gen_cmp(">=", scale),
+        ClarityCostFunction::Le => gen_cmp("<", scale, input_size),
+        ClarityCostFunction::Leq => gen_cmp("<=", scale, input_size),
+        ClarityCostFunction::Ge => gen_cmp(">", scale, input_size),
+        ClarityCostFunction::Geq => gen_cmp(">=", scale, input_size),
 
 
         // Boolean ///////////////////////////
@@ -2788,7 +2871,6 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         
         ClarityCostFunction::Len => gen_len(scale),
 
-        
         ClarityCostFunction::ElementAt => gen_element_at(scale),
         ClarityCostFunction::ElementAtAlias => gen_element_at(scale),
 
@@ -3027,7 +3109,8 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         ClarityCostFunction::ToConsensusBuff => gen_single_clar_value("to-consensus-buff", scale, Some(input_size)),
         ClarityCostFunction::FromConsensusBuff => gen_from_consensus_buff("from-consensus-buff", scale, input_size),
         ClarityCostFunction::StxTransferMemo => gen_stx_transfer_memo("stx-transfer-memo?", scale),
-        ClarityCostFunction::ReplaceAt => unimplemented!(),
+        ClarityCostFunction::ReplaceAt => gen_replace_at("replace-at?", scale),
+        ClarityCostFunction::AsContract => gen_as_contract(scale),
     }
 }
 
