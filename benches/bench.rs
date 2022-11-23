@@ -83,7 +83,7 @@ const INPUT_SIZES_DATA: [u64; 8] = [22, 1000, 40000, 160000, 360000, 640000, 100
 const INPUT_SIZES_DATA_SMALL: [u64; 8] = [17, 100, 500, 1000, 5000, 10000, 50000, 500000];
 
 // for comparators, which can compare any data of any size
-const CMP_INPUT_SIZES: [u64; 18] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
+const CMP_INPUT_SIZES: [u64; 16] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768];
 
 // input sizes for arithmetic functions
 const INPUT_SIZES_ARITHMETIC: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -979,9 +979,12 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
         let new_tip = StacksBlockId::from([5;32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
+        
+        let contract_identifier =
+            QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
 
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
+        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &contract_identifier, &ClarityVersion::Clarity2);
 
         let GenOutput {
             setup: _,
@@ -989,8 +992,6 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             input_size: _,
         } = gen(function, 1, *input_size);
 
-        let mut contract_identifier =
-            QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
         let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
             Ok(res) => res,
             Err(error) => {
@@ -1007,13 +1008,13 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
         );
 
         let mut typing_context = TypingContext::new();
-        type_checker.try_type_check_define(&contract_ast.expressions[0], &mut typing_context);
+        type_checker.try_type_check_define(&contract_ast.expressions[0], &mut typing_context).unwrap().unwrap();
         type_checker
             .contract_context
             .into_contract_analysis(&mut contract_analysis);
 
         type_checker.db.execute(|db| {
-            db.insert_contract(&contract_identifier, &contract_analysis);
+            db.insert_contract(&contract_identifier, &contract_analysis).unwrap();
             let trait_name = ClarityName::try_from("dummy-trait".to_string()).unwrap();
             let trait_id = TraitIdentifier {
                 name: trait_name.clone(),
@@ -1023,8 +1024,8 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             // get the size of the trait
             let trait_sig = db
                 .get_defined_trait(&contract_identifier, &trait_name)
-                .unwrap()
-                .unwrap();
+                .expect("FATAL: could not load from DB")
+                .expect("FATAL: could not unwrap");
             let type_size = trait_type_size(&trait_sig).unwrap();
 
             group.throughput(Throughput::Bytes(type_size));
@@ -2215,9 +2216,71 @@ fn bench_or(c: &mut Criterion) {
     )
 }
 
+fn bench_bit_and(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::BitwiseAnd,
+        SCALE,
+        Some(INPUT_SIZES_ARITHMETIC.into()),
+        None,
+    )
+}
+
+fn bench_bit_or(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::BitwiseOr,
+        SCALE,
+        Some(INPUT_SIZES_ARITHMETIC.into()),
+        None,
+    )
+}
+
+fn bench_bit_xor(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Xor,
+        SCALE,
+        Some(INPUT_SIZES_ARITHMETIC.into()),
+        None,
+    )
+}
+
+fn bench_bit_not(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::BitwiseNot,
+        SCALE,
+        None,
+        None,
+    )
+}
+        
+fn bench_bit_lshift(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::BitwiseLShift,
+        SCALE,
+        None,
+        None,
+    )
+}
+
+fn bench_bit_rshift(c: &mut Criterion) {
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::BitwiseRShift,
+        SCALE,
+        None,
+        None,
+    )
+}
+        
+/*
 fn bench_xor(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::Xor, SCALE, None, None)
 }
+*/
 
 fn bench_not(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::Not, SCALE, None, None)
@@ -3302,19 +3365,12 @@ fn bench_contract_of(c: &mut Criterion) {
 }
 
 fn bench_as_contract(c: &mut Criterion) {
-    let make_store = |env: &mut OwnedEnvironment| {
-        let contract_identifier = QualifiedContractIdentifier::local("as-contract-contract").unwrap();
-        let contract = "(define-public (bench-as-contract) (ok (as-contract true)))";
-        env.initialize_contract(contract_identifier, contract, None, ASTRules::PrecheckSize)
-            .unwrap();
-    };
-
     bench_with_input_sizes(
         c,
         ClarityCostFunction::AsContract,
         SCALE.into(),
         None,
-        Some(Box::new(make_store)),
+        None,
     )
 }
 
@@ -3588,8 +3644,14 @@ criterion_group!(
     bench_geq,
     bench_and,
     bench_or,
-    bench_xor,
+    // bench_xor,
     bench_not,
+    bench_bit_and,
+    bench_bit_or,
+    bench_bit_xor,
+    bench_bit_not,
+    bench_bit_lshift,
+    bench_bit_rshift
     bench_eq,
     bench_mod,
     bench_pow,
@@ -3713,8 +3775,8 @@ criterion_group!(
     bench_slice,
     bench_to_consensus_buff,
     bench_from_consensus_buff,
-    bench_replace_at
-    bench_analysis_fetch_contract_entry
+    bench_replace_at,
+    bench_analysis_fetch_contract_entry,
     bench_as_contract
 );
 
