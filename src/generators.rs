@@ -347,7 +347,7 @@ pub fn helper_make_sized_clarity_value(input_size: u64) -> String {
     }
 }
 
-/// cost_function: Add, Sub, Mul, Div, Sqrti, Log2, Mod
+/// cost_function: Add, Sub, Mul, Div, Sqrti, Log2, Mod, Xor, bit-and, bit-or
 /// input_size: number of arguments
 pub fn gen_arithmetic(
     function_name: &'static str,
@@ -399,7 +399,6 @@ fn gen_cmp(function_name: &'static str, scale: u16, input_size: u64) -> GenOutpu
             let n1: u128 = rng.gen();
             let n2: u128 = rng.gen();
             let code = format!("({} u{} u{}) ", function_name, n1, n2);
-            eprintln!("{}", &code);
             body.push_str(&*code);
         }
         else {
@@ -410,7 +409,6 @@ fn gen_cmp(function_name: &'static str, scale: u16, input_size: u64) -> GenOutpu
                 }
                 let val_2 = helper_generate_random_sequence_fixed_len_fixed_type(input_size, &type_1);
                 let code = format!("({} {} {}) ", function_name, val_1, val_2);
-                eprintln!("{}", &code);
                 body.push_str(&*code);
                 break;
             }
@@ -469,6 +467,66 @@ fn gen_xor(function_name: &'static str, scale: u16) -> GenOutput {
             }
         };
         body.push_str(&*format!("({} {}) ", function_name, args));
+    }
+
+    GenOutput::new(None, body, 2)
+}
+
+/// cost_function: bit-shift-left
+/// input_size: double arg function
+fn gen_lshift(scale: u16) -> GenOutput {
+    let mut body = String::new();
+    let mut rng = rand::thread_rng();
+
+    for _ in 0..scale {
+        let args = match rng.gen_range(0..=1) {
+            0 => {
+                // uint
+                let x: u128 = rng.gen();
+                let y: u128 = rng.gen();
+                format!("u{} u{}", x, y)
+            }
+            1 => {
+                // int
+                let x: i128 = rng.gen();
+                let y: u128 = rng.gen();
+                format!("{} u{}", x, y)
+            }
+            _ => {
+                unreachable!("should only be generating numbers in the range 0..=1.")
+            }
+        };
+        body.push_str(&*format!("(bit-shift-left {}) ", args));
+    }
+
+    GenOutput::new(None, body, 2)
+}
+
+/// cost_function: bit-shift-right
+/// input_size: double arg function
+fn gen_rshift(scale: u16) -> GenOutput {
+    let mut body = String::new();
+    let mut rng = rand::thread_rng();
+
+    for _ in 0..scale {
+        let args = match rng.gen_range(0..=1) {
+            0 => {
+                // uint
+                let x: u128 = rng.gen();
+                let y: u128 = rng.gen();
+                format!("u{} u{}", x, y)
+            }
+            1 => {
+                // int
+                let x: i128 = rng.gen();
+                let y: u128 = rng.gen();
+                format!("{} u{}", x, y)
+            }
+            _ => {
+                unreachable!("should only be generating numbers in the range 0..=1.")
+            }
+        };
+        body.push_str(&*format!("(bit-shift-right {}) ", args));
     }
 
     GenOutput::new(None, body, 2)
@@ -2293,7 +2351,7 @@ pub fn gen_stx_transfer(scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str("(stx-transfer? u1 tx-sender 'S0G0000000000000000000000000000015XM0F7) ");
+        body.push_str("(stx-transfer? u1 tx-sender 'S0G0000000000000000000000000000015XM0F7)");
     }
 
     GenOutput::new(None, body, 1)
@@ -2305,7 +2363,7 @@ pub fn gen_stx_get_balance(scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str("(stx-get-balance 'S1G2081040G2081040G2081040G208105NK8PE5) ");
+        body.push_str("(stx-get-balance 'S1G2081040G2081040G2081040G208105NK8PE5)");
     }
 
     GenOutput::new(None, body, 1)
@@ -2428,7 +2486,7 @@ fn gen_as_contract(scale: u16) -> GenOutput {
 
     for _ in 0..scale {
         body.push_str(
-            "(contract-call? .as-contract-contract bench-as-contract)"
+            "(as-contract true)"
         );
     }
 
@@ -2633,7 +2691,6 @@ pub fn gen_replace_at(function_name: &'static str, scale: u16) -> GenOutput {
         };
 
         let stmt = format!("(replace-at? {} u{} {})", &seq, index, &replace_val);
-        eprintln!("{}", &stmt);
         body.push_str(&stmt);
 
         sz += replace_val_sz;
@@ -2734,7 +2791,7 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         ClarityCostFunction::Not => gen_logic("not", scale, input_size),
         ClarityCostFunction::Eq => gen_logic("is-eq", scale, input_size),
         
-        ClarityCostFunction::Xor => gen_xor("xor", scale),
+        ClarityCostFunction::Xor => gen_arithmetic("bit-xor", scale, input_size),
 
 
         // Tuples ////////////////////////////
@@ -2872,11 +2929,9 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         ClarityCostFunction::Len => gen_len(scale),
 
         ClarityCostFunction::ElementAt => gen_element_at(scale),
-        ClarityCostFunction::ElementAtAlias => gen_element_at(scale),
 
         
         ClarityCostFunction::IndexOf => gen_index_of(scale, input_size),
-        ClarityCostFunction::IndexOfAlias => gen_index_of(scale, input_size),
 
         
         ClarityCostFunction::ListCons => gen_list_cons(scale, input_size),
@@ -3105,12 +3160,19 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         ClarityCostFunction::IntToUtf8 => gen_number_to_string("int-to-utf8", scale),
         ClarityCostFunction::GetBurnBlockInfo => gen_get_burn_block_info("get-burn-block-info?", scale),
         ClarityCostFunction::StxGetAccount => gen_stx_get_account("stx-account", scale),
-        ClarityCostFunction::Slice => gen_slice("slice", scale),
-        ClarityCostFunction::ToConsensusBuff => gen_single_clar_value("to-consensus-buff", scale, Some(input_size)),
-        ClarityCostFunction::FromConsensusBuff => gen_from_consensus_buff("from-consensus-buff", scale, input_size),
+        ClarityCostFunction::Slice => gen_slice("slice?", scale),
+        ClarityCostFunction::ToConsensusBuff => gen_single_clar_value("to-consensus-buff?", scale, Some(input_size)),
+        ClarityCostFunction::FromConsensusBuff => gen_from_consensus_buff("from-consensus-buff?", scale, input_size),
         ClarityCostFunction::StxTransferMemo => gen_stx_transfer_memo("stx-transfer-memo?", scale),
         ClarityCostFunction::ReplaceAt => gen_replace_at("replace-at?", scale),
         ClarityCostFunction::AsContract => gen_as_contract(scale),
+
+        // Clarity 2 bitwise functions
+        ClarityCostFunction::BitwiseAnd => gen_arithmetic("bit-and", scale, input_size),
+        ClarityCostFunction::BitwiseOr => gen_arithmetic("bit-or", scale, input_size),
+        ClarityCostFunction::BitwiseNot => gen_arithmetic("bit-not", scale, 1),
+        ClarityCostFunction::BitwiseLShift => gen_lshift(scale),
+        ClarityCostFunction::BitwiseRShift => gen_rshift(scale),
     }
 }
 
