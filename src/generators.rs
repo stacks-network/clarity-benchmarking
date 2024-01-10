@@ -1,35 +1,35 @@
 #[allow(unused_variables)]
 #[allow(unused_imports)]
 use std::cmp;
-use blockstack_lib::burnchains::PrivateKey;
-use blockstack_lib::util::secp256k1::{Secp256k1PrivateKey, Secp256k1PublicKey};
-use blockstack_lib::vm::ast::build_ast_pre;
-use blockstack_lib::vm::ast::definition_sorter::DefinitionSorter;
-use blockstack_lib::vm::costs::LimitedCostTracker;
-use blockstack_lib::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
-use blockstack_lib::vm::database::ClaritySerializable;
+use stackslib::burnchains::PrivateKey;
+use stackslib::util::secp256k1::{Secp256k1PrivateKey, Secp256k1PublicKey};
+use stackslib::clarity::vm::ast::build_ast_pre;
+use stackslib::clarity::vm::ast::definition_sorter::DefinitionSorter;
+use stackslib::clarity::vm::costs::LimitedCostTracker;
+use stackslib::clarity::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
+use stackslib::clarity::vm::database::ClaritySerializable;
 use rand::distributions::Uniform;
 use rand::prelude::SliceRandom;
 use rand::{Rng, RngCore};
 
-use blockstack_lib::address::AddressHashMode;
-use blockstack_lib::chainstate::stacks::{StacksPublicKey, C32_ADDRESS_VERSION_TESTNET_SINGLESIG};
-use blockstack_lib::types::chainstate::StacksAddress;
-use blockstack_lib::util::hash::to_hex;
-use blockstack_lib::vm::analysis::contract_interface_builder::ContractInterfaceAtomType::{
+use stackslib::address::AddressHashMode;
+use stackslib::chainstate::stacks::{StacksPublicKey, C32_ADDRESS_VERSION_TESTNET_SINGLESIG};
+use stackslib::types::chainstate::StacksAddress;
+use stackslib::util::hash::to_hex;
+use stackslib::clarity::vm::analysis::contract_interface_builder::ContractInterfaceAtomType::{
 };
-use blockstack_lib::vm::types::signatures::TypeSignature::{
+use stackslib::clarity::vm::types::signatures::TypeSignature::{
     BoolType, IntType, PrincipalType, TupleType, UIntType,
 };
-use blockstack_lib::vm::types::{ASCIIData, CharType, OptionalData, QualifiedContractIdentifier, SequenceData, TupleData, TupleTypeSignature, TypeSignature};
-use blockstack_lib::vm::{ClarityName, Value};
+use stackslib::clarity::vm::types::{ASCIIData, CharType, OptionalData, QualifiedContractIdentifier, SequenceData, TupleData, TupleTypeSignature, TypeSignature};
+use stackslib::clarity::vm::{ClarityName, Value};
 use lazy_static::lazy_static;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
-use blockstack_lib::clarity::vm::ClarityVersion;
-use blockstack_lib::clarity::vm::execute;
-use blockstack_lib::clarity::vm::types::StacksAddressExtensions;
-use blockstack_lib::clarity::codec::StacksMessageCodec;
+use stackslib::clarity::vm::ClarityVersion;
+use stackslib::clarity::vm::execute;
+use stackslib::clarity::vm::types::StacksAddressExtensions;
+use stackslib::clarity::codec::StacksMessageCodec;
 
 lazy_static! {
     pub static ref TUPLE_NAMES: Vec<String> = create_tuple_names(16);

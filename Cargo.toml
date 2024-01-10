@@ -11,19 +11,12 @@ criterion = "0.3.4"
 rand = "0.8.3"
 lazy_static = "1.4.0"
 
-[dependencies.blockstack-core]
+[dependencies.stackslib]
 #path = "../stacks-blockchain"
 git = "https://github.com/stacks-network/stacks-core"
 branch = "feat/clarity-wasm-next"
 features = ["testing"]
 package = "stackslib"
-
-[dependencies.clarity]
-#path = "../stacks-blockchain/clarity"
-git = "https://github.com/stacks-network/stacks-core"
-branch = "feat/clarity-wasm-next"
-features = ["default", "testing"]
-package = "clarity"
 
 [dependencies.secp256k1]
 version = "0.19.0"

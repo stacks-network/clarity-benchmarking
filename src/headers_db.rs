@@ -1,19 +1,17 @@
 use std::{fs, io, path::PathBuf};
 
-use blockstack_lib::{
+use stackslib::{
     chainstate::stacks::db::{MinerPaymentSchedule, StacksHeaderInfo},
-    types::{
-        chainstate::{BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, VRFSeed},
-    },
-    vm::database::HeadersDB,
+    types::chainstate::{BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, VRFSeed},
+    clarity::vm::database::HeadersDB,
 };
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
-use blockstack_lib::chainstate::burn::ConsensusHash;
-use blockstack_lib::chainstate::stacks::index::ClarityMarfTrieId;
-use blockstack_lib::clarity_vm::database::get_matured_reward;
-use blockstack_lib::util_lib::db::{FromRow, FromColumn};
-use blockstack_lib::clarity::util::hash::Hash160;
+use stackslib::chainstate::burn::ConsensusHash;
+use stackslib::chainstate::stacks::index::ClarityMarfTrieId;
+use stackslib::clarity_vm::database::get_matured_reward;
+use stackslib::util_lib::db::FromRow;
+use stackslib::clarity::util::hash::Hash160;
 
 pub struct TestHeadersDB;
 

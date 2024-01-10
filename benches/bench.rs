@@ -7,54 +7,54 @@ use std::num::ParseIntError;
 
 use benchmarking_lib::generators::{GenOutput, define_dummy_trait, gen, gen_analysis_pass, gen_read_only_func, helper_gen_clarity_list_type, helper_generate_rand_char_string, helper_make_value_for_sized_type_sig, make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map, make_sized_values_map, make_type_sig_list_of_size, gen_analysis_fetch_contract_entry, READ_TIP};
 use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
-use blockstack_lib::address::AddressHashMode;
-use blockstack_lib::burnchains::PoxConstants;
-use blockstack_lib::chainstate::stacks::db::StacksChainState;
-use blockstack_lib::chainstate::stacks::{CoinbasePayload, StacksBlock, StacksMicroblock, StacksMicroblockHeader, StacksPrivateKey, StacksPublicKey, StacksTransaction, StacksTransactionSigner, TransactionAnchorMode, TransactionAuth, TransactionPayload, TransactionVersion, C32_ADDRESS_VERSION_TESTNET_SINGLESIG, StacksBlockHeader, MINER_BLOCK_CONSENSUS_HASH, MINER_BLOCK_HEADER_HASH};
-use blockstack_lib::clarity_vm::clarity::ClarityInstance;
-use blockstack_lib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
-use blockstack_lib::core::{
+use stackslib::address::AddressHashMode;
+use stackslib::burnchains::PoxConstants;
+use stackslib::chainstate::stacks::db::StacksChainState;
+use stackslib::chainstate::stacks::{CoinbasePayload, StacksBlock, StacksMicroblock, StacksMicroblockHeader, StacksPrivateKey, StacksPublicKey, StacksTransaction, StacksTransactionSigner, TransactionAnchorMode, TransactionAuth, TransactionPayload, TransactionVersion, C32_ADDRESS_VERSION_TESTNET_SINGLESIG, StacksBlockHeader, MINER_BLOCK_CONSENSUS_HASH, MINER_BLOCK_HEADER_HASH};
+use stackslib::clarity_vm::clarity::ClarityInstance;
+use stackslib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
+use stackslib::core::{
     FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH,
 };
-use blockstack_lib::types::chainstate::{
+use stackslib::types::chainstate::{
     BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId,
     StacksWorkScore, VRFSeed,
 };
 
-use blockstack_lib::util::hash::{hex_bytes, to_hex, Hash160, MerkleTree, Sha512Trunc256Sum};
-use blockstack_lib::util::secp256k1::MessageSignature;
-use blockstack_lib::util::vrf::VRFProof;
-use blockstack_lib::vm::analysis;
-use blockstack_lib::vm::analysis::arithmetic_checker::ArithmeticOnlyChecker;
-use blockstack_lib::vm::analysis::read_only_checker::ReadOnlyChecker;
-use blockstack_lib::vm::analysis::trait_checker::TraitChecker;
-use blockstack_lib::vm::analysis::type_checker::contexts::TypingContext;
-use blockstack_lib::vm::analysis::type_checker::natives::assets::bench_check_special_mint_asset;
-use blockstack_lib::vm::analysis::type_checker::natives::options::{check_special_is_response, check_special_some, bench_analysis_option_check_helper, bench_analysis_option_cons_helper};
-use blockstack_lib::vm::analysis::type_checker::natives::sequences::{check_special_map, get_simple_native_or_user_define, bench_analysis_iterable_function_helper};
-use blockstack_lib::vm::analysis::type_checker::natives::{bench_analysis_get_function_entry_in_context, bench_check_contract_call, check_special_get, check_special_let, check_special_list_cons, check_special_merge, check_special_tuple_cons, inner_handle_tuple_get, bench_analysis_list_items_check_helper, bench_analysis_check_tuple_merge_helper, bench_analysis_tuple_cons_helper, bench_analysis_tuple_items_check_helper};
-use blockstack_lib::vm::analysis::type_checker::{trait_type_size, TypeChecker};
-use blockstack_lib::vm::analysis::{AnalysisDatabase, AnalysisPass, CheckResult, ContractAnalysis};
-use blockstack_lib::vm::ast::ASTRules;
-use blockstack_lib::vm::ast::definition_sorter::DefinitionSorter;
-use blockstack_lib::vm::ast::expression_identifier::ExpressionIdentifier;
-use blockstack_lib::vm::ast::{build_ast, parser, ContractAST};
-use blockstack_lib::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
-use blockstack_lib::vm::contracts::Contract;
-use blockstack_lib::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
-use blockstack_lib::vm::costs::{CostTracker, ExecutionCost, LimitedCostTracker};
-use blockstack_lib::vm::database::clarity_store::NullBackingStore;
-use blockstack_lib::vm::database::{
+use stackslib::util::hash::{hex_bytes, to_hex, Hash160, MerkleTree, Sha512Trunc256Sum};
+use stackslib::util::secp256k1::MessageSignature;
+use stackslib::util::vrf::VRFProof;
+use stackslib::vm::analysis;
+use stackslib::vm::analysis::arithmetic_checker::ArithmeticOnlyChecker;
+use stackslib::vm::analysis::read_only_checker::ReadOnlyChecker;
+use stackslib::vm::analysis::trait_checker::TraitChecker;
+use stackslib::vm::analysis::type_checker::contexts::TypingContext;
+use stackslib::vm::analysis::type_checker::natives::assets::bench_check_special_mint_asset;
+use stackslib::vm::analysis::type_checker::natives::options::{check_special_is_response, check_special_some, bench_analysis_option_check_helper, bench_analysis_option_cons_helper};
+use stackslib::vm::analysis::type_checker::natives::sequences::{check_special_map, get_simple_native_or_user_define, bench_analysis_iterable_function_helper};
+use stackslib::vm::analysis::type_checker::natives::{bench_analysis_get_function_entry_in_context, bench_check_contract_call, check_special_get, check_special_let, check_special_list_cons, check_special_merge, check_special_tuple_cons, inner_handle_tuple_get, bench_analysis_list_items_check_helper, bench_analysis_check_tuple_merge_helper, bench_analysis_tuple_cons_helper, bench_analysis_tuple_items_check_helper};
+use stackslib::vm::analysis::type_checker::{trait_type_size, TypeChecker};
+use stackslib::vm::analysis::{AnalysisDatabase, AnalysisPass, CheckResult, ContractAnalysis};
+use stackslib::vm::ast::ASTRules;
+use stackslib::vm::ast::definition_sorter::DefinitionSorter;
+use stackslib::vm::ast::expression_identifier::ExpressionIdentifier;
+use stackslib::vm::ast::{build_ast, parser, ContractAST};
+use stackslib::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
+use stackslib::vm::contracts::Contract;
+use stackslib::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
+use stackslib::vm::costs::{CostTracker, ExecutionCost, LimitedCostTracker};
+use stackslib::vm::database::clarity_store::NullBackingStore;
+use stackslib::vm::database::{
     ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB, ClaritySerializable
 };
-use blockstack_lib::vm::functions::crypto::special_principal_of;
-use blockstack_lib::vm::representations::depth_traverse;
-use blockstack_lib::vm::types::signatures::TypeSignature::{
+use stackslib::vm::functions::crypto::special_principal_of;
+use stackslib::vm::representations::depth_traverse;
+use stackslib::vm::types::signatures::TypeSignature::{
     BoolType, IntType, NoType, PrincipalType, TupleType, UIntType,
 };
-use blockstack_lib::vm::types::signatures::{TupleTypeSignature, TypeSignature};
-use blockstack_lib::vm::types::{FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier, StandardPrincipalData, TraitIdentifier, SequenceSubtype, BufferLength};
-use blockstack_lib::vm::{CallStack, ClarityName, Environment, LocalContext, SymbolicExpression, Value, apply, ast, bench_create_ft_in_context, bench_create_map_in_context, bench_create_nft_in_context, bench_create_var_in_context, eval_all, lookup_function, lookup_variable, ClarityVersion};
+use stackslib::vm::types::signatures::{TupleTypeSignature, TypeSignature};
+use stackslib::vm::types::{FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier, StandardPrincipalData, TraitIdentifier, SequenceSubtype, BufferLength};
+use stackslib::vm::{CallStack, ClarityName, Environment, LocalContext, SymbolicExpression, Value, apply, ast, bench_create_ft_in_context, bench_create_map_in_context, bench_create_nft_in_context, bench_create_var_in_context, eval_all, lookup_function, lookup_variable, ClarityVersion};
 use criterion::measurement::WallTime;
 use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
@@ -66,11 +66,11 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
-use blockstack_lib::clarity::types::{StacksEpochId, Address};
-use blockstack_lib::chainstate::burn::db::sortdb::SortitionDB;
-use blockstack_lib::clarity_vm::database::marf::ReadOnlyMarfStore;
+use stackslib::clarity::types::{StacksEpochId, Address};
+use stackslib::chainstate::burn::db::sortdb::SortitionDB;
+use stackslib::clarity_vm::database::marf::ReadOnlyMarfStore;
 use clarity::vm::tests::BurnStateDB;
-use blockstack_lib::clarity::vm::database::ClarityBackingStore;
+use stackslib::clarity::vm::database::ClarityBackingStore;
 
 // for when input size is the number of elements
 const INPUT_SIZES: [u64; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
