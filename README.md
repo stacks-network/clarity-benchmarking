@@ -13,7 +13,7 @@ relies on a modified version of the repository. The branch it currently depends 
 
 Running the benchmarking suite can be done via the cargo `bench` command:
 
-```
+```sh
 cargo bench
 ```
 
@@ -41,7 +41,8 @@ The analysis script requires `SciPy`, so for convenience, a Dockerfile is
 included to perform analysis.
 
 Via docker:
-```
+
+```sh
 docker build -f analysis/analysis.Dockerfile --build-arg criterion_dir="latest-data/criterion" -o /tmp/analysis-output/ .
 ```
 
@@ -70,7 +71,7 @@ the various analysis passes (those do not go into the costs contract):
 cost_arithmetic_only_checker, cost_read_only, cost_trait_checker, and
 cost_type_checker. 
 
-```
+```sh
 cd ./proposal
 cp /tmp/analysis-output/cost_constants.csv ./estimated_constants.csv
 python ./make_cost_functions.py

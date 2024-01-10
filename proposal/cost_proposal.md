@@ -38,7 +38,7 @@ the next Bitcoin block 95% of the time (`exp( -1/20 ) ~= 95%`).
 
 To determine a new proposed cost for a Clarity function, we executed a
 set of benchmarks for each Clarity cost function in the
-[clarity-benchmarking](https://github.com/blockstack/clarity-benchmarking)
+[clarity-benchmarking](https://github.com/stacks-network/clarity-benchmarking)
 Github repository. After running these benchmarks, constant factors in
 the runtime functions were fitted using linear regression (given a
 transform). These benchmarks produced regression fitted functions

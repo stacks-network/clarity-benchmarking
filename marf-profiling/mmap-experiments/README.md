@@ -8,24 +8,25 @@ without using the `mmap_size` pragma.
 ### Extract Raw Data (in Rust)
 The script `extract_data.py` expects as STDIN input the `LOGS` output by
 running this code:
-https://github.com/blockstack/stacks-blockchain/pull/2867
+https://github.com/stacks-network/stacks-core/pull/2867
 
 In particular, we are scraping lines output by the Rust code:
 
-```
+```rust
 info!("MARF read"; "db" => c.db_path , "time_micros" => duration);
 ```
 
 To run the code, use a line like:
 
-```
+```sh
 head -n 1000000 ~/data/no_mmap.log | python3 extract_data.py no_mmap > data/no_mmap.txt
 ```
 
 ### Summarize the Data
+
 Get the average and length of the data by running:
 
-````
+```sh
 python3 summarize_data.py data/no_mmap.txt
 ```
 
@@ -33,6 +34,6 @@ python3 summarize_data.py data/no_mmap.txt
 
 To calculate a rolling moving average over the time series data run:
 
-```
+```sh
 python3 moving_average_over_time.py data/with_mmap.txt
 ```
