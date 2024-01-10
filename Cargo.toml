@@ -12,9 +12,9 @@ rand = "0.8.3"
 lazy_static = "1.4.0"
 
 [dependencies.stackslib]
-#path = "../stacks-blockchain"
-git = "https://github.com/stacks-network/stacks-core"
-branch = "feat/clarity-wasm-next"
+path = "../stacks-blockchain/stackslib"
+#git = "https://github.com/stacks-network/stacks-core"
+#branch = "feat/clarity-wasm-next"
 features = ["testing"]
 package = "stackslib"
 
@@ -23,7 +23,7 @@ version = "0.19.0"
 features = ["serde", "recovery"]
 
 [dependencies.rusqlite]
-version = "0.28"
+version = "0.24"
 features = ["blob", "serde_json", "i128_blob", "bundled", "trace"]
 
 [lib]

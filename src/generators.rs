@@ -45,7 +45,9 @@ fn string_to_value(s: String) -> Value {
 
 fn size_of_value(s: String) -> u64 {
     let v = string_to_value(s);
-    v.serialize().len() as u64 / 2
+    let mut bytes = vec![];
+    v.serialize_write(&mut bytes).expect("Serialize failed");
+    bytes.len() as u64 / 2
 }
 
 fn serialized_size(s: String) -> u64 {
@@ -2183,10 +2185,10 @@ fn gen_ast_cycle_detection(input_size: u64) -> GenOutput {
         ClarityVersion::latest(),
     ).unwrap();
 
-    let mut definition_sorter = DefinitionSorter::new();
+    let mut definition_sorter = DefinitionSorter::new_pub();
     definition_sorter.run(&mut ast, &mut cost_tracker, ClarityVersion::Clarity2).unwrap();
 
-    let edges = definition_sorter.graph.edges_count().unwrap();
+    let edges = definition_sorter.get_graph().edges_count().unwrap();
 
     GenOutput::new(None, body, edges as u64)
 }
