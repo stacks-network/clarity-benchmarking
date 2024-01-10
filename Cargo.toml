@@ -10,21 +10,27 @@ criterion = "0.3.4"
 [dependencies]
 rand = "0.8.3"
 lazy_static = "1.4.0"
-clarity = { path = "../stacks-blockchain/clarity", features = ["default", "testing"] }
 
 [dependencies.blockstack-core]
 #path = "../stacks-blockchain"
 git = "https://github.com/stacks-network/stacks-core"
-branch = "clarity-benchmarking-stacks-2.1"
+branch = "feat/clarity-wasm-next"
 features = ["testing"]
-#package = "stackslib"
+package = "stackslib"
+
+[dependencies.clarity]
+#path = "../stacks-blockchain/clarity"
+git = "https://github.com/stacks-network/stacks-core"
+branch = "feat/clarity-wasm-next"
+features = ["default", "testing"]
+package = "clarity"
 
 [dependencies.secp256k1]
 version = "0.19.0"
 features = ["serde", "recovery"]
 
 [dependencies.rusqlite]
-version = "=0.24.2"
+version = "0.28"
 features = ["blob", "serde_json", "i128_blob", "bundled", "trace"]
 
 [lib]
