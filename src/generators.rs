@@ -2,8 +2,9 @@
 #[allow(unused_imports)]
 use std::cmp;
 use stackslib::burnchains::PrivateKey;
+use stackslib::types::StacksEpochId;
 use stackslib::util::secp256k1::{Secp256k1PrivateKey, Secp256k1PublicKey};
-use stackslib::clarity::vm::ast::build_ast_pre;
+use stackslib::clarity::vm::ast::{build_ast_with_rules, ASTRules};
 use stackslib::clarity::vm::ast::definition_sorter::DefinitionSorter;
 use stackslib::clarity::vm::costs::LimitedCostTracker;
 use stackslib::clarity::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
@@ -22,7 +23,7 @@ use stackslib::clarity::vm::types::signatures::TypeSignature::{
     BoolType, IntType, PrincipalType, TupleType, UIntType,
 };
 use stackslib::clarity::vm::types::{ASCIIData, CharType, OptionalData, QualifiedContractIdentifier, SequenceData, TupleData, TupleTypeSignature, TypeSignature};
-use stackslib::clarity::vm::{ClarityName, Value};
+use stackslib::clarity::vm::{ClarityName, Value, StacksEpoch};
 use lazy_static::lazy_static;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
@@ -2178,12 +2179,14 @@ fn gen_ast_cycle_detection(input_size: u64) -> GenOutput {
 
     let mut cost_tracker = LimitedCostTracker::new_free();
 
-    let mut ast = build_ast_pre(
+    let mut ast = build_ast_with_rules(
         &QualifiedContractIdentifier::transient(),
         &body,
         &mut cost_tracker,
         ClarityVersion::latest(),
-    ).unwrap();
+        StacksEpochId::latest(),
+        ASTRules::PrecheckSize
+    ).expect("Failed to build AST");
 
     let mut definition_sorter = DefinitionSorter::new_pub();
     definition_sorter.run(&mut ast, &mut cost_tracker, ClarityVersion::Clarity2).unwrap();
