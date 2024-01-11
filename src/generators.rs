@@ -2188,10 +2188,10 @@ fn gen_ast_cycle_detection(input_size: u64) -> GenOutput {
         ASTRules::PrecheckSize
     ).expect("Failed to build AST");
 
-    let mut definition_sorter = DefinitionSorter::new_pub();
+    let mut definition_sorter = DefinitionSorter::_new();
     definition_sorter.run(&mut ast, &mut cost_tracker, ClarityVersion::Clarity2).unwrap();
 
-    let edges = definition_sorter.get_graph().edges_count().unwrap();
+    let edges = definition_sorter.get_graph()._edges_count().unwrap();
 
     GenOutput::new(None, body, edges as u64)
 }

@@ -1,7 +1,7 @@
 use std::{fs, io, path::PathBuf};
 
 use stackslib::{
-    chainstate::stacks::db::{MinerPaymentSchedule, StacksHeaderInfo},
+    chainstate::stacks::db::{MinerPaymentSchedule, StacksHeaderInfo, StacksBlockHeaderTypes},
     types::chainstate::{BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, VRFSeed},
     clarity::vm::database::HeadersDB,
 };
@@ -131,7 +131,10 @@ impl HeadersDB for SimHeadersDB {
 
     fn get_vrf_seed_for_block(&self, id_bhh: &StacksBlockId) -> Option<VRFSeed> {
         get_stacks_header_info(&self.conn, id_bhh)
-            .map(|x| VRFSeed::from_proof(&x.anchored_header.proof))
+            .map(|x| match x.anchored_header {
+                StacksBlockHeaderTypes::Epoch2(h) => VRFSeed::from_proof(&h.proof),
+                StacksBlockHeaderTypes::Nakamoto(h) => todo!("Nakamoto blocks not supported yet"),
+            })
     }
 
     fn get_miner_address(&self, id_bhh: &StacksBlockId) -> Option<StacksAddress> {
