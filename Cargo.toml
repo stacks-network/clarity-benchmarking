@@ -14,8 +14,8 @@ lazy_static = "1.4.0"
 [dependencies.stackslib]
 path = "../stacks-blockchain/stackslib"
 #git = "https://github.com/stacks-network/stacks-core"
-#branch = "feat/clarity-wasm-next"
-features = ["testing"]
+#branch = "feat/costs-4-benchmark"
+features = ["benchmarking", "testing"]
 package = "stackslib"
 
 [dependencies.secp256k1]

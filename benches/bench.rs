@@ -24,37 +24,37 @@ use stackslib::types::chainstate::{
 use stackslib::util::hash::{hex_bytes, to_hex, Hash160, MerkleTree, Sha512Trunc256Sum};
 use stackslib::util::secp256k1::MessageSignature;
 use stackslib::util::vrf::VRFProof;
-use stackslib::vm::analysis;
-use stackslib::vm::analysis::arithmetic_checker::ArithmeticOnlyChecker;
-use stackslib::vm::analysis::read_only_checker::ReadOnlyChecker;
-use stackslib::vm::analysis::trait_checker::TraitChecker;
-use stackslib::vm::analysis::type_checker::contexts::TypingContext;
-use stackslib::vm::analysis::type_checker::natives::assets::bench_check_special_mint_asset;
-use stackslib::vm::analysis::type_checker::natives::options::{check_special_is_response, check_special_some, bench_analysis_option_check_helper, bench_analysis_option_cons_helper};
-use stackslib::vm::analysis::type_checker::natives::sequences::{check_special_map, get_simple_native_or_user_define, bench_analysis_iterable_function_helper};
-use stackslib::vm::analysis::type_checker::natives::{bench_analysis_get_function_entry_in_context, bench_check_contract_call, check_special_get, check_special_let, check_special_list_cons, check_special_merge, check_special_tuple_cons, inner_handle_tuple_get, bench_analysis_list_items_check_helper, bench_analysis_check_tuple_merge_helper, bench_analysis_tuple_cons_helper, bench_analysis_tuple_items_check_helper};
-use stackslib::vm::analysis::type_checker::{trait_type_size, TypeChecker};
-use stackslib::vm::analysis::{AnalysisDatabase, AnalysisPass, CheckResult, ContractAnalysis};
-use stackslib::vm::ast::ASTRules;
-use stackslib::vm::ast::definition_sorter::DefinitionSorter;
-use stackslib::vm::ast::expression_identifier::ExpressionIdentifier;
-use stackslib::vm::ast::{build_ast, parser, ContractAST};
-use stackslib::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
-use stackslib::vm::contracts::Contract;
-use stackslib::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
-use stackslib::vm::costs::{CostTracker, ExecutionCost, LimitedCostTracker};
-use stackslib::vm::database::clarity_store::NullBackingStore;
-use stackslib::vm::database::{
+use stackslib::clarity::vm::analysis;
+use stackslib::clarity::vm::analysis::arithmetic_checker::ArithmeticOnlyChecker;
+use stackslib::clarity::vm::analysis::read_only_checker::ReadOnlyChecker;
+use stackslib::clarity::vm::analysis::trait_checker::TraitChecker;
+use stackslib::clarity::vm::analysis::type_checker::contexts::TypingContext;
+use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::assets::bench_check_special_mint_asset;
+use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::options::{check_special_is_response, check_special_some, bench_analysis_option_check_helper, bench_analysis_option_cons_helper};
+use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::sequences::{check_special_map, get_simple_native_or_user_define, bench_analysis_iterable_function_helper};
+use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::{bench_analysis_get_function_entry_in_context, bench_check_contract_call, check_special_get, check_special_let, check_special_list_cons, check_special_merge, check_special_tuple_cons, inner_handle_tuple_get, bench_analysis_list_items_check_helper, bench_analysis_check_tuple_merge_helper, bench_analysis_tuple_cons_helper, bench_analysis_tuple_items_check_helper};
+use stackslib::clarity::vm::analysis::type_checker::v2_1::{trait_type_size, TypeChecker};
+use stackslib::clarity::vm::analysis::{AnalysisDatabase, AnalysisPass, CheckResult, ContractAnalysis};
+use stackslib::clarity::vm::ast::ASTRules;
+use stackslib::clarity::vm::ast::definition_sorter::DefinitionSorter;
+use stackslib::clarity::vm::ast::expression_identifier::ExpressionIdentifier;
+use stackslib::clarity::vm::ast::{build_ast, parser, ContractAST};
+use stackslib::clarity::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
+use stackslib::clarity::vm::contracts::Contract;
+use stackslib::clarity::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
+use stackslib::clarity::vm::costs::{CostTracker, ExecutionCost, LimitedCostTracker};
+use stackslib::clarity::vm::database::clarity_store::NullBackingStore;
+use stackslib::clarity::vm::database::{
     ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB, ClaritySerializable
 };
-use stackslib::vm::functions::crypto::special_principal_of;
-use stackslib::vm::representations::depth_traverse;
-use stackslib::vm::types::signatures::TypeSignature::{
+use stackslib::clarity::vm::functions::crypto::special_principal_of;
+use stackslib::clarity::vm::representations::depth_traverse;
+use stackslib::clarity::vm::types::signatures::TypeSignature::{
     BoolType, IntType, NoType, PrincipalType, TupleType, UIntType,
 };
-use stackslib::vm::types::signatures::{TupleTypeSignature, TypeSignature};
-use stackslib::vm::types::{FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier, StandardPrincipalData, TraitIdentifier, SequenceSubtype, BufferLength};
-use stackslib::vm::{CallStack, ClarityName, Environment, LocalContext, SymbolicExpression, Value, apply, ast, bench_create_ft_in_context, bench_create_map_in_context, bench_create_nft_in_context, bench_create_var_in_context, eval_all, lookup_function, lookup_variable, ClarityVersion};
+use stackslib::clarity::vm::types::signatures::{TupleTypeSignature, TypeSignature};
+use stackslib::clarity::vm::types::{FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier, StandardPrincipalData, TraitIdentifier, SequenceSubtype, BufferLength};
+use stackslib::clarity::vm::{CallStack, ClarityName, Environment, LocalContext, SymbolicExpression, Value, apply, ast, bench_create_ft_in_context, bench_create_map_in_context, bench_create_nft_in_context, bench_create_var_in_context, eval_all, lookup_function, lookup_variable, ClarityVersion};
 use criterion::measurement::WallTime;
 use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
@@ -66,10 +66,9 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
-use stackslib::clarity::types::{StacksEpochId, Address};
 use stackslib::chainstate::burn::db::sortdb::SortitionDB;
-use stackslib::clarity_vm::database::marf::ReadOnlyMarfStore;
-use clarity::vm::tests::BurnStateDB;
+use stackslib::clarity::types::{StacksEpochId, Address};
+use stackslib::clarity::vm::tests::BurnStateDB;
 use stackslib::clarity::vm::database::ClarityBackingStore;
 
 // for when input size is the number of elements
@@ -203,7 +202,7 @@ fn run_bench<'a, F>(
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -319,7 +318,7 @@ fn bench_analysis<F, G>(
         let new_tip = StacksBlockId::from([5;32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
-        let mut local_context = TypingContext::new();
+        let mut local_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
@@ -352,7 +351,7 @@ fn bench_analysis<F, G>(
 
 fn bench_analysis_pass<F>(c: &mut Criterion, function: AnalysisCostFunction, code_to_bench: F) -> ()
 where
-    F: Fn(&mut ContractAnalysis, &mut AnalysisDatabase) -> CheckResult<()>,
+    F: Fn(&StacksEpochId, &mut ContractAnalysis, &mut AnalysisDatabase) -> CheckResult<()>,
 {
     let mut group = c.benchmark_group(function.to_string());
 
@@ -373,6 +372,7 @@ where
             contract_identifier.clone(),
             contract_ast.expressions.clone(),
             cost_tracker,
+            StacksEpochId::latest(),
             ClarityVersion::Clarity2
         );
 
@@ -399,7 +399,7 @@ where
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
-                            code_to_bench(&mut contract_analysis, db);
+                            code_to_bench(&StacksEpochId::latest(), &mut contract_analysis, db);
                         }
                     })
                 },
@@ -457,6 +457,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             pre_contract_identifier.clone(),
             pre_contract_ast.expressions.clone(),
             cost_tracker,
+            StacksEpochId::latest(),
             ClarityVersion::Clarity2
         );
 
@@ -483,6 +484,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             contract_identifier.clone(),
             contract_ast.expressions.clone(),
             cost_tracker,
+            StacksEpochId::latest(),
             ClarityVersion::Clarity2
         );
 
@@ -504,7 +506,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
         // add defined traits to pre contract analysis
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
-        let mut typing_context = TypingContext::new();
+        let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         for exp in &pre_contract_ast.expressions {
             type_checker.try_type_check_define(exp, &mut typing_context);
         }
@@ -515,7 +517,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
         // add implemented traits to contract analysis
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
-        let mut typing_context = TypingContext::new();
+        let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         for exp in &contract_ast.expressions {
             type_checker.try_type_check_define(exp, &mut typing_context);
         }
@@ -533,7 +535,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
-                            TraitChecker::run_pass(&mut contract_analysis, db);
+                            TraitChecker::run_pass(&StacksEpochId::latest(), &mut contract_analysis, db);
                         }
                     })
                 },
@@ -572,6 +574,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             pre_contract_identifier.clone(),
             pre_contract_ast.expressions.clone(),
             cost_tracker,
+            StacksEpochId::latest(),
             ClarityVersion::Clarity2
         );
 
@@ -598,6 +601,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             contract_identifier.clone(),
             contract_ast.expressions.clone(),
             cost_tracker,
+            StacksEpochId::latest(),
             ClarityVersion::Clarity2
         );
 
@@ -620,7 +624,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
         // add defined traits to pre contract analysis
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
-        let mut typing_context = TypingContext::new();
+        let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         for exp in &pre_contract_ast.expressions {
             type_checker.try_type_check_define(exp, &mut typing_context);
         }
@@ -638,7 +642,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
-                            TypeChecker::run_pass(&mut contract_analysis, db);
+                            TypeChecker::run_pass(&StacksEpochId::latest(), &mut contract_analysis, db);
                         }
                     })
                 },
@@ -697,7 +701,7 @@ fn bench_analysis_lookup_variable_depth(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let mut local_context = TypingContext::new();
+        let mut local_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         helper_deepen_typing_context(*input_size, *input_size, &local_context, &mut group);
     }
 }
@@ -725,7 +729,7 @@ fn helper_deepen_local_context(
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -832,7 +836,7 @@ fn bench_contract_storage(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -913,7 +917,7 @@ fn bench_principal_of(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -1004,10 +1008,11 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             contract_identifier.clone(),
             contract_ast.expressions.clone(),
             cost_tracker,
+            StacksEpochId::latest(),
             ClarityVersion::Clarity2
         );
 
-        let mut typing_context = TypingContext::new();
+        let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         type_checker.try_type_check_define(&contract_ast.expressions[0], &mut typing_context).unwrap().unwrap();
         type_checker
             .contract_context
@@ -1092,10 +1097,11 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
             contract_identifier.clone(),
             contract_ast.expressions.clone(),
             cost_tracker,
+            StacksEpochId::latest(),
             ClarityVersion::Clarity2
         );
 
-        let mut typing_context = TypingContext::new();
+        let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         type_checker.try_type_check_define(&contract_ast.expressions[0], &mut typing_context);
         type_checker
             .contract_context
@@ -1160,7 +1166,7 @@ fn bench_inner_type_check_cost(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1230,7 +1236,7 @@ fn bench_user_function_application(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1303,7 +1309,7 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1391,7 +1397,7 @@ fn bench_lookup_function(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -1472,7 +1478,7 @@ fn bench_lookup_variable_size(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1909,7 +1915,7 @@ fn bench_analysis_iterable_func(c: &mut Criterion) {
     for input_size in &INPUT_SIZES {
         let type_sig_list = vec![TypeSignature::SequenceType(SequenceSubtype::BufferType(BufferLength::try_from(15u32).unwrap())); *input_size as usize];
 
-        let mut local_context = TypingContext::new();
+        let mut local_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
 
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut null_store = NullBackingStore::new();
@@ -1975,10 +1981,10 @@ fn bench_analysis_storage(c: &mut Criterion) {
             let contract_id = QualifiedContractIdentifier::local("analysis_test").unwrap();
             let exp_list = exp.match_list().unwrap();
             let mut contract_analysis =
-                ContractAnalysis::new(contract_id.clone(), exp_list.to_vec(), cost_tracker.clone(), ClarityVersion::Clarity2);
+                ContractAnalysis::new(contract_id.clone(), exp_list.to_vec(), cost_tracker.clone(), StacksEpochId::latest(), ClarityVersion::Clarity2);
 
             let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
-            let mut typing_context = TypingContext::new();
+            let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
             for exp in exp_list {
                 type_checker.try_type_check_define(exp, &mut typing_context);
             }
@@ -2413,7 +2419,7 @@ fn bench_create_ft(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -2508,7 +2514,7 @@ fn bench_create_nft(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -2686,7 +2692,7 @@ fn bench_create_map(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -2747,7 +2753,7 @@ fn bench_create_var(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -2805,7 +2811,7 @@ fn bench_wrapped_data_function(mut group: BenchmarkGroup<WallTime>, cost_functio
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -3152,7 +3158,7 @@ fn bench_load_contract(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -3270,7 +3276,7 @@ fn bench_poison_microblock(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -3590,7 +3596,7 @@ fn bench_analysis_fetch_contract_entry(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value());
+    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -3612,7 +3618,7 @@ fn bench_analysis_fetch_contract_entry(c: &mut Criterion) {
         analysis_db.begin();
         let mut contract_ast = ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21).unwrap();
         let mut ct = LimitedCostTracker::new_free();
-        let contract_analysis = analysis::run_analysis(&contract_identifier, &mut contract_ast.expressions, &mut analysis_db, true, ct, ClarityVersion::Clarity2).unwrap();
+        let contract_analysis = analysis::run_analysis(&contract_identifier, &mut contract_ast.expressions, &mut analysis_db, true, ct, StacksEpochId::latest(), ClarityVersion::Clarity2).unwrap();
 
         // how many bytes
         let contract_size = contract_analysis.serialize().len();
@@ -3623,7 +3629,7 @@ fn bench_analysis_fetch_contract_entry(c: &mut Criterion) {
             &contract_size,
             |b, &_| {
                 b.iter(|| {
-                    analysis_db.load_contract(&contract_identifier).unwrap();
+                    analysis_db.load_contract(&contract_identifier, &StacksEpochId::latest()).unwrap();
                 })
             },
         );
@@ -3651,7 +3657,7 @@ criterion_group!(
     bench_bit_xor,
     bench_bit_not,
     bench_bit_lshift,
-    bench_bit_rshift
+    bench_bit_rshift,
     bench_eq,
     bench_mod,
     bench_pow,

@@ -9,7 +9,7 @@ use stackslib::{
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use stackslib::chainstate::burn::ConsensusHash;
 use stackslib::chainstate::stacks::index::ClarityMarfTrieId;
-use stackslib::clarity_vm::database::get_matured_reward_pub;
+use stackslib::clarity_vm::database::_get_matured_reward;
 use stackslib::util_lib::db::FromRow;
 use stackslib::clarity::util::hash::Hash160;
 
@@ -154,7 +154,7 @@ impl HeadersDB for SimHeadersDB {
     }
 
     fn get_tokens_earned_for_block(&self, id_bhh: &StacksBlockId) -> Option<u128> {
-        get_matured_reward_pub(&self.conn, id_bhh).map(|x| x.total().into())
+        _get_matured_reward(&self.conn, id_bhh).map(|x| x.total().into())
     }
 }
 

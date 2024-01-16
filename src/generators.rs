@@ -989,7 +989,7 @@ fn helper_create_nft_fn_boilerplate(input_size: u64) -> (String, String, String,
 
     let nft_value = helper_make_value_for_sized_type_sig(input_size);
     assert_eq!(nft_type_size, nft_value.size());
-    let mut owner_principal = helper_create_principal();
+    let owner_principal = helper_create_principal();
     let mint_statement = format!(
         "(nft-mint? {} {} {}) ",
         token_name, nft_value, owner_principal
@@ -1009,7 +1009,7 @@ fn helper_create_nft_fn_boilerplate(input_size: u64) -> (String, String, String,
 ///     `expected_asset_type.size()`
 fn gen_nft_transfer(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
-    let (mut setup, token_name, mut owner_principal, nft_value, nft_type_size) =
+    let (setup, token_name, mut owner_principal, nft_value, nft_type_size) =
         helper_create_nft_fn_boilerplate(input_size);
     for _ in 0..scale {
         let next_principal = helper_create_principal();
@@ -1032,7 +1032,7 @@ fn gen_nft_transfer(function_name: &'static str, scale: u16, input_size: u64) ->
 fn gen_nft_owner(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
-    let (mut setup, token_name, _, nft_value, nft_type_size) =
+    let (setup, token_name, _, nft_value, nft_type_size) =
         helper_create_nft_fn_boilerplate(input_size);
     let invalid_nft_value = helper_make_value_for_sized_type_sig(input_size);
     assert!(invalid_nft_value.size() <= u16::MAX as u32);
@@ -1062,7 +1062,7 @@ fn gen_nft_owner(function_name: &'static str, scale: u16, input_size: u64) -> Ge
 ///     `expected_asset_type.size()`
 fn gen_nft_burn(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
-    let (mut setup, token_name, mut owner_principal, nft_value, nft_type_size) =
+    let (setup, token_name, owner_principal, nft_value, nft_type_size) =
         helper_create_nft_fn_boilerplate(input_size);
     for _ in 0..scale {
         let args = format!("{} {} {}", token_name, nft_value, owner_principal);
@@ -2707,7 +2707,6 @@ pub fn gen_replace_at(function_name: &'static str, scale: u16) -> GenOutput {
 /// cost_function: FromConsensusBuff
 /// input_size: number of bytes in the input buffer
 pub fn gen_from_consensus_buff(function_name: &'static str, scale: u16, input_size: u64) -> GenOutput {
-    let mut rng = rand::thread_rng();
     let mut body = String::new();
 
     let clar_value = make_sized_value(input_size).serialize_to_vec();
@@ -2723,7 +2722,7 @@ pub fn gen_from_consensus_buff(function_name: &'static str, scale: u16, input_si
         };
         body.push_str(&*format!("({} {} {}) ", function_name, clar_type, clar_buff_serialized));
     }
-    println!("{}", body);
+    println!("{body}");
 
     GenOutput::new(None, body, len as u64)
 }
