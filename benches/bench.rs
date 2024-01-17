@@ -607,7 +607,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             type_checker._try_type_check_define(exp, &mut typing_context);
         }
         type_checker
-            .get_contract_context()
+            .contract_context
             .into_contract_analysis(&mut pre_contract_analysis);
 
         // add implemented traits to contract analysis
@@ -624,7 +624,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             type_checker._try_type_check_define(exp, &mut typing_context);
         }
         type_checker
-            .get_contract_context()
+            .contract_context
             .into_contract_analysis(&mut contract_analysis);
 
         analysis_db.execute::<_, _, ()>(|db| {
@@ -751,7 +751,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             type_checker._try_type_check_define(exp, &mut typing_context);
         }
         type_checker
-            .get_contract_context()
+            .contract_context
             .into_contract_analysis(&mut pre_contract_analysis);
 
         analysis_db.execute::<_, _, ()>(|db| {
@@ -1237,10 +1237,10 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             .unwrap();
 
         type_checker
-            .get_contract_context_clone()
+            .contract_context
             .into_contract_analysis(&mut contract_analysis);
 
-        type_checker.get_db().execute(|db| {
+        type_checker.db.execute(|db| {
             db.insert_contract(&contract_identifier, &contract_analysis)
                 .unwrap();
             let trait_id = TraitIdentifier {
@@ -1338,10 +1338,10 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
             TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         type_checker._try_type_check_define(&contract_ast.expressions[0], &mut typing_context);
         type_checker
-            .get_contract_context_clone()
+            .contract_context
             .into_contract_analysis(&mut contract_analysis);
 
-        type_checker.get_db().execute(|db| {
+        type_checker.db.execute(|db| {
             db.insert_contract(&contract_identifier, &contract_analysis);
             let fn_name = ClarityName::try_from("dummy-fn".to_string()).unwrap();
             let type_size = match db
@@ -1669,7 +1669,7 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
         // add trait to the contract context of the type checker
         let trait_clarity_name = ClarityName::from("dummy-trait");
         type_checker
-            .get_contract_context()
+            .contract_context
             .add_defined_trait(trait_clarity_name.clone(), trait_obj);
 
         // construct trait id
@@ -1977,7 +1977,7 @@ fn bench_analysis_bind_name(c: &mut Criterion) {
         input_size: u64,
         _c: &mut T,
     ) {
-        type_checker.get_contract_context().clear_variable_types();
+        type_checker.contract_context.clear_variable_types();
         let type_sig = SIZED_TYPE_SIG.get(&input_size).unwrap();
         for _ in 0..SCALE {
             type_checker.bench_analysis_bind_name_helper(type_sig.clone());
@@ -2215,7 +2215,7 @@ fn bench_analysis_type_annotate(c: &mut Criterion) {
         for exp in &contract_ast.expressions {
             let var_name = exp.match_atom().unwrap();
             type_checker
-                .get_contract_context()
+                .contract_context
                 .add_variable_type(var_name.clone(), var_type_sig.clone());
         }
     }
@@ -2397,7 +2397,7 @@ fn bench_analysis_storage(c: &mut Criterion) {
                 type_checker._try_type_check_define(exp, &mut typing_context);
             }
             type_checker
-                .get_contract_context()
+                .contract_context
                 .into_contract_analysis(&mut contract_analysis);
 
             contract_analyses.push(contract_analysis);
@@ -2440,7 +2440,7 @@ fn bench_analysis_type_lookup(c: &mut Criterion) {
             let exp_list = exp.match_list().unwrap();
             let asset_name = exp_list[0].match_atom().unwrap();
             type_checker
-                .get_contract_context()
+                .contract_context
                 .add_nft(asset_name.clone(), token_type.clone());
         }
     }
@@ -2482,7 +2482,7 @@ fn bench_analysis_lookup_variable_const(c: &mut Criterion) {
             let var_name = exp.match_atom().unwrap();
             let var_type_sig = type_sig_list.choose(&mut rng).unwrap();
             type_checker
-                .get_contract_context()
+                .contract_context
                 .add_variable_type(var_name.clone(), var_type_sig.clone());
         }
     }
