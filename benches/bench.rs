@@ -122,9 +122,9 @@ const INPUT_SIZES_ANALYSIS_PASS: [u64; 6] = [1, 2, 8, 16, 32, 64];
 // scaling factor for code generators
 const SCALE: u16 = 75;
 
-const SORTITION_MARF_PATH: &str = "./db/sortition/";
-const CLARITY_MARF_PATH: &str = "./db/vm/clarity/";
-const CHAINSTATE_PATH: &str = "./db/vm/index.sqlite";
+const SORTITION_MARF_PATH: &str = "./db/epoch3/sortition/";
+const CLARITY_MARF_PATH: &str = "./db/epoch3/vm/clarity/";
+const CHAINSTATE_PATH: &str = "./db/epoch3/vm/index.sqlite";
 
 lazy_static! {
     pub static ref SIZED_VALUES: HashMap<u64, Value> = make_sized_values_map(INPUT_SIZES.to_vec());

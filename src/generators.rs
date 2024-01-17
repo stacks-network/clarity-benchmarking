@@ -37,8 +37,9 @@ lazy_static! {
 }
 
 // This index_block_hash corresponds to block height 7 in the chainstate DB
-// pub const READ_TIP: &str = "df3d88b6d70cecc1d94442c4dc23ccc5a4466101454002d26620f972f0b30299";
-pub const READ_TIP: &str = "24d3f81a0bad21b113af437dfc0872824d39cd6ad46d0a79fc80db3bcedbd687";
+//pub const READ_TIP: &str = "df3d88b6d70cecc1d94442c4dc23ccc5a4466101454002d26620f972f0b30299"; // ???
+//pub const READ_TIP: &str = "24d3f81a0bad21b113af437dfc0872824d39cd6ad46d0a79fc80db3bcedbd687"; // epoch2 db
+pub const READ_TIP: &str = "35c018bc926bb35110b0573c687eea6c988544598141630f9bb5aa76a2490a77"; // epoch3 db
 
 fn string_to_value(s: String) -> Value {
     execute(s.as_str()).unwrap().unwrap()
