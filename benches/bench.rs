@@ -495,6 +495,7 @@ fn bench_analysis_pass_read_only(c: &mut Criterion) {
 
 fn bench_analysis_pass_arithmetic_only_checker(c: &mut Criterion) {
     fn wrapper_arithmetic_checker(
+        epoch_id: &StacksEpochId,
         contract_analysis: &mut ContractAnalysis,
         _db: &mut AnalysisDatabase,
     ) -> CheckResult<()> {
@@ -606,7 +607,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             type_checker._try_type_check_define(exp, &mut typing_context);
         }
         type_checker
-            ._get_contract_context()
+            .get_contract_context()
             .into_contract_analysis(&mut pre_contract_analysis);
 
         // add implemented traits to contract analysis
@@ -623,7 +624,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             type_checker._try_type_check_define(exp, &mut typing_context);
         }
         type_checker
-            ._get_contract_context()
+            .get_contract_context()
             .into_contract_analysis(&mut contract_analysis);
 
         analysis_db.execute::<_, _, ()>(|db| {
@@ -750,7 +751,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             type_checker._try_type_check_define(exp, &mut typing_context);
         }
         type_checker
-            ._get_contract_context()
+            .get_contract_context()
             .into_contract_analysis(&mut pre_contract_analysis);
 
         analysis_db.execute::<_, _, ()>(|db| {
@@ -1023,7 +1024,7 @@ fn bench_contract_storage(c: &mut Criterion) {
         global_context.begin();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_context =
+        let contract_context =
             ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
         let GenOutput {
@@ -1032,7 +1033,7 @@ fn bench_contract_storage(c: &mut Criterion) {
             input_size: computed_input_size,
         } = gen(function, 1, *input_size);
 
-        let mut contract_ast = match ast::build_ast(
+        let contract_ast = match ast::build_ast(
             &contract_identifier,
             &contract,
             &mut (),
@@ -1228,20 +1229,20 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             ClarityVersion::Clarity2,
         );
 
+        let trait_name = ClarityName::try_from("dummy-trait".to_string()).unwrap();
         let mut typing_context =
             TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         type_checker
-            ._type_check_define_trait(&contract_ast.expressions[0], &mut typing_context)
-            .unwrap()
+            ._type_check_define_trait(&trait_name, &contract_ast.expressions, &mut typing_context)
             .unwrap();
+
         type_checker
-            ._get_contract_context()
+            .get_contract_context_clone()
             .into_contract_analysis(&mut contract_analysis);
 
-        type_checker._get_db().execute(|db| {
+        type_checker.get_db().execute(|db| {
             db.insert_contract(&contract_identifier, &contract_analysis)
                 .unwrap();
-            let trait_name = ClarityName::try_from("dummy-trait".to_string()).unwrap();
             let trait_id = TraitIdentifier {
                 name: trait_name.clone(),
                 contract_identifier: contract_identifier.clone(),
@@ -1249,7 +1250,7 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
 
             // get the size of the trait
             let trait_sig = db
-                .get_defined_trait(&contract_identifier, &trait_name)
+                .get_defined_trait(&contract_identifier, &trait_name, &StacksEpochId::latest())
                 .expect("FATAL: could not load from DB")
                 .expect("FATAL: could not unwrap");
             let type_size = _trait_type_size(&trait_sig).unwrap();
@@ -1337,14 +1338,14 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
             TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         type_checker._try_type_check_define(&contract_ast.expressions[0], &mut typing_context);
         type_checker
-            ._get_contract_context()
+            .get_contract_context_clone()
             .into_contract_analysis(&mut contract_analysis);
 
-        type_checker._get_db().execute(|db| {
+        type_checker.get_db().execute(|db| {
             db.insert_contract(&contract_identifier, &contract_analysis);
             let fn_name = ClarityName::try_from("dummy-fn".to_string()).unwrap();
             let type_size = match db
-                .get_read_only_function_type(&contract_identifier, "dummy-fn")
+                .get_read_only_function_type(&contract_identifier, "dummy-fn", &StacksEpochId::latest())
                 .unwrap()
             {
                 Some(FunctionType::Fixed(function)) => {
@@ -1668,12 +1669,12 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
         // add trait to the contract context of the type checker
         let trait_clarity_name = ClarityName::from("dummy-trait");
         type_checker
-            ._get_contract_context()
+            .get_contract_context()
             .add_defined_trait(trait_clarity_name.clone(), trait_obj);
 
         // construct trait id
         let trait_id = TraitIdentifier {
-            contract_identifier: contract_identifier,
+            contract_identifier,
             name: trait_clarity_name,
         };
 
@@ -1976,7 +1977,7 @@ fn bench_analysis_bind_name(c: &mut Criterion) {
         input_size: u64,
         _c: &mut T,
     ) {
-        type_checker._get_contract_context().clear_variable_types();
+        type_checker.get_contract_context().clear_variable_types();
         let type_sig = SIZED_TYPE_SIG.get(&input_size).unwrap();
         for _ in 0..SCALE {
             type_checker.bench_analysis_bind_name_helper(type_sig.clone());
@@ -2214,7 +2215,7 @@ fn bench_analysis_type_annotate(c: &mut Criterion) {
         for exp in &contract_ast.expressions {
             let var_name = exp.match_atom().unwrap();
             type_checker
-                ._get_contract_context()
+                .get_contract_context()
                 .add_variable_type(var_name.clone(), var_type_sig.clone());
         }
     }
@@ -2252,7 +2253,7 @@ fn bench_analysis_type_check(c: &mut Criterion) {
         _c: &mut T,
     ) {
         let tuple_type_sig = SIZED_TYPE_SIG.get(&i).unwrap().clone();
-        type_checker._get_function_return_tracker() = Some(Some(tuple_type_sig.clone()));
+        type_checker.set_function_return_tracker(Some(Some(tuple_type_sig.clone())));
     }
 
     fn eval_track_return_type<T: CostTracker>(
@@ -2396,7 +2397,7 @@ fn bench_analysis_storage(c: &mut Criterion) {
                 type_checker._try_type_check_define(exp, &mut typing_context);
             }
             type_checker
-                ._get_contract_context()
+                .get_contract_context()
                 .into_contract_analysis(&mut contract_analysis);
 
             contract_analyses.push(contract_analysis);
@@ -2439,7 +2440,7 @@ fn bench_analysis_type_lookup(c: &mut Criterion) {
             let exp_list = exp.match_list().unwrap();
             let asset_name = exp_list[0].match_atom().unwrap();
             type_checker
-                ._get_contract_context()
+                .get_contract_context()
                 .add_nft(asset_name.clone(), token_type.clone());
         }
     }
@@ -2481,7 +2482,7 @@ fn bench_analysis_lookup_variable_const(c: &mut Criterion) {
             let var_name = exp.match_atom().unwrap();
             let var_type_sig = type_sig_list.choose(&mut rng).unwrap();
             type_checker
-                ._get_contract_context()
+                .get_contract_context()
                 .add_variable_type(var_name.clone(), var_type_sig.clone());
         }
     }
@@ -3206,7 +3207,7 @@ fn bench_create_var(c: &mut Criterion) {
         let value_type = SIZED_TYPE_SIG.get(input_size).unwrap();
         let value_type_size = value_type.size();
         let value = helper_make_value_for_sized_type_sig(*input_size);
-        assert!(value_type.admits(&value));
+        assert!(value_type.admits(&StacksEpochId::latest(), &value).unwrap());
         assert_eq!(value_type.size(), value.size());
 
         group.throughput(Throughput::Bytes(value_type_size as u64));
