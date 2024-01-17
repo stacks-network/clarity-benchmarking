@@ -1,60 +1,33 @@
 #[allow(unused_imports)]
 #[allow(unused_variables)]
-
-use std::fs::{self, File, read};
+use std::fs::{self, read, File};
 use std::io::Write;
 use std::num::ParseIntError;
 
-use benchmarking_lib::generators::{GenOutput, define_dummy_trait, gen, gen_analysis_pass, gen_read_only_func, helper_gen_clarity_list_type, helper_generate_rand_char_string, helper_make_value_for_sized_type_sig, make_sized_contracts_map, make_sized_tuple_sigs_map, make_sized_type_sig_map, make_sized_values_map, make_type_sig_list_of_size, gen_analysis_fetch_contract_entry, READ_TIP};
+use benchmarking_lib::generators::{
+    define_dummy_trait, gen, gen_analysis_fetch_contract_entry, gen_analysis_pass,
+    gen_read_only_func, helper_gen_clarity_list_type, helper_generate_rand_char_string,
+    helper_make_value_for_sized_type_sig, make_sized_contracts_map, make_sized_tuple_sigs_map,
+    make_sized_type_sig_map, make_sized_values_map, make_type_sig_list_of_size, GenOutput,
+    READ_TIP,
+};
 use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
 use stackslib::address::AddressHashMode;
 use stackslib::burnchains::PoxConstants;
 use stackslib::chainstate::stacks::db::StacksChainState;
-use stackslib::chainstate::stacks::{CoinbasePayload, StacksBlock, StacksMicroblock, StacksMicroblockHeader, StacksPrivateKey, StacksPublicKey, StacksTransaction, StacksTransactionSigner, TransactionAnchorMode, TransactionAuth, TransactionPayload, TransactionVersion, C32_ADDRESS_VERSION_TESTNET_SINGLESIG, StacksBlockHeader, MINER_BLOCK_CONSENSUS_HASH, MINER_BLOCK_HEADER_HASH};
+use stackslib::chainstate::stacks::{
+    CoinbasePayload, StacksBlock, StacksBlockHeader, StacksMicroblock, StacksMicroblockHeader,
+    StacksPrivateKey, StacksPublicKey, StacksTransaction, StacksTransactionSigner,
+    TransactionAnchorMode, TransactionAuth, TransactionPayload, TransactionVersion,
+    C32_ADDRESS_VERSION_TESTNET_SINGLESIG, MINER_BLOCK_CONSENSUS_HASH, MINER_BLOCK_HEADER_HASH,
+};
 use stackslib::clarity_vm::clarity::ClarityInstance;
 use stackslib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
-use stackslib::core::{
-    FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH,
-};
+use stackslib::core::{FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
 use stackslib::types::chainstate::{
-    BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId,
-    StacksWorkScore, VRFSeed,
+    BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, StacksWorkScore, VRFSeed,
 };
 
-use stackslib::util::hash::{hex_bytes, to_hex, Hash160, MerkleTree, Sha512Trunc256Sum};
-use stackslib::util::secp256k1::MessageSignature;
-use stackslib::util::vrf::VRFProof;
-use stackslib::clarity::vm::analysis;
-use stackslib::clarity::vm::analysis::arithmetic_checker::ArithmeticOnlyChecker;
-use stackslib::clarity::vm::analysis::read_only_checker::ReadOnlyChecker;
-use stackslib::clarity::vm::analysis::trait_checker::TraitChecker;
-use stackslib::clarity::vm::analysis::type_checker::contexts::TypingContext;
-use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::assets::bench_check_special_mint_asset;
-use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::options::{check_special_is_response, check_special_some, bench_analysis_option_check_helper, bench_analysis_option_cons_helper};
-use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::sequences::{check_special_map, get_simple_native_or_user_define, bench_analysis_iterable_function_helper};
-use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::{bench_analysis_get_function_entry_in_context, bench_check_contract_call, check_special_get, check_special_let, check_special_list_cons, check_special_merge, check_special_tuple_cons, inner_handle_tuple_get, bench_analysis_list_items_check_helper, bench_analysis_check_tuple_merge_helper, bench_analysis_tuple_cons_helper, bench_analysis_tuple_items_check_helper};
-use stackslib::clarity::vm::analysis::type_checker::v2_1::{trait_type_size, TypeChecker};
-use stackslib::clarity::vm::analysis::{AnalysisDatabase, AnalysisPass, CheckResult, ContractAnalysis};
-use stackslib::clarity::vm::ast::ASTRules;
-use stackslib::clarity::vm::ast::definition_sorter::DefinitionSorter;
-use stackslib::clarity::vm::ast::expression_identifier::ExpressionIdentifier;
-use stackslib::clarity::vm::ast::{build_ast, parser, ContractAST};
-use stackslib::clarity::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
-use stackslib::clarity::vm::contracts::Contract;
-use stackslib::clarity::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
-use stackslib::clarity::vm::costs::{CostTracker, ExecutionCost, LimitedCostTracker};
-use stackslib::clarity::vm::database::clarity_store::NullBackingStore;
-use stackslib::clarity::vm::database::{
-    ClarityDatabase, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB, ClaritySerializable
-};
-use stackslib::clarity::vm::functions::crypto::special_principal_of;
-use stackslib::clarity::vm::representations::depth_traverse;
-use stackslib::clarity::vm::types::signatures::TypeSignature::{
-    BoolType, IntType, NoType, PrincipalType, TupleType, UIntType,
-};
-use stackslib::clarity::vm::types::signatures::{TupleTypeSignature, TypeSignature};
-use stackslib::clarity::vm::types::{FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier, StandardPrincipalData, TraitIdentifier, SequenceSubtype, BufferLength};
-use stackslib::clarity::vm::{CallStack, ClarityName, Environment, LocalContext, SymbolicExpression, Value, apply, ast, bench_create_ft_in_context, bench_create_map_in_context, bench_create_nft_in_context, bench_create_var_in_context, eval_all, lookup_function, lookup_variable, ClarityVersion};
 use criterion::measurement::WallTime;
 use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
@@ -62,14 +35,69 @@ use criterion::{
 use lazy_static::lazy_static;
 use rand::prelude::SliceRandom;
 use rand::{thread_rng, Rng};
+use stackslib::chainstate::burn::db::sortdb::SortitionDB;
+use stackslib::clarity::types::{Address, StacksEpochId};
+use stackslib::clarity::vm::analysis;
+use stackslib::clarity::vm::analysis::arithmetic_checker::ArithmeticOnlyChecker;
+use stackslib::clarity::vm::analysis::read_only_checker::ReadOnlyChecker;
+use stackslib::clarity::vm::analysis::trait_checker::TraitChecker;
+use stackslib::clarity::vm::analysis::type_checker::contexts::TypingContext;
+use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::assets::bench_check_special_mint_asset;
+use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::options::{
+    bench_analysis_option_check_helper, bench_analysis_option_cons_helper,
+    check_special_is_response, check_special_some,
+};
+use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::sequences::{
+    bench_analysis_iterable_function_helper, check_special_map, get_simple_native_or_user_define,
+};
+use stackslib::clarity::vm::analysis::type_checker::v2_1::natives::{
+    bench_analysis_check_tuple_merge_helper, bench_analysis_get_function_entry_in_context,
+    bench_analysis_list_items_check_helper, bench_analysis_tuple_cons_helper,
+    bench_analysis_tuple_items_check_helper, bench_check_contract_call, check_special_get,
+    check_special_let, check_special_list_cons, check_special_merge, check_special_tuple_cons,
+    inner_handle_tuple_get,
+};
+use stackslib::clarity::vm::analysis::type_checker::v2_1::{TypeChecker, _trait_type_size};
+use stackslib::clarity::vm::analysis::{
+    AnalysisDatabase, AnalysisPass, CheckResult, ContractAnalysis,
+};
+use stackslib::clarity::vm::ast::definition_sorter::DefinitionSorter;
+use stackslib::clarity::vm::ast::expression_identifier::ExpressionIdentifier;
+use stackslib::clarity::vm::ast::ASTRules;
+use stackslib::clarity::vm::ast::{build_ast, parser, ContractAST};
+use stackslib::clarity::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
+use stackslib::clarity::vm::contracts::Contract;
+use stackslib::clarity::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
+use stackslib::clarity::vm::costs::{CostTracker, ExecutionCost, LimitedCostTracker};
+use stackslib::clarity::vm::database::clarity_store::NullBackingStore;
+use stackslib::clarity::vm::database::ClarityBackingStore;
+use stackslib::clarity::vm::database::{
+    ClarityDatabase, ClaritySerializable, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB,
+};
+use stackslib::clarity::vm::functions::crypto::special_principal_of;
+use stackslib::clarity::vm::representations::depth_traverse;
+use stackslib::clarity::vm::tests::BurnStateDB;
+use stackslib::clarity::vm::types::signatures::TypeSignature::{
+    BoolType, IntType, NoType, PrincipalType, TupleType, UIntType,
+};
+use stackslib::clarity::vm::types::signatures::{TupleTypeSignature, TypeSignature};
+use stackslib::clarity::vm::types::{
+    BufferLength, FunctionSignature, FunctionType, PrincipalData, QualifiedContractIdentifier,
+    SequenceSubtype, StandardPrincipalData, TraitIdentifier,
+};
+use stackslib::clarity::vm::{
+    apply, ast, bench_create_ft_in_context, bench_create_map_in_context,
+    bench_create_nft_in_context, bench_create_var_in_context, eval_all, lookup_function,
+    lookup_variable, CallStack, ClarityName, ClarityVersion, Environment, LocalContext,
+    SymbolicExpression, Value,
+};
+use stackslib::util::hash::{hex_bytes, to_hex, Hash160, MerkleTree, Sha512Trunc256Sum};
+use stackslib::util::secp256k1::MessageSignature;
+use stackslib::util::vrf::VRFProof;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
-use stackslib::chainstate::burn::db::sortdb::SortitionDB;
-use stackslib::clarity::types::{StacksEpochId, Address};
-use stackslib::clarity::vm::tests::BurnStateDB;
-use stackslib::clarity::vm::database::ClarityBackingStore;
 
 // for when input size is the number of elements
 const INPUT_SIZES: [u64; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
@@ -82,7 +110,9 @@ const INPUT_SIZES_DATA: [u64; 8] = [22, 1000, 40000, 160000, 360000, 640000, 100
 const INPUT_SIZES_DATA_SMALL: [u64; 8] = [17, 100, 500, 1000, 5000, 10000, 50000, 500000];
 
 // for comparators, which can compare any data of any size
-const CMP_INPUT_SIZES: [u64; 16] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768];
+const CMP_INPUT_SIZES: [u64; 16] = [
+    1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768,
+];
 
 // input sizes for arithmetic functions
 const INPUT_SIZES_ARITHMETIC: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -133,7 +163,7 @@ fn bench_with_input_sizes<'a>(
     function: ClarityCostFunction,
     scale: u16,
     input_sizes: Option<Vec<u64>>,
-    maybe_make_store: Option<Box<dyn Fn(&mut OwnedEnvironment) -> () > >,
+    maybe_make_store: Option<Box<dyn Fn(&mut OwnedEnvironment) -> ()>>,
 ) {
     let mut group = c.benchmark_group(function.to_string());
 
@@ -150,14 +180,7 @@ fn bench_with_input_sizes<'a>(
                 )
             }
         }
-        None => run_bench(
-            &mut group,
-            function,
-            scale,
-            1,
-            &maybe_make_store,
-            eval,
-        ),
+        None => run_bench(&mut group, function, scale, 1, &maybe_make_store, eval),
     }
 }
 
@@ -198,11 +221,24 @@ fn run_bench<'a, F>(
     // Set up Clarity Backing Store
     // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
     let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-    let new_tip = StacksBlockId::from([5;32]);
+    let new_tip = StacksBlockId::from([5; 32]);
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+    let pox_constants = PoxConstants::new(
+        10,
+        5,
+        3,
+        25,
+        5,
+        u64::MAX,
+        u64::MAX,
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+    );
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -218,9 +254,14 @@ fn run_bench<'a, F>(
 
     let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-    let mut global_context = GlobalContext::new(false, 0,clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+    let mut global_context = GlobalContext::new(
+        false,
+        0,
+        clarity_db,
+        LimitedCostTracker::new_free(),
+        StacksEpochId::Epoch21,
+    );
     global_context.begin();
-
 
     let GenOutput {
         setup: pre_contract_opt,
@@ -230,9 +271,16 @@ fn run_bench<'a, F>(
 
     let contract_identifier =
         QualifiedContractIdentifier::local(&*format!("c{}", computed_input_size)).unwrap();
-    let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+    let mut contract_context =
+        ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
-    let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+    let contract_ast = match ast::build_ast(
+        &contract_identifier,
+        &contract,
+        &mut (),
+        ClarityVersion::Clarity2,
+        StacksEpochId::Epoch21,
+    ) {
         Ok(res) => res,
         Err(error) => {
             panic!("Parsing error: {}", error.diagnostic.message);
@@ -244,15 +292,27 @@ fn run_bench<'a, F>(
             let pre_contract_identifier =
                 QualifiedContractIdentifier::local(&*format!("pre{}", computed_input_size))
                     .unwrap();
-            let pre_contract_ast =
-                match ast::build_ast(&pre_contract_identifier, &pre_contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
-                    Ok(res) => res,
-                    Err(error) => {
-                        panic!("Parsing error: {}", error.diagnostic.message);
-                    }
-                };
+            let pre_contract_ast = match ast::build_ast(
+                &pre_contract_identifier,
+                &pre_contract,
+                &mut (),
+                ClarityVersion::Clarity2,
+                StacksEpochId::Epoch21,
+            ) {
+                Ok(res) => res,
+                Err(error) => {
+                    panic!("Parsing error: {}", error.diagnostic.message);
+                }
+            };
             global_context
-                .execute(|g| eval_all(&pre_contract_ast.expressions, &mut contract_context, g, None))
+                .execute(|g| {
+                    eval_all(
+                        &pre_contract_ast.expressions,
+                        &mut contract_context,
+                        g,
+                        None,
+                    )
+                })
                 .unwrap();
         }
         _ => {}
@@ -301,7 +361,13 @@ fn bench_analysis<F, G>(
             input_size: computed_input_size,
         } = gen(function, scale, *input_size);
 
-        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (),ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+        let mut contract_ast = match ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -315,13 +381,19 @@ fn bench_analysis<F, G>(
         let mut marfed_kv = MarfedKV::open(CLARITY_MARF_PATH, Some(&miner_tip), None).unwrap();
 
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
-        let mut local_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut local_context =
+            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
-        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
+        let mut type_checker = TypeChecker::_new(
+            &mut analysis_db,
+            cost_tracker.clone(),
+            &QualifiedContractIdentifier::transient(),
+            &ClarityVersion::Clarity2,
+        );
 
         group.throughput(Throughput::Bytes(computed_input_size as u64));
         group.bench_with_input(
@@ -361,7 +433,13 @@ where
         let contract = gen_analysis_pass(function, 1, *input_size).body;
         let contract_size = contract.len();
 
-        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+        let mut contract_ast = match ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -373,7 +451,7 @@ where
             contract_ast.expressions.clone(),
             cost_tracker,
             StacksEpochId::latest(),
-            ClarityVersion::Clarity2
+            ClarityVersion::Clarity2,
         );
 
         // Set up MarfedKV
@@ -386,7 +464,7 @@ where
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
@@ -445,20 +523,25 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
         let setup_contract = setup_opt.unwrap();
         let pre_contract_identifier =
             QualifiedContractIdentifier::local(&*format!("pre{}", computed_input_size)).unwrap();
-        let pre_contract_ast =
-            match ast::build_ast(&pre_contract_identifier, &setup_contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
-                Ok(res) => res,
-                Err(error) => {
-                    panic!("Parsing error: {}", error.diagnostic.message);
-                }
-            };
+        let pre_contract_ast = match ast::build_ast(
+            &pre_contract_identifier,
+            &setup_contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
+            Ok(res) => res,
+            Err(error) => {
+                panic!("Parsing error: {}", error.diagnostic.message);
+            }
+        };
         let cost_tracker = LimitedCostTracker::new_free();
         let mut pre_contract_analysis = ContractAnalysis::new(
             pre_contract_identifier.clone(),
             pre_contract_ast.expressions.clone(),
             cost_tracker,
             StacksEpochId::latest(),
-            ClarityVersion::Clarity2
+            ClarityVersion::Clarity2,
         );
 
         // add impl-trait statements
@@ -473,7 +556,13 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
         let contract_size = contract.len();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+        let mut contract_ast = match ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -485,7 +574,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             contract_ast.expressions.clone(),
             cost_tracker,
             StacksEpochId::latest(),
-            ClarityVersion::Clarity2
+            ClarityVersion::Clarity2,
         );
 
         // Set up MarfedKV
@@ -498,31 +587,43 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
 
         // add defined traits to pre contract analysis
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
-        let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut type_checker = TypeChecker::_new(
+            &mut analysis_db,
+            cost_tracker.clone(),
+            &QualifiedContractIdentifier::transient(),
+            &ClarityVersion::Clarity2,
+        );
+        let mut typing_context =
+            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         for exp in &pre_contract_ast.expressions {
-            type_checker.try_type_check_define(exp, &mut typing_context);
+            type_checker._try_type_check_define(exp, &mut typing_context);
         }
         type_checker
-            .contract_context
+            ._get_contract_context()
             .into_contract_analysis(&mut pre_contract_analysis);
 
         // add implemented traits to contract analysis
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
-        let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut type_checker = TypeChecker::_new(
+            &mut analysis_db,
+            cost_tracker.clone(),
+            &QualifiedContractIdentifier::transient(),
+            &ClarityVersion::Clarity2,
+        );
+        let mut typing_context =
+            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         for exp in &contract_ast.expressions {
-            type_checker.try_type_check_define(exp, &mut typing_context);
+            type_checker._try_type_check_define(exp, &mut typing_context);
         }
         type_checker
-            .contract_context
+            ._get_contract_context()
             .into_contract_analysis(&mut contract_analysis);
 
         analysis_db.execute::<_, _, ()>(|db| {
@@ -535,7 +636,11 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
-                            TraitChecker::run_pass(&StacksEpochId::latest(), &mut contract_analysis, db);
+                            TraitChecker::run_pass(
+                                &StacksEpochId::latest(),
+                                &mut contract_analysis,
+                                db,
+                            );
                         }
                     })
                 },
@@ -562,20 +667,25 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
         let setup_contract = setup_opt.unwrap();
         let pre_contract_identifier =
             QualifiedContractIdentifier::local(&*format!("pre{}", input_size)).unwrap();
-        let pre_contract_ast =
-            match ast::build_ast(&pre_contract_identifier, &setup_contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
-                Ok(res) => res,
-                Err(error) => {
-                    panic!("Parsing error: {}", error.diagnostic.message);
-                }
-            };
+        let pre_contract_ast = match ast::build_ast(
+            &pre_contract_identifier,
+            &setup_contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
+            Ok(res) => res,
+            Err(error) => {
+                panic!("Parsing error: {}", error.diagnostic.message);
+            }
+        };
         let cost_tracker = LimitedCostTracker::new_free();
         let mut pre_contract_analysis = ContractAnalysis::new(
             pre_contract_identifier.clone(),
             pre_contract_ast.expressions.clone(),
             cost_tracker,
             StacksEpochId::latest(),
-            ClarityVersion::Clarity2
+            ClarityVersion::Clarity2,
         );
 
         // add use-trait statements
@@ -590,7 +700,13 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
         let contract_size = contract.len();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+        let mut contract_ast = match ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -602,7 +718,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             contract_ast.expressions.clone(),
             cost_tracker,
             StacksEpochId::latest(),
-            ClarityVersion::Clarity2
+            ClarityVersion::Clarity2,
         );
 
         // Set up MarfedKV
@@ -615,21 +731,26 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
 
-
         // add defined traits to pre contract analysis
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
-        let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut type_checker = TypeChecker::_new(
+            &mut analysis_db,
+            cost_tracker.clone(),
+            &QualifiedContractIdentifier::transient(),
+            &ClarityVersion::Clarity2,
+        );
+        let mut typing_context =
+            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         for exp in &pre_contract_ast.expressions {
-            type_checker.try_type_check_define(exp, &mut typing_context);
+            type_checker._try_type_check_define(exp, &mut typing_context);
         }
         type_checker
-            .contract_context
+            ._get_contract_context()
             .into_contract_analysis(&mut pre_contract_analysis);
 
         analysis_db.execute::<_, _, ()>(|db| {
@@ -642,7 +763,11 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
-                            TypeChecker::run_pass(&StacksEpochId::latest(), &mut contract_analysis, db);
+                            TypeChecker::run_pass(
+                                &StacksEpochId::latest(),
+                                &mut contract_analysis,
+                                db,
+                            );
                         }
                     })
                 },
@@ -674,12 +799,17 @@ fn helper_deepen_typing_context(
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
 
-        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
+        let mut type_checker = TypeChecker::_new(
+            &mut analysis_db,
+            cost_tracker.clone(),
+            &QualifiedContractIdentifier::transient(),
+            &ClarityVersion::Clarity2,
+        );
 
         group.throughput(Throughput::Bytes(input_size as u64));
         group.bench_with_input(
@@ -701,7 +831,8 @@ fn bench_analysis_lookup_variable_depth(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let mut local_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut local_context =
+            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         helper_deepen_typing_context(*input_size, *input_size, &local_context, &mut group);
     }
 }
@@ -725,11 +856,24 @@ fn helper_deepen_local_context(
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+        let pox_constants = PoxConstants::new(
+            10,
+            5,
+            3,
+            25,
+            5,
+            u64::MAX,
+            u64::MAX,
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+        );
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -738,12 +882,18 @@ fn helper_deepen_local_context(
 
         let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-        let mut global_context =
-            GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+        let mut global_context = GlobalContext::new(
+            false,
+            0,
+            clarity_db,
+            LimitedCostTracker::new_free(),
+            StacksEpochId::Epoch21,
+        );
         global_context.begin();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+        let mut contract_context =
+            ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
         let mut call_stack = CallStack::new();
         let mut environment = Environment::new(
             global_context.borrow_mut(),
@@ -751,7 +901,7 @@ fn helper_deepen_local_context(
             &mut call_stack,
             None,
             None,
-            None
+            None,
         );
 
         group.throughput(Throughput::Bytes(input_size as u64));
@@ -795,10 +945,11 @@ fn bench_ast_cycle_detection(c: &mut Criterion) {
 
         let pre_expressions = parser::v2::parse(&contract).unwrap();
         let mut contract_ast = ContractAST::new(contract_identifier.clone(), pre_expressions);
-        ExpressionIdentifier::run_pre_expression_pass(&mut contract_ast, ClarityVersion::Clarity2).unwrap();
+        ExpressionIdentifier::run_pre_expression_pass(&mut contract_ast, ClarityVersion::Clarity2)
+            .unwrap();
 
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut def_sorter = DefinitionSorter::new();
+        let mut def_sorter = DefinitionSorter::_new();
 
         group.throughput(Throughput::Bytes(computed_input_size as u64));
         group.bench_with_input(
@@ -808,7 +959,11 @@ fn bench_ast_cycle_detection(c: &mut Criterion) {
                 b.iter(|| {
                     for _ in 0..SCALE {
                         def_sorter.clear_graph();
-                        def_sorter.run(&mut contract_ast, &mut cost_tracker, ClarityVersion::Clarity2);
+                        def_sorter.run(
+                            &mut contract_ast,
+                            &mut cost_tracker,
+                            ClarityVersion::Clarity2,
+                        );
                     }
                 })
             },
@@ -832,11 +987,24 @@ fn bench_contract_storage(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+        let pox_constants = PoxConstants::new(
+            10,
+            5,
+            3,
+            25,
+            5,
+            u64::MAX,
+            u64::MAX,
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+        );
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -845,12 +1013,18 @@ fn bench_contract_storage(c: &mut Criterion) {
 
         let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-        let mut global_context =
-            GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+        let mut global_context = GlobalContext::new(
+            false,
+            0,
+            clarity_db,
+            LimitedCostTracker::new_free(),
+            StacksEpochId::Epoch21,
+        );
         global_context.begin();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+        let mut contract_context =
+            ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
         let GenOutput {
             setup: _,
@@ -858,7 +1032,13 @@ fn bench_contract_storage(c: &mut Criterion) {
             input_size: computed_input_size,
         } = gen(function, 1, *input_size);
 
-        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+        let mut contract_ast = match ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -913,11 +1093,24 @@ fn bench_principal_of(c: &mut Criterion) {
     // Set up Clarity Backing Store
     // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
     let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-    let new_tip = StacksBlockId::from([5;32]);
+    let new_tip = StacksBlockId::from([5; 32]);
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+    let pox_constants = PoxConstants::new(
+        10,
+        5,
+        3,
+        25,
+        5,
+        u64::MAX,
+        u64::MAX,
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+    );
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -925,11 +1118,18 @@ fn bench_principal_of(c: &mut Criterion) {
     let headers_db = StacksChainState::open_db(false, 2147483648, CHAINSTATE_PATH).unwrap();
     let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-    let mut global_context = GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+    let mut global_context = GlobalContext::new(
+        false,
+        0,
+        clarity_db,
+        LimitedCostTracker::new_free(),
+        StacksEpochId::Epoch21,
+    );
     global_context.begin();
 
     let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-    let contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+    let contract_context =
+        ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
     let GenOutput {
         setup: _,
@@ -937,7 +1137,13 @@ fn bench_principal_of(c: &mut Criterion) {
         input_size: _,
     } = gen(function, SCALE, 1);
 
-    let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+    let contract_ast = match ast::build_ast(
+        &contract_identifier,
+        &contract,
+        &mut (),
+        ClarityVersion::Clarity2,
+        StacksEpochId::Epoch21,
+    ) {
         Ok(res) => res,
         Err(error) => {
             panic!("Parsing error: {}", error.diagnostic.message);
@@ -980,15 +1186,19 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
-        
-        let contract_identifier =
-            QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
+
+        let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
 
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &contract_identifier, &ClarityVersion::Clarity2);
+        let mut type_checker = TypeChecker::_new(
+            &mut analysis_db,
+            cost_tracker.clone(),
+            &contract_identifier,
+            &ClarityVersion::Clarity2,
+        );
 
         let GenOutput {
             setup: _,
@@ -996,7 +1206,13 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             input_size: _,
         } = gen(function, 1, *input_size);
 
-        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+        let mut contract_ast = match ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -1009,17 +1225,22 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             contract_ast.expressions.clone(),
             cost_tracker,
             StacksEpochId::latest(),
-            ClarityVersion::Clarity2
+            ClarityVersion::Clarity2,
         );
 
-        let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
-        type_checker.try_type_check_define(&contract_ast.expressions[0], &mut typing_context).unwrap().unwrap();
+        let mut typing_context =
+            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         type_checker
-            .contract_context
+            ._type_check_define_trait(&contract_ast.expressions[0], &mut typing_context)
+            .unwrap()
+            .unwrap();
+        type_checker
+            ._get_contract_context()
             .into_contract_analysis(&mut contract_analysis);
 
-        type_checker.db.execute(|db| {
-            db.insert_contract(&contract_identifier, &contract_analysis).unwrap();
+        type_checker._get_db().execute(|db| {
+            db.insert_contract(&contract_identifier, &contract_analysis)
+                .unwrap();
             let trait_name = ClarityName::try_from("dummy-trait".to_string()).unwrap();
             let trait_id = TraitIdentifier {
                 name: trait_name.clone(),
@@ -1031,7 +1252,7 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
                 .get_defined_trait(&contract_identifier, &trait_name)
                 .expect("FATAL: could not load from DB")
                 .expect("FATAL: could not unwrap");
-            let type_size = trait_type_size(&trait_sig).unwrap();
+            let type_size = _trait_type_size(&trait_sig).unwrap();
 
             group.throughput(Throughput::Bytes(type_size));
             group.bench_with_input(
@@ -1070,12 +1291,17 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
         let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
+        let mut type_checker = TypeChecker::_new(
+            &mut analysis_db,
+            cost_tracker.clone(),
+            &QualifiedContractIdentifier::transient(),
+            &ClarityVersion::Clarity2,
+        );
 
         let GenOutput {
             setup: _,
@@ -1085,7 +1311,13 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
 
         let mut contract_identifier =
             QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+        let mut contract_ast = match ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -1098,16 +1330,17 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
             contract_ast.expressions.clone(),
             cost_tracker,
             StacksEpochId::latest(),
-            ClarityVersion::Clarity2
+            ClarityVersion::Clarity2,
         );
 
-        let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
-        type_checker.try_type_check_define(&contract_ast.expressions[0], &mut typing_context);
+        let mut typing_context =
+            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        type_checker._try_type_check_define(&contract_ast.expressions[0], &mut typing_context);
         type_checker
-            .contract_context
+            ._get_contract_context()
             .into_contract_analysis(&mut contract_analysis);
 
-        type_checker.db.execute(|db| {
+        type_checker._get_db().execute(|db| {
             db.insert_contract(&contract_identifier, &contract_analysis);
             let fn_name = ClarityName::try_from("dummy-fn".to_string()).unwrap();
             let type_size = match db
@@ -1162,11 +1395,24 @@ fn bench_inner_type_check_cost(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+        let pox_constants = PoxConstants::new(
+            10,
+            5,
+            3,
+            25,
+            5,
+            u64::MAX,
+            u64::MAX,
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+        );
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1174,12 +1420,18 @@ fn bench_inner_type_check_cost(c: &mut Criterion) {
         let headers_db = StacksChainState::open_db(false, 2147483648, CHAINSTATE_PATH).unwrap();
         let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-        let mut global_context =
-            GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+        let mut global_context = GlobalContext::new(
+            false,
+            0,
+            clarity_db,
+            LimitedCostTracker::new_free(),
+            StacksEpochId::Epoch21,
+        );
         global_context.begin();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+        let mut contract_context =
+            ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
         let GenOutput {
             setup: _,
@@ -1187,7 +1439,13 @@ fn bench_inner_type_check_cost(c: &mut Criterion) {
             input_size: _,
         } = gen(function, 1, *input_size);
 
-        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+        let mut contract_ast = match ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -1232,11 +1490,24 @@ fn bench_user_function_application(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+        let pox_constants = PoxConstants::new(
+            10,
+            5,
+            3,
+            25,
+            5,
+            u64::MAX,
+            u64::MAX,
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+        );
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1245,12 +1516,18 @@ fn bench_user_function_application(c: &mut Criterion) {
 
         let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-        let mut global_context =
-            GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+        let mut global_context = GlobalContext::new(
+            false,
+            0,
+            clarity_db,
+            LimitedCostTracker::new_free(),
+            StacksEpochId::Epoch21,
+        );
         global_context.begin();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+        let mut contract_context =
+            ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
         let GenOutput {
             setup: _,
@@ -1258,7 +1535,13 @@ fn bench_user_function_application(c: &mut Criterion) {
             input_size: computed_input_size,
         } = gen(function, 1, *input_size);
 
-        let contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+        let contract_ast = match ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -1305,11 +1588,24 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+        let pox_constants = PoxConstants::new(
+            10,
+            5,
+            3,
+            25,
+            5,
+            u64::MAX,
+            u64::MAX,
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+        );
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1317,12 +1613,18 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
         let headers_db = StacksChainState::open_db(false, 2147483648, CHAINSTATE_PATH).unwrap();
         let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-        let mut global_context =
-            GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+        let mut global_context = GlobalContext::new(
+            false,
+            0,
+            clarity_db,
+            LimitedCostTracker::new_free(),
+            StacksEpochId::Epoch21,
+        );
         global_context.begin();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+        let mut contract_context =
+            ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
         let GenOutput {
             setup: _,
@@ -1330,7 +1632,13 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
             input_size: _,
         } = gen(function, 1, *input_size);
 
-        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+        let mut contract_ast = match ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -1339,7 +1647,12 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut null_store = NullBackingStore::new();
         let mut analysis_db = null_store.as_analysis_db();
-        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
+        let mut type_checker = TypeChecker::_new(
+            &mut analysis_db,
+            cost_tracker.clone(),
+            &QualifiedContractIdentifier::transient(),
+            &ClarityVersion::Clarity2,
+        );
         global_context
             .execute(|g| eval_all(&contract_ast.expressions, &mut contract_context, g, None))
             .unwrap();
@@ -1355,7 +1668,7 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
         // add trait to the contract context of the type checker
         let trait_clarity_name = ClarityName::from("dummy-trait");
         type_checker
-            .contract_context
+            ._get_contract_context()
             .add_defined_trait(trait_clarity_name.clone(), trait_obj);
 
         // construct trait id
@@ -1393,11 +1706,24 @@ fn bench_lookup_function(c: &mut Criterion) {
     // Set up Clarity Backing Store
     // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
     let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-    let new_tip = StacksBlockId::from([5;32]);
+    let new_tip = StacksBlockId::from([5; 32]);
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+    let pox_constants = PoxConstants::new(
+        10,
+        5,
+        3,
+        25,
+        5,
+        u64::MAX,
+        u64::MAX,
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+    );
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -1406,11 +1732,18 @@ fn bench_lookup_function(c: &mut Criterion) {
 
     let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-    let mut global_context = GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+    let mut global_context = GlobalContext::new(
+        false,
+        0,
+        clarity_db,
+        LimitedCostTracker::new_free(),
+        StacksEpochId::Epoch21,
+    );
     global_context.begin();
 
     let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-    let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+    let mut contract_context =
+        ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
     let GenOutput {
         setup: _,
@@ -1418,7 +1751,13 @@ fn bench_lookup_function(c: &mut Criterion) {
         input_size: _,
     } = gen(function, SCALE, 1);
 
-    let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+    let mut contract_ast = match ast::build_ast(
+        &contract_identifier,
+        &contract,
+        &mut (),
+        ClarityVersion::Clarity2,
+        StacksEpochId::Epoch21,
+    ) {
         Ok(res) => res,
         Err(error) => {
             panic!("Parsing error: {}", error.diagnostic.message);
@@ -1474,11 +1813,24 @@ fn bench_lookup_variable_size(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+        let pox_constants = PoxConstants::new(
+            10,
+            5,
+            3,
+            25,
+            5,
+            u64::MAX,
+            u64::MAX,
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+        );
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1487,12 +1839,18 @@ fn bench_lookup_variable_size(c: &mut Criterion) {
 
         let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-        let mut global_context =
-            GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+        let mut global_context = GlobalContext::new(
+            false,
+            0,
+            clarity_db,
+            LimitedCostTracker::new_free(),
+            StacksEpochId::Epoch21,
+        );
         global_context.begin();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+        let mut contract_context =
+            ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
         let mut call_stack = CallStack::new();
 
@@ -1502,7 +1860,7 @@ fn bench_lookup_variable_size(c: &mut Criterion) {
             &mut call_stack,
             None,
             None,
-            None
+            None,
         );
         let mut local_context = LocalContext::new();
         let inner_val = SIZED_VALUES.get(input_size).unwrap();
@@ -1569,7 +1927,10 @@ fn bench_analysis_option_check(c: &mut Criterion) {
         _c: &mut LimitedCostTracker,
     ) {
         for _ in 0..SCALE {
-           bench_analysis_option_check_helper(TypeSignature::ResponseType(Box::new((TypeSignature::BoolType, TypeSignature::BoolType))));
+            bench_analysis_option_check_helper(TypeSignature::ResponseType(Box::new((
+                TypeSignature::BoolType,
+                TypeSignature::BoolType,
+            ))));
         }
     }
 
@@ -1615,7 +1976,7 @@ fn bench_analysis_bind_name(c: &mut Criterion) {
         input_size: u64,
         _c: &mut T,
     ) {
-        type_checker.contract_context.clear_variable_types();
+        type_checker._get_contract_context().clear_variable_types();
         let type_sig = SIZED_TYPE_SIG.get(&input_size).unwrap();
         for _ in 0..SCALE {
             type_checker.bench_analysis_bind_name_helper(type_sig.clone());
@@ -1698,11 +2059,16 @@ fn bench_analysis_check_tuple_merge(c: &mut Criterion) {
         input_size: u64,
         _c: &mut T,
     ) {
-        let sized_tuple_sig = TypeSignature::TupleType(SIZED_TUPLE_SIG.get(&input_size).unwrap().clone());
+        let sized_tuple_sig =
+            TypeSignature::TupleType(SIZED_TUPLE_SIG.get(&input_size).unwrap().clone());
         for _ in 0..SCALE {
-            bench_analysis_check_tuple_merge_helper(type_checker, sized_tuple_sig.clone(), sized_tuple_sig.clone(), local_context);
+            bench_analysis_check_tuple_merge_helper(
+                type_checker,
+                sized_tuple_sig.clone(),
+                sized_tuple_sig.clone(),
+                local_context,
+            );
         }
-
     }
 
     bench_analysis(
@@ -1714,7 +2080,6 @@ fn bench_analysis_check_tuple_merge(c: &mut Criterion) {
         eval_check_special_merge,
     )
 }
-
 
 fn bench_analysis_check_tuple_cons(c: &mut Criterion) {
     fn eval_check_special_tuple_cons<T: CostTracker>(
@@ -1796,7 +2161,12 @@ fn bench_analysis_lookup_function(c: &mut Criterion) {
     let mut cost_tracker = LimitedCostTracker::new_free();
     let mut null_store = NullBackingStore::new();
     let mut analysis_db = null_store.as_analysis_db();
-    let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
+    let mut type_checker = TypeChecker::_new(
+        &mut analysis_db,
+        cost_tracker.clone(),
+        &QualifiedContractIdentifier::transient(),
+        &ClarityVersion::Clarity2,
+    );
 
     let mut rng = rand::thread_rng();
     let mut fn_names = Vec::new();
@@ -1844,7 +2214,7 @@ fn bench_analysis_type_annotate(c: &mut Criterion) {
         for exp in &contract_ast.expressions {
             let var_name = exp.match_atom().unwrap();
             type_checker
-                .contract_context
+                ._get_contract_context()
                 .add_variable_type(var_name.clone(), var_type_sig.clone());
         }
     }
@@ -1882,7 +2252,7 @@ fn bench_analysis_type_check(c: &mut Criterion) {
         _c: &mut T,
     ) {
         let tuple_type_sig = SIZED_TYPE_SIG.get(&i).unwrap().clone();
-        type_checker.function_return_tracker = Some(Some(tuple_type_sig.clone()));
+        type_checker._get_function_return_tracker() = Some(Some(tuple_type_sig.clone()));
     }
 
     fn eval_track_return_type<T: CostTracker>(
@@ -1913,14 +2283,25 @@ fn bench_analysis_iterable_func(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let type_sig_list = vec![TypeSignature::SequenceType(SequenceSubtype::BufferType(BufferLength::try_from(15u32).unwrap())); *input_size as usize];
+        let type_sig_list = vec![
+            TypeSignature::SequenceType(SequenceSubtype::BufferType(
+                BufferLength::try_from(15u32).unwrap()
+            ));
+            *input_size as usize
+        ];
 
-        let mut local_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut local_context =
+            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
 
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut null_store = NullBackingStore::new();
         let mut analysis_db = null_store.as_analysis_db();
-        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
+        let mut type_checker = TypeChecker::_new(
+            &mut analysis_db,
+            cost_tracker.clone(),
+            &QualifiedContractIdentifier::transient(),
+            &ClarityVersion::Clarity2,
+        );
 
         group.throughput(Throughput::Bytes(*input_size as u64));
         group.bench_with_input(
@@ -1929,7 +2310,11 @@ fn bench_analysis_iterable_func(c: &mut Criterion) {
             |b, &_| {
                 b.iter(|| {
                     for _ in 0..SCALE {
-                        bench_analysis_iterable_function_helper(&mut type_checker, &type_sig_list, &mut local_context);
+                        bench_analysis_iterable_function_helper(
+                            &mut type_checker,
+                            &type_sig_list,
+                            &mut local_context,
+                        );
                     }
                 })
             },
@@ -1951,7 +2336,13 @@ fn bench_analysis_storage(c: &mut Criterion) {
             input_size: _,
         } = gen(function, SCALE, *input_size);
 
-        let mut contract_ast = match ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
+        let mut contract_ast = match ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        ) {
             Ok(res) => res,
             Err(error) => {
                 panic!("Parsing error: {}", error.diagnostic.message);
@@ -1970,26 +2361,42 @@ fn bench_analysis_storage(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
-        let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
+        let mut type_checker = TypeChecker::_new(
+            &mut analysis_db,
+            cost_tracker.clone(),
+            &QualifiedContractIdentifier::transient(),
+            &ClarityVersion::Clarity2,
+        );
 
         let mut contract_analyses = Vec::new();
         for exp in &contract_ast.expressions {
             let contract_id = QualifiedContractIdentifier::local("analysis_test").unwrap();
             let exp_list = exp.match_list().unwrap();
-            let mut contract_analysis =
-                ContractAnalysis::new(contract_id.clone(), exp_list.to_vec(), cost_tracker.clone(), StacksEpochId::latest(), ClarityVersion::Clarity2);
+            let mut contract_analysis = ContractAnalysis::new(
+                contract_id.clone(),
+                exp_list.to_vec(),
+                cost_tracker.clone(),
+                StacksEpochId::latest(),
+                ClarityVersion::Clarity2,
+            );
 
-            let mut type_checker = TypeChecker::new(&mut analysis_db, cost_tracker.clone(), &QualifiedContractIdentifier::transient(), &ClarityVersion::Clarity2);
-            let mut typing_context = TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+            let mut type_checker = TypeChecker::_new(
+                &mut analysis_db,
+                cost_tracker.clone(),
+                &QualifiedContractIdentifier::transient(),
+                &ClarityVersion::Clarity2,
+            );
+            let mut typing_context =
+                TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
             for exp in exp_list {
-                type_checker.try_type_check_define(exp, &mut typing_context);
+                type_checker._try_type_check_define(exp, &mut typing_context);
             }
             type_checker
-                .contract_context
+                ._get_contract_context()
                 .into_contract_analysis(&mut contract_analysis);
 
             contract_analyses.push(contract_analysis);
@@ -2032,7 +2439,7 @@ fn bench_analysis_type_lookup(c: &mut Criterion) {
             let exp_list = exp.match_list().unwrap();
             let asset_name = exp_list[0].match_atom().unwrap();
             type_checker
-                .contract_context
+                ._get_contract_context()
                 .add_nft(asset_name.clone(), token_type.clone());
         }
     }
@@ -2047,7 +2454,6 @@ fn bench_analysis_type_lookup(c: &mut Criterion) {
         for exp in &contract_ast.expressions {
             let exp_list = exp.match_list().unwrap();
             bench_check_special_mint_asset(type_checker, exp_list);
-
         }
     }
 
@@ -2075,7 +2481,7 @@ fn bench_analysis_lookup_variable_const(c: &mut Criterion) {
             let var_name = exp.match_atom().unwrap();
             let var_type_sig = type_sig_list.choose(&mut rng).unwrap();
             type_checker
-                .contract_context
+                ._get_contract_context()
                 .add_variable_type(var_name.clone(), var_type_sig.clone());
         }
     }
@@ -2089,8 +2495,7 @@ fn bench_analysis_lookup_variable_const(c: &mut Criterion) {
     ) {
         for i in 0..SCALE {
             let var_name = format!("var-{}", i);
-            type_checker.lookup_variable(&var_name, local_context);
-
+            type_checker._lookup_variable(&var_name, local_context);
         }
     }
 
@@ -2131,7 +2536,13 @@ fn bench_ast_parse(c: &mut Criterion) {
         let contract = SIZED_CONTRACTS.get(&input_size).unwrap();
         let contract_id = QualifiedContractIdentifier::transient();
         for _ in 0..SCALE {
-            build_ast(&contract_id, &contract, cost_tracker, ClarityVersion::Clarity2, StacksEpochId::Epoch21);
+            build_ast(
+                &contract_id,
+                &contract,
+                cost_tracker,
+                ClarityVersion::Clarity2,
+                StacksEpochId::Epoch21,
+            );
         }
     }
 
@@ -2186,19 +2597,43 @@ fn bench_div(c: &mut Criterion) {
 }
 
 fn bench_le(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Le, SCALE, Some(CMP_INPUT_SIZES.to_vec()), None)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Le,
+        SCALE,
+        Some(CMP_INPUT_SIZES.to_vec()),
+        None,
+    )
 }
 
 fn bench_leq(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Leq, SCALE, Some(CMP_INPUT_SIZES.to_vec()), None)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Leq,
+        SCALE,
+        Some(CMP_INPUT_SIZES.to_vec()),
+        None,
+    )
 }
 
 fn bench_ge(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Ge, SCALE, Some(CMP_INPUT_SIZES.to_vec()), None)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Ge,
+        SCALE,
+        Some(CMP_INPUT_SIZES.to_vec()),
+        None,
+    )
 }
 
 fn bench_geq(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Geq, SCALE, Some(CMP_INPUT_SIZES.to_vec()), None)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Geq,
+        SCALE,
+        Some(CMP_INPUT_SIZES.to_vec()),
+        None,
+    )
 }
 
 // boolean functions
@@ -2253,35 +2688,17 @@ fn bench_bit_xor(c: &mut Criterion) {
 }
 
 fn bench_bit_not(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::BitwiseNot,
-        SCALE,
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::BitwiseNot, SCALE, None, None)
 }
-        
+
 fn bench_bit_lshift(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::BitwiseLShift,
-        SCALE,
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::BitwiseLShift, SCALE, None, None)
 }
 
 fn bench_bit_rshift(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::BitwiseRShift,
-        SCALE,
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::BitwiseRShift, SCALE, None, None)
 }
-        
+
 /*
 fn bench_xor(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::Xor, SCALE, None, None)
@@ -2351,53 +2768,65 @@ fn bench_tuple_cons(c: &mut Criterion) {
 
 // hash functions
 fn bench_hash160(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Hash160, SCALE, Some(INPUT_SIZES_DATA.into()), None)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Hash160,
+        SCALE,
+        Some(INPUT_SIZES_DATA.into()),
+        None,
+    )
 }
 
 fn bench_sha256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha256, SCALE, Some(INPUT_SIZES_DATA.into()), None)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Sha256,
+        SCALE,
+        Some(INPUT_SIZES_DATA.into()),
+        None,
+    )
 }
 
 fn bench_sha512(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512, SCALE, Some(INPUT_SIZES_DATA.into()), None)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Sha512,
+        SCALE,
+        Some(INPUT_SIZES_DATA.into()),
+        None,
+    )
 }
 
 fn bench_sha512t256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Sha512t256, SCALE, Some(INPUT_SIZES_DATA.into()), None)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Sha512t256,
+        SCALE,
+        Some(INPUT_SIZES_DATA.into()),
+        None,
+    )
 }
 
 fn bench_keccak256(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Keccak256, SCALE, Some(INPUT_SIZES_DATA.into()), None)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Keccak256,
+        SCALE,
+        Some(INPUT_SIZES_DATA.into()),
+        None,
+    )
 }
 
 fn bench_secp256k1recover(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Secp256k1recover,
-        SCALE,
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Secp256k1recover, SCALE, None, None)
 }
 
 fn bench_secp256k1verify(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Secp256k1verify,
-        SCALE,
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Secp256k1verify, SCALE, None, None)
 }
 
 fn bench_create_ft_old(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::CreateFt,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::CreateFt, SCALE.into(), None, None)
 }
 
 // note: verify that we want a warmed-up marf for this
@@ -2415,11 +2844,24 @@ fn bench_create_ft(c: &mut Criterion) {
     // Set up Clarity Backing Store
     // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
     let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-    let new_tip = StacksBlockId::from([5;32]);
+    let new_tip = StacksBlockId::from([5; 32]);
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+    let pox_constants = PoxConstants::new(
+        10,
+        5,
+        3,
+        25,
+        5,
+        u64::MAX,
+        u64::MAX,
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+    );
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -2428,11 +2870,18 @@ fn bench_create_ft(c: &mut Criterion) {
 
     let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-    let mut global_context = GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+    let mut global_context = GlobalContext::new(
+        false,
+        0,
+        clarity_db,
+        LimitedCostTracker::new_free(),
+        StacksEpochId::Epoch21,
+    );
     global_context.begin();
 
     let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-    let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+    let mut contract_context =
+        ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
     group.throughput(Throughput::Bytes(0));
     group.bench_with_input(BenchmarkId::from_parameter(0), &0, |b, &_| {
@@ -2445,53 +2894,23 @@ fn bench_create_ft(c: &mut Criterion) {
 }
 
 fn bench_mint_ft(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::FtMint,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::FtMint, SCALE.into(), None, None)
 }
 
 fn bench_ft_transfer(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::FtTransfer,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::FtTransfer, SCALE.into(), None, None)
 }
 
 fn bench_ft_balance(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::FtBalance,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::FtBalance, SCALE.into(), None, None)
 }
 
 fn bench_ft_supply(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::FtSupply,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::FtSupply, SCALE.into(), None, None)
 }
 
 fn bench_ft_burn(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::FtBurn,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::FtBurn, SCALE.into(), None, None)
 }
 
 // note: verify that we want a warmed-up marf for this
@@ -2510,11 +2929,24 @@ fn bench_create_nft(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+        let pox_constants = PoxConstants::new(
+            10,
+            5,
+            3,
+            25,
+            5,
+            u64::MAX,
+            u64::MAX,
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+        );
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -2523,12 +2955,18 @@ fn bench_create_nft(c: &mut Criterion) {
 
         let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-        let mut global_context =
-            GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+        let mut global_context = GlobalContext::new(
+            false,
+            0,
+            clarity_db,
+            LimitedCostTracker::new_free(),
+            StacksEpochId::Epoch21,
+        );
         global_context.begin();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+        let mut contract_context =
+            ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
         let asset_type = SIZED_TYPE_SIG.get(input_size).unwrap();
         let asset_type_size = asset_type.size();
@@ -2592,73 +3030,31 @@ fn bench_nft_burn(c: &mut Criterion) {
 }
 
 fn bench_is_none(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::IsNone,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::IsNone, SCALE.into(), None, None)
 }
 
 fn bench_is_some(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::IsSome,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::IsSome, SCALE.into(), None, None)
 }
 
 fn bench_is_ok(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::IsOkay,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::IsOkay, SCALE.into(), None, None)
 }
 
 fn bench_is_err(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::IsErr,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::IsErr, SCALE.into(), None, None)
 }
 
 fn bench_unwrap(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Unwrap,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Unwrap, SCALE.into(), None, None)
 }
 
 fn bench_unwrap_ret(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::UnwrapRet,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::UnwrapRet, SCALE.into(), None, None)
 }
 
 fn bench_unwrap_err(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::UnwrapErr,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::UnwrapErr, SCALE.into(), None, None)
 }
 
 fn bench_unwrap_err_or_ret(c: &mut Criterion) {
@@ -2688,11 +3084,24 @@ fn bench_create_map(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+        let pox_constants = PoxConstants::new(
+            10,
+            5,
+            3,
+            25,
+            5,
+            u64::MAX,
+            u64::MAX,
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+        );
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -2701,12 +3110,18 @@ fn bench_create_map(c: &mut Criterion) {
 
         let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-        let mut global_context =
-            GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+        let mut global_context = GlobalContext::new(
+            false,
+            0,
+            clarity_db,
+            LimitedCostTracker::new_free(),
+            StacksEpochId::Epoch21,
+        );
         global_context.begin();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+        let mut contract_context =
+            ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
         let key_type = TypeSignature::BoolType;
         let value_type = SIZED_TYPE_SIG.get(input_size).unwrap();
@@ -2749,11 +3164,24 @@ fn bench_create_var(c: &mut Criterion) {
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+        let pox_constants = PoxConstants::new(
+            10,
+            5,
+            3,
+            25,
+            5,
+            u64::MAX,
+            u64::MAX,
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+        );
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -2762,12 +3190,18 @@ fn bench_create_var(c: &mut Criterion) {
 
         let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-        let mut global_context =
-            GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+        let mut global_context = GlobalContext::new(
+            false,
+            0,
+            clarity_db,
+            LimitedCostTracker::new_free(),
+            StacksEpochId::Epoch21,
+        );
         global_context.begin();
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
-        let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+        let mut contract_context =
+            ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
         let value_type = SIZED_TYPE_SIG.get(input_size).unwrap();
         let value_type_size = value_type.size();
@@ -2795,7 +3229,12 @@ fn bench_create_var(c: &mut Criterion) {
     }
 }
 
-fn bench_wrapped_data_function(mut group: BenchmarkGroup<WallTime>, cost_function: ClarityCostFunction, input_sizes: Vec<u64>, scale: u16) {
+fn bench_wrapped_data_function(
+    mut group: BenchmarkGroup<WallTime>,
+    cost_function: ClarityCostFunction,
+    input_sizes: Vec<u64>,
+    scale: u16,
+) {
     for input_size in input_sizes.iter() {
         // Set up MarfedKV
         let miner_tip = StacksBlockHeader::make_index_block_hash(
@@ -2807,11 +3246,24 @@ fn bench_wrapped_data_function(mut group: BenchmarkGroup<WallTime>, cost_functio
         // Set up Clarity Backing Store
         // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
         let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-        let new_tip = StacksBlockId::from([5;32]);
+        let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+        let pox_constants = PoxConstants::new(
+            10,
+            5,
+            3,
+            25,
+            5,
+            u64::MAX,
+            u64::MAX,
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+            u32::max_value(),
+        );
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -2820,8 +3272,13 @@ fn bench_wrapped_data_function(mut group: BenchmarkGroup<WallTime>, cost_functio
 
         let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-
-        let mut global_context = GlobalContext::new(false, 0, clarity_db, LimitedCostTracker::new_free(), StacksEpochId::Epoch21);
+        let mut global_context = GlobalContext::new(
+            false,
+            0,
+            clarity_db,
+            LimitedCostTracker::new_free(),
+            StacksEpochId::Epoch21,
+        );
         global_context.begin();
 
         let GenOutput {
@@ -2835,23 +3292,35 @@ fn bench_wrapped_data_function(mut group: BenchmarkGroup<WallTime>, cost_functio
 
         let contract_identifier =
             QualifiedContractIdentifier::local(&*format!("c{}", list_size)).unwrap();
-        let mut contract_context = ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
+        let mut contract_context =
+            ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
         let publisher: PrincipalData = contract_context.contract_identifier.issuer.clone().into();
 
         match pre_contract_opt {
             Some(pre_contract) => {
                 let pre_contract_identifier =
-                    QualifiedContractIdentifier::local(&*format!("pre{}", list_size))
-                        .unwrap();
-                let pre_contract_ast =
-                    match ast::build_ast(&pre_contract_identifier, &pre_contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21) {
-                        Ok(res) => res,
-                        Err(error) => {
-                            panic!("Parsing error: {}", error.diagnostic.message);
-                        }
-                    };
+                    QualifiedContractIdentifier::local(&*format!("pre{}", list_size)).unwrap();
+                let pre_contract_ast = match ast::build_ast(
+                    &pre_contract_identifier,
+                    &pre_contract,
+                    &mut (),
+                    ClarityVersion::Clarity2,
+                    StacksEpochId::Epoch21,
+                ) {
+                    Ok(res) => res,
+                    Err(error) => {
+                        panic!("Parsing error: {}", error.diagnostic.message);
+                    }
+                };
                 global_context
-                    .execute(|g| eval_all(&pre_contract_ast.expressions, &mut contract_context, g, None))
+                    .execute(|g| {
+                        eval_all(
+                            &pre_contract_ast.expressions,
+                            &mut contract_context,
+                            g,
+                            None,
+                        )
+                    })
                     .unwrap();
             }
             _ => {}
@@ -2866,10 +3335,25 @@ fn bench_wrapped_data_function(mut group: BenchmarkGroup<WallTime>, cost_functio
                     global_context
                         .execute(|g| {
                             let mut call_stack = CallStack::new();
-                            let mut env = Environment::new(g, &contract_context, &mut call_stack, Some(publisher.clone()), Some(publisher.clone()), None);
+                            let mut env = Environment::new(
+                                g,
+                                &contract_context,
+                                &mut call_stack,
+                                Some(publisher.clone()),
+                                Some(publisher.clone()),
+                                None,
+                            );
                             let f = lookup_function("execute", &mut env).unwrap();
-                            let list = Value::list_from((0..list_len).map(|i| Value::UInt(i as u128)).collect()).unwrap();
-                            apply(&f, &[SymbolicExpression::literal_value(list)], &mut env, &LocalContext::new())
+                            let list = Value::list_from(
+                                (0..list_len).map(|i| Value::UInt(i as u128)).collect(),
+                            )
+                            .unwrap();
+                            apply(
+                                &f,
+                                &[SymbolicExpression::literal_value(list)],
+                                &mut env,
+                                &LocalContext::new(),
+                            )
                         })
                         .unwrap()
                 })
@@ -2901,49 +3385,24 @@ fn bench_print(c: &mut Criterion) {
     bench_wrapped_data_function(group, cost_function, INPUT_SIZES_DATA.into(), SCALE)
 }
 
-
 fn bench_if(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::If, SCALE.into(), None, None)
 }
 
 fn bench_asserts(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Asserts,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Asserts, SCALE.into(), None, None)
 }
 
 fn bench_ok_cons(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::OkCons,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::OkCons, SCALE.into(), None, None)
 }
 
 fn bench_err_cons(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::ErrCons,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::ErrCons, SCALE.into(), None, None)
 }
 
 fn bench_some_cons(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::SomeCons,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::SomeCons, SCALE.into(), None, None)
 }
 
 fn bench_concat(c: &mut Criterion) {
@@ -2957,63 +3416,27 @@ fn bench_concat(c: &mut Criterion) {
 }
 
 fn bench_as_max_len(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::AsMaxLen,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::AsMaxLen, SCALE.into(), None, None)
 }
 
 fn bench_begin(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Begin,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Begin, SCALE.into(), None, None)
 }
 
 fn bench_bind_name(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::BindName,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::BindName, SCALE.into(), None, None)
 }
 
 fn bench_default_to(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::DefaultTo,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::DefaultTo, SCALE.into(), None, None)
 }
 
 fn bench_try(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::TryRet,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::TryRet, SCALE.into(), None, None)
 }
 
 fn bench_int_cast(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::IntCast,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::IntCast, SCALE.into(), None, None)
 }
 
 fn bench_set_entry(c: &mut Criterion) {
@@ -3033,17 +3456,17 @@ fn bench_fetch_entry(c: &mut Criterion) {
 }
 
 fn bench_match(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Match,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Match, SCALE.into(), None, None)
 }
 
 fn bench_let(c: &mut Criterion) {
-    bench_with_input_sizes(c, ClarityCostFunction::Let, SCALE.into(), Some(INPUT_SIZES.into()), None)
+    bench_with_input_sizes(
+        c,
+        ClarityCostFunction::Let,
+        SCALE.into(),
+        Some(INPUT_SIZES.into()),
+        None,
+    )
 }
 
 fn bench_index_of(c: &mut Criterion) {
@@ -3057,13 +3480,7 @@ fn bench_index_of(c: &mut Criterion) {
 }
 
 fn bench_element_at(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::ElementAt,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::ElementAt, SCALE.into(), None, None)
 }
 
 fn bench_len(c: &mut Criterion) {
@@ -3091,13 +3508,7 @@ fn bench_append(c: &mut Criterion) {
 }
 
 fn bench_filter(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Filter,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Filter, SCALE.into(), None, None)
 }
 
 // note: this takes a lot of time to run; can shorten the list sizes to make it faster
@@ -3112,33 +3523,15 @@ fn bench_map(c: &mut Criterion) {
 }
 
 fn bench_fold(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Fold,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Fold, SCALE.into(), None, None)
 }
 
 fn bench_block_info(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::BlockInfo,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::BlockInfo, SCALE.into(), None, None)
 }
 
 fn bench_at_block(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::AtBlock,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::AtBlock, SCALE.into(), None, None)
 }
 
 fn bench_load_contract(c: &mut Criterion) {
@@ -3154,11 +3547,24 @@ fn bench_load_contract(c: &mut Criterion) {
     // Set up Clarity Backing Store
     // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
     let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-    let new_tip = StacksBlockId::from([5;32]);
+    let new_tip = StacksBlockId::from([5; 32]);
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+    let pox_constants = PoxConstants::new(
+        10,
+        5,
+        3,
+        25,
+        5,
+        u64::MAX,
+        u64::MAX,
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+    );
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -3167,10 +3573,13 @@ fn bench_load_contract(c: &mut Criterion) {
 
     let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-    let mut owned_env = OwnedEnvironment::new_free(true,  0,clarity_db, StacksEpochId::Epoch21);
+    let mut owned_env = OwnedEnvironment::new_free(true, 0, clarity_db, StacksEpochId::Epoch21);
     owned_env.begin();
 
-    let mut contract_context = ContractContext::new(QualifiedContractIdentifier::transient(), ClarityVersion::Clarity2);
+    let mut contract_context = ContractContext::new(
+        QualifiedContractIdentifier::transient(),
+        ClarityVersion::Clarity2,
+    );
     let mut env = owned_env.get_exec_environment(None, None, &mut contract_context);
 
     for size in INPUT_SIZES.iter() {
@@ -3183,10 +3592,18 @@ fn bench_load_contract(c: &mut Criterion) {
             input_size: _,
         } = gen_read_only_func(*size as u16);
 
-        env.initialize_contract(contract_identifier.clone(), &contract, ASTRules::PrecheckSize)
+        env.initialize_contract(
+            contract_identifier.clone(),
+            &contract,
+            ASTRules::PrecheckSize,
+        )
+        .unwrap();
+
+        let contract_size = env
+            .global_context
+            .database
+            .get_contract_size(&contract_identifier)
             .unwrap();
-        
-        let contract_size = env.global_context.database.get_contract_size(&contract_identifier).unwrap();
 
         group.throughput(Throughput::Bytes(contract_size));
         group.bench_with_input(
@@ -3210,7 +3627,7 @@ fn bench_type_parse_step(c: &mut Criterion) {
         cost_tracker: &mut T,
     ) {
         for exp in &contract_ast.expressions {
-            TypeSignature::parse_type_repr(exp, cost_tracker);
+            TypeSignature::parse_type_repr(StacksEpochId::latest(), exp, cost_tracker);
         }
     }
 
@@ -3272,11 +3689,24 @@ fn bench_poison_microblock(c: &mut Criterion) {
     // Set up Clarity Backing Store
     // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
     let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-    let new_tip = StacksBlockId::from([5;32]);
+    let new_tip = StacksBlockId::from([5; 32]);
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+    let pox_constants = PoxConstants::new(
+        10,
+        5,
+        3,
+        25,
+        5,
+        u64::MAX,
+        u64::MAX,
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+    );
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -3288,7 +3718,10 @@ fn bench_poison_microblock(c: &mut Criterion) {
     let mut owned_env = OwnedEnvironment::new_free(true, 0, clarity_db, StacksEpochId::Epoch21);
     owned_env.begin();
     // TODO: verify correctness
-    let mut contract_context = ContractContext::new(QualifiedContractIdentifier::transient(), ClarityVersion::Clarity2);
+    let mut contract_context = ContractContext::new(
+        QualifiedContractIdentifier::transient(),
+        ClarityVersion::Clarity2,
+    );
     let mut env = owned_env.get_exec_environment(None, None, &mut contract_context);
 
     let privk_string = "eb05c83546fdd2c79f10f5ad5434a90dd28f7e3acb7c092157aa1bc3656b012c01";
@@ -3344,8 +3777,13 @@ fn bench_contract_of(c: &mut Criterion) {
         let define_identifier =
             QualifiedContractIdentifier::local("define-trait-contract").unwrap();
         let define_contract = "(define-trait trait-1 ((get-1 (uint) (response uint uint))))";
-        env.initialize_contract(define_identifier, define_contract, None, ASTRules::PrecheckSize)
-            .unwrap();
+        env.initialize_contract(
+            define_identifier,
+            define_contract,
+            None,
+            ASTRules::PrecheckSize,
+        )
+        .unwrap();
 
         let impl_identifier = QualifiedContractIdentifier::local("impl-trait-contract").unwrap();
         let impl_contract = "(impl-trait .define-trait-contract.trait-1)
@@ -3371,13 +3809,7 @@ fn bench_contract_of(c: &mut Criterion) {
 }
 
 fn bench_as_contract(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::AsContract,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::AsContract, SCALE.into(), None, None)
 }
 
 //////////////////////////////////
@@ -3441,13 +3873,7 @@ fn bench_buff_to_uint_be(c: &mut Criterion) {
 }
 
 fn bench_is_standard(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::IsStandard,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::IsStandard, SCALE.into(), None, None)
 }
 
 fn bench_principal_destruct(c: &mut Criterion) {
@@ -3491,33 +3917,15 @@ fn bench_string_to_uint(c: &mut Criterion) {
 }
 
 fn bench_int_to_ascii(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::IntToAscii,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::IntToAscii, SCALE.into(), None, None)
 }
 
 fn bench_int_to_utf8(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::IntToUtf8,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::IntToUtf8, SCALE.into(), None, None)
 }
 
 fn bench_slice(c: &mut Criterion) {
-    bench_with_input_sizes(
-        c,
-        ClarityCostFunction::Slice,
-        SCALE.into(),
-        None,
-        None,
-    )
+    bench_with_input_sizes(c, ClarityCostFunction::Slice, SCALE.into(), None, None)
 }
 
 fn bench_to_consensus_buff(c: &mut Criterion) {
@@ -3575,7 +3983,7 @@ fn bench_replace_at(c: &mut Criterion) {
         ClarityCostFunction::ReplaceAt,
         SCALE.into(),
         Some(INPUT_SIZES_DATA.into()),
-        None
+        None,
     )
 }
 
@@ -3592,18 +4000,34 @@ fn bench_analysis_fetch_contract_entry(c: &mut Criterion) {
     // Set up Clarity Backing Store
     // NOTE: this StacksBlockId comes from the `block_headers` in the chainstate DB (db/index.sqlite)
     let read_tip = StacksBlockId::from_hex(READ_TIP).unwrap();
-    let new_tip = StacksBlockId::from([5;32]);
+    let new_tip = StacksBlockId::from([5; 32]);
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(10, 5, 3, 25, 5, u64::MAX, u64::MAX, u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value(), u32::max_value());
+    let pox_constants = PoxConstants::new(
+        10,
+        5,
+        3,
+        25,
+        5,
+        u64::MAX,
+        u64::MAX,
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+    );
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
     // Set up HeaderDB
     let headers_db = StacksChainState::open_db(false, 2147483648, CHAINSTATE_PATH).unwrap();
     let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
-    let mut contract_context = ContractContext::new(QualifiedContractIdentifier::transient(), ClarityVersion::Clarity2);
+    let mut contract_context = ContractContext::new(
+        QualifiedContractIdentifier::transient(),
+        ClarityVersion::Clarity2,
+    );
 
     for size in INPUT_SIZES.iter() {
         let contract_identifier =
@@ -3616,20 +4040,38 @@ fn bench_analysis_fetch_contract_entry(c: &mut Criterion) {
         } = gen_analysis_fetch_contract_entry(*size as u64);
 
         analysis_db.begin();
-        let mut contract_ast = ast::build_ast(&contract_identifier, &contract, &mut (), ClarityVersion::Clarity2, StacksEpochId::Epoch21).unwrap();
+        let mut contract_ast = ast::build_ast(
+            &contract_identifier,
+            &contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            StacksEpochId::Epoch21,
+        )
+        .unwrap();
         let mut ct = LimitedCostTracker::new_free();
-        let contract_analysis = analysis::run_analysis(&contract_identifier, &mut contract_ast.expressions, &mut analysis_db, true, ct, StacksEpochId::latest(), ClarityVersion::Clarity2).unwrap();
+        let contract_analysis = analysis::run_analysis(
+            &contract_identifier,
+            &mut contract_ast.expressions,
+            &mut analysis_db,
+            true,
+            ct,
+            StacksEpochId::latest(),
+            ClarityVersion::Clarity2,
+        )
+        .unwrap();
 
         // how many bytes
         let contract_size = contract_analysis.serialize().len();
-        
+
         group.throughput(Throughput::Bytes(contract_size as u64));
         group.bench_with_input(
             BenchmarkId::from_parameter(contract_size),
             &contract_size,
             |b, &_| {
                 b.iter(|| {
-                    analysis_db.load_contract(&contract_identifier, &StacksEpochId::latest()).unwrap();
+                    analysis_db
+                        .load_contract(&contract_identifier, &StacksEpochId::latest())
+                        .unwrap();
                 })
             },
         );
