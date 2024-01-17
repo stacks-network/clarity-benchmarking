@@ -1,8 +1,12 @@
+use std::borrow::BorrowMut;
+use std::collections::HashMap;
+use std::convert::{TryFrom, TryInto};
 #[allow(unused_imports)]
 #[allow(unused_variables)]
 use std::fs::{self, read, File};
 use std::io::Write;
 use std::num::ParseIntError;
+use std::time::Duration;
 
 use benchmarking_lib::generators::{
     define_dummy_trait, gen, gen_analysis_fetch_contract_entry, gen_analysis_pass,
@@ -12,22 +16,6 @@ use benchmarking_lib::generators::{
     READ_TIP,
 };
 use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
-use stackslib::address::AddressHashMode;
-use stackslib::burnchains::PoxConstants;
-use stackslib::chainstate::stacks::db::StacksChainState;
-use stackslib::chainstate::stacks::{
-    CoinbasePayload, StacksBlock, StacksBlockHeader, StacksMicroblock, StacksMicroblockHeader,
-    StacksPrivateKey, StacksPublicKey, StacksTransaction, StacksTransactionSigner,
-    TransactionAnchorMode, TransactionAuth, TransactionPayload, TransactionVersion,
-    C32_ADDRESS_VERSION_TESTNET_SINGLESIG, MINER_BLOCK_CONSENSUS_HASH, MINER_BLOCK_HEADER_HASH,
-};
-use stackslib::clarity_vm::clarity::ClarityInstance;
-use stackslib::clarity_vm::database::{marf::MarfedKV, MemoryBackingStore};
-use stackslib::core::{FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
-use stackslib::types::chainstate::{
-    BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, StacksWorkScore, VRFSeed,
-};
-
 use criterion::measurement::WallTime;
 use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
@@ -35,9 +23,17 @@ use criterion::{
 use lazy_static::lazy_static;
 use rand::prelude::SliceRandom;
 use rand::{thread_rng, Rng};
+use stackslib::address::AddressHashMode;
+use stackslib::burnchains::PoxConstants;
 use stackslib::chainstate::burn::db::sortdb::SortitionDB;
+use stackslib::chainstate::stacks::db::StacksChainState;
+use stackslib::chainstate::stacks::{
+    CoinbasePayload, StacksBlock, StacksBlockHeader, StacksMicroblock, StacksMicroblockHeader,
+    StacksPrivateKey, StacksPublicKey, StacksTransaction, StacksTransactionSigner,
+    TransactionAnchorMode, TransactionAuth, TransactionPayload, TransactionVersion,
+    C32_ADDRESS_VERSION_TESTNET_SINGLESIG, MINER_BLOCK_CONSENSUS_HASH, MINER_BLOCK_HEADER_HASH,
+};
 use stackslib::clarity::types::{Address, StacksEpochId};
-use stackslib::clarity::vm::analysis;
 use stackslib::clarity::vm::analysis::arithmetic_checker::ArithmeticOnlyChecker;
 use stackslib::clarity::vm::analysis::read_only_checker::ReadOnlyChecker;
 use stackslib::clarity::vm::analysis::trait_checker::TraitChecker;
@@ -63,16 +59,15 @@ use stackslib::clarity::vm::analysis::{
 };
 use stackslib::clarity::vm::ast::definition_sorter::DefinitionSorter;
 use stackslib::clarity::vm::ast::expression_identifier::ExpressionIdentifier;
-use stackslib::clarity::vm::ast::ASTRules;
-use stackslib::clarity::vm::ast::{build_ast, parser, ContractAST};
+use stackslib::clarity::vm::ast::{build_ast, parser, ASTRules, ContractAST};
 use stackslib::clarity::vm::contexts::{ContractContext, GlobalContext, OwnedEnvironment};
 use stackslib::clarity::vm::contracts::Contract;
 use stackslib::clarity::vm::costs::cost_functions::{AnalysisCostFunction, ClarityCostFunction};
 use stackslib::clarity::vm::costs::{CostTracker, ExecutionCost, LimitedCostTracker};
 use stackslib::clarity::vm::database::clarity_store::NullBackingStore;
-use stackslib::clarity::vm::database::ClarityBackingStore;
 use stackslib::clarity::vm::database::{
-    ClarityDatabase, ClaritySerializable, HeadersDB, NULL_BURN_STATE_DB, NULL_HEADER_DB,
+    ClarityBackingStore, ClarityDatabase, ClaritySerializable, HeadersDB, NULL_BURN_STATE_DB,
+    NULL_HEADER_DB,
 };
 use stackslib::clarity::vm::functions::crypto::special_principal_of;
 use stackslib::clarity::vm::representations::depth_traverse;
@@ -86,18 +81,21 @@ use stackslib::clarity::vm::types::{
     SequenceSubtype, StandardPrincipalData, TraitIdentifier,
 };
 use stackslib::clarity::vm::{
-    apply, ast, bench_create_ft_in_context, bench_create_map_in_context,
+    analysis, apply, ast, bench_create_ft_in_context, bench_create_map_in_context,
     bench_create_nft_in_context, bench_create_var_in_context, eval_all, lookup_function,
     lookup_variable, CallStack, ClarityName, ClarityVersion, Environment, LocalContext,
     SymbolicExpression, Value,
 };
+use stackslib::clarity_vm::clarity::ClarityInstance;
+use stackslib::clarity_vm::database::marf::MarfedKV;
+use stackslib::clarity_vm::database::MemoryBackingStore;
+use stackslib::core::{FIRST_BURNCHAIN_CONSENSUS_HASH, FIRST_STACKS_BLOCK_HASH};
+use stackslib::types::chainstate::{
+    BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, StacksWorkScore, VRFSeed,
+};
 use stackslib::util::hash::{hex_bytes, to_hex, Hash160, MerkleTree, Sha512Trunc256Sum};
 use stackslib::util::secp256k1::MessageSignature;
 use stackslib::util::vrf::VRFProof;
-use std::borrow::BorrowMut;
-use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
-use std::time::Duration;
 
 // for when input size is the number of elements
 const INPUT_SIZES: [u64; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
@@ -1345,7 +1343,11 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
             db.insert_contract(&contract_identifier, &contract_analysis);
             let fn_name = ClarityName::try_from("dummy-fn".to_string()).unwrap();
             let type_size = match db
-                .get_read_only_function_type(&contract_identifier, "dummy-fn", &StacksEpochId::latest())
+                .get_read_only_function_type(
+                    &contract_identifier,
+                    "dummy-fn",
+                    &StacksEpochId::latest(),
+                )
                 .unwrap()
             {
                 Some(FunctionType::Fixed(function)) => {

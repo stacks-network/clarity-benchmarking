@@ -1,17 +1,19 @@
-use std::{fs, io, path::PathBuf};
-
-use stackslib::{
-    chainstate::stacks::db::{MinerPaymentSchedule, StacksHeaderInfo, StacksBlockHeaderTypes},
-    types::chainstate::{BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, VRFSeed},
-    clarity::vm::database::HeadersDB,
-};
+use std::path::PathBuf;
+use std::{fs, io};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use stackslib::chainstate::burn::ConsensusHash;
+use stackslib::chainstate::stacks::db::{
+    MinerPaymentSchedule, StacksBlockHeaderTypes, StacksHeaderInfo,
+};
 use stackslib::chainstate::stacks::index::ClarityMarfTrieId;
-use stackslib::clarity_vm::database::_get_matured_reward;
-use stackslib::util_lib::db::FromRow;
 use stackslib::clarity::util::hash::Hash160;
+use stackslib::clarity::vm::database::HeadersDB;
+use stackslib::clarity_vm::database::_get_matured_reward;
+use stackslib::types::chainstate::{
+    BlockHeaderHash, BurnchainHeaderHash, StacksAddress, StacksBlockId, VRFSeed,
+};
+use stackslib::util_lib::db::FromRow;
 
 pub struct TestHeadersDB;
 
@@ -130,11 +132,10 @@ impl HeadersDB for SimHeadersDB {
     }
 
     fn get_vrf_seed_for_block(&self, id_bhh: &StacksBlockId) -> Option<VRFSeed> {
-        get_stacks_header_info(&self.conn, id_bhh)
-            .map(|x| match x.anchored_header {
-                StacksBlockHeaderTypes::Epoch2(h) => VRFSeed::from_proof(&h.proof),
-                StacksBlockHeaderTypes::Nakamoto(h) => todo!("Nakamoto blocks not supported yet"),
-            })
+        get_stacks_header_info(&self.conn, id_bhh).map(|x| match x.anchored_header {
+            StacksBlockHeaderTypes::Epoch2(h) => VRFSeed::from_proof(&h.proof),
+            StacksBlockHeaderTypes::Nakamoto(h) => todo!("Nakamoto blocks not supported yet"),
+        })
     }
 
     fn get_miner_address(&self, id_bhh: &StacksBlockId) -> Option<StacksAddress> {
