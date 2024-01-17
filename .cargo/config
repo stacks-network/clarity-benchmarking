@@ -1,0 +1,2 @@
+[alias]
+fmt-stacks = "fmt -- --config group_imports=StdExternalCrate,imports_granularity=Module"
