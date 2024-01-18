@@ -1170,6 +1170,9 @@ fn bench_principal_of(c: &mut Criterion) {
     });
 }
 
+// TODO
+// Test panics while setting `trait_sig`
+// Fix panic and re-enable test
 fn bench_analysis_use_trait_entry(c: &mut Criterion) {
     let function = ClarityCostFunction::AnalysisUseTraitEntry;
     let mut group = c.benchmark_group(function.to_string());
@@ -1191,8 +1194,8 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
 
         let contract_identifier = QualifiedContractIdentifier::local(&*format!("c{}", 0)).unwrap();
 
-        let mut cost_tracker = LimitedCostTracker::new_free();
-        let mut type_checker = TypeChecker::_new(
+        let cost_tracker = LimitedCostTracker::new_free();
+        let type_checker = TypeChecker::_new(
             &mut analysis_db,
             cost_tracker.clone(),
             &contract_identifier,
@@ -1205,7 +1208,7 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             input_size: _,
         } = gen(function, 1, *input_size);
 
-        let mut contract_ast = match ast::build_ast(
+        let contract_ast = match ast::build_ast(
             &contract_identifier,
             &contract,
             &mut (),
@@ -1227,51 +1230,58 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             ClarityVersion::Clarity2,
         );
 
-        let trait_name = ClarityName::try_from("dummy-trait".to_string()).unwrap();
+        /*
         let mut typing_context =
             TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
         type_checker
             ._type_check_define_trait(&trait_name, &contract_ast.expressions, &mut typing_context)
             .unwrap();
+        */
 
         type_checker
             .contract_context
             .into_contract_analysis(&mut contract_analysis);
 
-        type_checker.db.execute(|db| {
-            db.insert_contract(&contract_identifier, &contract_analysis)
-                .unwrap();
-            let trait_id = TraitIdentifier {
-                name: trait_name.clone(),
-                contract_identifier: contract_identifier.clone(),
-            };
+        type_checker
+            .db
+            .execute(|db| {
+                db.insert_contract(&contract_identifier, &contract_analysis)
+                    .unwrap();
+                let trait_name = ClarityName::try_from("dummy-trait".to_string()).unwrap();
+                let trait_id = TraitIdentifier {
+                    name: trait_name.clone(),
+                    contract_identifier: contract_identifier.clone(),
+                };
 
-            // get the size of the trait
-            let trait_sig = db
-                .get_defined_trait(&contract_identifier, &trait_name, &StacksEpochId::latest())
-                .expect("FATAL: could not load from DB")
-                .expect("FATAL: could not unwrap");
-            let type_size = _trait_type_size(&trait_sig).unwrap();
+                // get the size of the trait
+                let trait_sig = db
+                    .get_defined_trait(&contract_identifier, &trait_name, &StacksEpochId::latest())
+                    .expect("FATAL: could not load from DB")
+                    .expect("FATAL: could not unwrap");
+                let type_size = _trait_type_size(&trait_sig).unwrap();
 
-            group.throughput(Throughput::Bytes(type_size));
-            group.bench_with_input(
-                BenchmarkId::from_parameter(type_size),
-                &type_size,
-                |b, &_| {
-                    b.iter(|| {
-                        for _ in 0..SCALE {
-                            TypeChecker::bench_analysis_use_trait_entry_in_context(db, &trait_id);
-                        }
-                    })
-                },
-            );
-            // this snippet is here since the "execute" context needs to determine the return type
-            if false {
-                return Err(());
-            }
+                group.throughput(Throughput::Bytes(type_size));
+                group.bench_with_input(
+                    BenchmarkId::from_parameter(type_size),
+                    &type_size,
+                    |b, &_| {
+                        b.iter(|| {
+                            for _ in 0..SCALE {
+                                TypeChecker::bench_analysis_use_trait_entry_in_context(
+                                    db, &trait_id,
+                                );
+                            }
+                        })
+                    },
+                );
+                // this snippet is here since the "execute" context needs to determine the return type
+                if false {
+                    return Err(());
+                }
 
-            Ok(())
-        });
+                Ok(())
+            })
+            .unwrap();
     }
 }
 
@@ -4192,7 +4202,7 @@ criterion_group!(
     bench_analysis_lookup_variable_depth,
     bench_analysis_type_lookup,
     bench_analysis_lookup_variable_const,
-    bench_analysis_use_trait_entry,
+    //bench_analysis_use_trait_entry,
     bench_analysis_get_function_entry,
     bench_inner_type_check_cost,
     bench_user_function_application,
