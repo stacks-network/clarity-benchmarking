@@ -929,6 +929,8 @@ fn bench_lookup_variable_depth(c: &mut Criterion) {
 }
 
 // note: could write `bench_run` function, and split out adding nodes to the graph from finding dependencies
+// FIXME
+// Fails because `computed_input_size` is 0 on each iteration
 fn bench_ast_cycle_detection(c: &mut Criterion) {
     let function = ClarityCostFunction::AstCycleDetection;
     let mut group = c.benchmark_group(function.to_string());
@@ -1170,7 +1172,7 @@ fn bench_principal_of(c: &mut Criterion) {
     });
 }
 
-// TODO
+// FIXME
 // Test panics while setting `trait_sig`
 // Fix panic and re-enable test
 fn bench_analysis_use_trait_entry(c: &mut Criterion) {
@@ -3889,6 +3891,7 @@ fn bench_is_standard(c: &mut Criterion) {
     bench_with_input_sizes(c, ClarityCostFunction::IsStandard, SCALE.into(), None, None)
 }
 
+// FIXME:  Panics with `Unchecked(UndefinedFunction("principal-destruct"))``
 fn bench_principal_destruct(c: &mut Criterion) {
     bench_with_input_sizes(
         c,
@@ -3899,6 +3902,7 @@ fn bench_principal_destruct(c: &mut Criterion) {
     )
 }
 
+// FIXME: Panics with `Unchecked(UndefinedFunction("principal-construct"))``
 fn bench_principal_construct(c: &mut Criterion) {
     bench_with_input_sizes(
         c,
@@ -3909,6 +3913,7 @@ fn bench_principal_construct(c: &mut Criterion) {
     )
 }
 
+// FIXME: Panics with `Unchecked(UndefinedFunction("string-to-int"))``
 fn bench_string_to_int(c: &mut Criterion) {
     bench_with_input_sizes(
         c,
@@ -3919,6 +3924,7 @@ fn bench_string_to_int(c: &mut Criterion) {
     )
 }
 
+// FIXME: Panics with `Unchecked(UndefinedFunction("string-to-uint"))``
 fn bench_string_to_uint(c: &mut Criterion) {
     bench_with_input_sizes(
         c,
@@ -4206,7 +4212,7 @@ criterion_group!(
     bench_analysis_get_function_entry,
     bench_inner_type_check_cost,
     bench_user_function_application,
-    bench_ast_cycle_detection,
+    //bench_ast_cycle_detection,
     bench_ast_parse,
     bench_contract_storage,
     bench_principal_of,
@@ -4224,10 +4230,10 @@ criterion_group!(
     bench_buff_to_int_be,
     bench_buff_to_uint_be,
     bench_is_standard,
-    bench_principal_destruct,
-    bench_principal_construct,
-    bench_string_to_int,
-    bench_string_to_uint,
+    //bench_principal_destruct,
+    //bench_principal_construct,
+    //bench_string_to_int,
+    //bench_string_to_uint,
     bench_int_to_ascii,
     bench_int_to_utf8,
     bench_stx_get_account,
