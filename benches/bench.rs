@@ -237,6 +237,7 @@ fn run_bench<'a, F>(
         u32::max_value(),
         u32::max_value(),
     );
+    // If this line panics, see comment above function for how to make a database
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
