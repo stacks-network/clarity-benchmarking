@@ -1,2 +1,16 @@
 [alias]
 fmt-stacks = "fmt -- --config group_imports=StdExternalCrate,imports_granularity=Module"
+
+# Uncomment the two patches below to use local versions of stacks-core and clarity-wasm
+[patch.'https://github.com/stacks-network/stacks-core.git']
+clarity = { path = "../stacks-core/clarity" }
+stacks-common = { path = "../stacks-core/stacks-common" }
+pox-locking = { path = "../stacks-core/pox-locking" }
+libstackerdb = { path = "../stacks-core/libstackerdb" }
+stx-genesis = { path = "../stacks-core/stx-genesis"}
+stacks = { path = "../stacks-core/stackslib", package = "stackslib" }
+libsigner = { path = "../stacks-core/libsigner" }
+stacks-signer = { path = "../stacks-core/stacks-signer" }
+
+[patch.'https://github.com/stacks-network/clarity-wasm.git']
+clar2wasm = { package = "clar2wasm", path = "../clarity-wasm/clar2wasm" }

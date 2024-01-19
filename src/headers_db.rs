@@ -162,7 +162,7 @@ impl HeadersDB for SimHeadersDB {
 fn get_stacks_header_info(conn: &Connection, id_bhh: &StacksBlockId) -> Option<StacksHeaderInfo> {
     conn.query_row(
         "SELECT * FROM block_headers WHERE index_block_hash = ?",
-        [id_bhh].iter(),
+        [id_bhh],
         |x| Ok(StacksHeaderInfo::from_row(x).expect("Bad stacks header info in database")),
     )
     .optional()
@@ -172,7 +172,7 @@ fn get_stacks_header_info(conn: &Connection, id_bhh: &StacksBlockId) -> Option<S
 fn get_miner_info(conn: &Connection, id_bhh: &StacksBlockId) -> Option<MinerPaymentSchedule> {
     conn.query_row(
         "SELECT * FROM payments WHERE index_block_hash = ? AND miner = 1",
-        [id_bhh].iter(),
+        [id_bhh],
         |x| Ok(MinerPaymentSchedule::from_row(x).expect("Bad payment info in database")),
     )
     .optional()

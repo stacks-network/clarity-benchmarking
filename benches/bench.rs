@@ -1034,7 +1034,7 @@ fn bench_contract_storage(c: &mut Criterion) {
             input_size: computed_input_size,
         } = gen(function, 1, *input_size);
 
-        let contract_ast = match ast::build_ast(
+        let mut contract_ast = match ast::build_ast(
             &contract_identifier,
             &contract,
             &mut (),
@@ -1058,6 +1058,15 @@ fn bench_contract_storage(c: &mut Criterion) {
             None,
         );
 
+        let cost_tracker = LimitedCostTracker::new_free();
+        let mut contract_analysis = ContractAnalysis::new(
+            contract_identifier.clone(),
+            contract_ast.expressions.clone(),
+            cost_tracker,
+            StacksEpochId::latest(),
+            ClarityVersion::Clarity2,
+        );
+
         group.throughput(Throughput::Bytes(computed_input_size as u64));
         group.bench_with_input(
             BenchmarkId::from_parameter(computed_input_size),
@@ -1071,7 +1080,8 @@ fn bench_contract_storage(c: &mut Criterion) {
                         environment.initialize_contract_from_ast(
                             contract_identifier.clone(),
                             ClarityVersion::Clarity2,
-                            &contract_ast,
+                            &mut contract_ast,
+                            &contract_analysis,
                             &contract,
                         );
                     }
