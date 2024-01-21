@@ -5,9 +5,9 @@ Benchmarking suite to determine constants for usage in the Clarity Cost Function
 
 ### Setup 
 
-Ensure that the `blockstack-core` dependency is set currently. This library 
+Ensure that the `stacks-core` dependency is set currently. This library 
 relies on a modified version of the repository. The branch it currently depends on is called 
-`clarity-benchmarking-stacks-2.1`.
+`costs-4-benchmark`.
 
 ### Running the benchmark suite
 
@@ -28,6 +28,12 @@ with the following specs on Google Cloud Platform:
 - Hard Drive size (500GB)
 - Hard Drive type (Standard persistent disk)
 - GCP Network Tier (Premium)
+
+For `costs-4` and `costs-4-clarity-wasm`, the following was used:
+- GCP `n2-standard-4` instance
+- 50 GB SSD
+- Debian 12
+- Rust 1.75
 
 ### Running regression analysis
 
