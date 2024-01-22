@@ -4235,7 +4235,7 @@ criterion_group!(
     bench_analysis_pass_type_checker,            // g
     bench_poison_microblock,
     bench_contract_call,
-    bench_contract_of,
+    //bench_contract_of,
     bench_buff_to_int_le,
     bench_buff_to_uint_le,
     bench_buff_to_int_be,
