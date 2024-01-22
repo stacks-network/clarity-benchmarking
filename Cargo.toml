@@ -14,7 +14,7 @@ lazy_static = "1.4.0"
 [dependencies.stackslib]
 # Check .cargo/config, this may be patched!
 git = "https://github.com/stacks-network/stacks-core"
-branch = "feat/costs-4-benchmark"
+branch = "feat/clarity-wasm-next-costs-4-benchmark"
 features = ["benchmarking", "testing"]
 package = "stackslib"
 

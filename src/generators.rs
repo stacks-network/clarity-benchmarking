@@ -30,6 +30,8 @@ use stackslib::types::StacksEpochId;
 use stackslib::util::hash::to_hex;
 use stackslib::util::secp256k1::{Secp256k1PrivateKey, Secp256k1PublicKey};
 
+pub const EPOCH_ID: StacksEpochId = StacksEpochId::Epoch30;
+
 lazy_static! {
     pub static ref TUPLE_NAMES: Vec<String> = create_tuple_names(16);
 }
@@ -2119,7 +2121,7 @@ fn gen_ast_cycle_detection(input_size: u64) -> GenOutput {
         &body,
         &mut cost_tracker,
         ClarityVersion::latest(),
-        StacksEpochId::latest(),
+        EPOCH_ID,
         ASTRules::PrecheckSize,
     )
     .expect("Failed to build AST");

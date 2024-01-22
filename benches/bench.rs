@@ -13,7 +13,7 @@ use benchmarking_lib::generators::{
     gen_read_only_func, helper_gen_clarity_list_type, helper_generate_rand_char_string,
     helper_make_value_for_sized_type_sig, make_sized_contracts_map, make_sized_tuple_sigs_map,
     make_sized_type_sig_map, make_sized_values_map, make_type_sig_list_of_size, GenOutput,
-    READ_TIP,
+    EPOCH_ID, READ_TIP,
 };
 use benchmarking_lib::headers_db::{SimHeadersDB, TestHeadersDB};
 use criterion::measurement::WallTime;
@@ -247,7 +247,7 @@ fn run_bench<'a, F>(
     // Set up data if necessary
     if let Some(ref make_store) = maybe_make_store {
         let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
-        let mut env = OwnedEnvironment::new_free(false, 0, clarity_db, StacksEpochId::Epoch21);
+        let mut env = OwnedEnvironment::new_free(false, 0, clarity_db, EPOCH_ID);
         make_store(&mut env);
     }
 
@@ -258,7 +258,7 @@ fn run_bench<'a, F>(
         0,
         clarity_db,
         LimitedCostTracker::new_free(),
-        StacksEpochId::Epoch21,
+        EPOCH_ID,
     );
     global_context.begin();
 
@@ -278,7 +278,7 @@ fn run_bench<'a, F>(
         &contract,
         &mut (),
         ClarityVersion::Clarity2,
-        StacksEpochId::Epoch21,
+        EPOCH_ID,
     ) {
         Ok(res) => res,
         Err(error) => {
@@ -296,7 +296,7 @@ fn run_bench<'a, F>(
                 &pre_contract,
                 &mut (),
                 ClarityVersion::Clarity2,
-                StacksEpochId::Epoch21,
+                EPOCH_ID,
             ) {
                 Ok(res) => res,
                 Err(error) => {
@@ -365,7 +365,7 @@ fn bench_analysis<F, G>(
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -383,8 +383,7 @@ fn bench_analysis<F, G>(
         let new_tip = StacksBlockId::from([5; 32]);
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
-        let mut local_context =
-            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut local_context = TypingContext::new(EPOCH_ID, ClarityVersion::Clarity2);
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
         let mut type_checker = TypeChecker::_new(
@@ -437,7 +436,7 @@ where
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -449,7 +448,7 @@ where
             contract_identifier.clone(),
             contract_ast.expressions.clone(),
             cost_tracker,
-            StacksEpochId::latest(),
+            EPOCH_ID,
             ClarityVersion::Clarity2,
         );
 
@@ -476,7 +475,7 @@ where
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
-                            code_to_bench(&StacksEpochId::latest(), &mut contract_analysis, db);
+                            code_to_bench(&EPOCH_ID, &mut contract_analysis, db);
                         }
                     })
                 },
@@ -528,7 +527,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             &setup_contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -540,7 +539,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             pre_contract_identifier.clone(),
             pre_contract_ast.expressions.clone(),
             cost_tracker,
-            StacksEpochId::latest(),
+            EPOCH_ID,
             ClarityVersion::Clarity2,
         );
 
@@ -561,7 +560,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -573,7 +572,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             contract_identifier.clone(),
             contract_ast.expressions.clone(),
             cost_tracker,
-            StacksEpochId::latest(),
+            EPOCH_ID,
             ClarityVersion::Clarity2,
         );
 
@@ -600,8 +599,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             &QualifiedContractIdentifier::transient(),
             &ClarityVersion::Clarity2,
         );
-        let mut typing_context =
-            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut typing_context = TypingContext::new(EPOCH_ID, ClarityVersion::Clarity2);
         for exp in &pre_contract_ast.expressions {
             type_checker._try_type_check_define(exp, &mut typing_context);
         }
@@ -617,8 +615,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             &QualifiedContractIdentifier::transient(),
             &ClarityVersion::Clarity2,
         );
-        let mut typing_context =
-            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut typing_context = TypingContext::new(EPOCH_ID, ClarityVersion::Clarity2);
         for exp in &contract_ast.expressions {
             type_checker._try_type_check_define(exp, &mut typing_context);
         }
@@ -636,11 +633,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
-                            TraitChecker::run_pass(
-                                &StacksEpochId::latest(),
-                                &mut contract_analysis,
-                                db,
-                            );
+                            TraitChecker::run_pass(&EPOCH_ID, &mut contract_analysis, db);
                         }
                     })
                 },
@@ -672,7 +665,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             &setup_contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -684,7 +677,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             pre_contract_identifier.clone(),
             pre_contract_ast.expressions.clone(),
             cost_tracker,
-            StacksEpochId::latest(),
+            EPOCH_ID,
             ClarityVersion::Clarity2,
         );
 
@@ -705,7 +698,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -717,7 +710,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             contract_identifier.clone(),
             contract_ast.expressions.clone(),
             cost_tracker,
-            StacksEpochId::latest(),
+            EPOCH_ID,
             ClarityVersion::Clarity2,
         );
 
@@ -744,8 +737,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             &QualifiedContractIdentifier::transient(),
             &ClarityVersion::Clarity2,
         );
-        let mut typing_context =
-            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut typing_context = TypingContext::new(EPOCH_ID, ClarityVersion::Clarity2);
         for exp in &pre_contract_ast.expressions {
             type_checker._try_type_check_define(exp, &mut typing_context);
         }
@@ -763,11 +755,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
                 |b, &_| {
                     b.iter(|| {
                         for _ in 0..SCALE {
-                            TypeChecker::run_pass(
-                                &StacksEpochId::latest(),
-                                &mut contract_analysis,
-                                db,
-                            );
+                            TypeChecker::run_pass(&EPOCH_ID, &mut contract_analysis, db);
                         }
                     })
                 },
@@ -831,8 +819,7 @@ fn bench_analysis_lookup_variable_depth(c: &mut Criterion) {
     let mut group = c.benchmark_group(function.to_string());
 
     for input_size in &INPUT_SIZES {
-        let mut local_context =
-            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut local_context = TypingContext::new(EPOCH_ID, ClarityVersion::Clarity2);
         helper_deepen_typing_context(*input_size, *input_size, &local_context, &mut group);
     }
 }
@@ -887,7 +874,7 @@ fn helper_deepen_local_context(
             0,
             clarity_db,
             LimitedCostTracker::new_free(),
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         );
         global_context.begin();
 
@@ -1020,7 +1007,7 @@ fn bench_contract_storage(c: &mut Criterion) {
             0,
             clarity_db,
             LimitedCostTracker::new_free(),
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         );
         global_context.begin();
 
@@ -1039,7 +1026,7 @@ fn bench_contract_storage(c: &mut Criterion) {
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -1063,7 +1050,7 @@ fn bench_contract_storage(c: &mut Criterion) {
             contract_identifier.clone(),
             contract_ast.expressions.clone(),
             cost_tracker,
-            StacksEpochId::latest(),
+            EPOCH_ID,
             ClarityVersion::Clarity2,
         );
 
@@ -1135,7 +1122,7 @@ fn bench_principal_of(c: &mut Criterion) {
         0,
         clarity_db,
         LimitedCostTracker::new_free(),
-        StacksEpochId::Epoch21,
+        EPOCH_ID,
     );
     global_context.begin();
 
@@ -1154,7 +1141,7 @@ fn bench_principal_of(c: &mut Criterion) {
         &contract,
         &mut (),
         ClarityVersion::Clarity2,
-        StacksEpochId::Epoch21,
+        EPOCH_ID,
     ) {
         Ok(res) => res,
         Err(error) => {
@@ -1226,7 +1213,7 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -1239,13 +1226,13 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
             contract_identifier.clone(),
             contract_ast.expressions.clone(),
             cost_tracker,
-            StacksEpochId::latest(),
+            EPOCH_ID,
             ClarityVersion::Clarity2,
         );
 
         /*
         let mut typing_context =
-            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+            TypingContext::new(STACKS_EPOCH, ClarityVersion::Clarity2);
         type_checker
             ._type_check_define_trait(&trait_name, &contract_ast.expressions, &mut typing_context)
             .unwrap();
@@ -1268,7 +1255,7 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
 
                 // get the size of the trait
                 let trait_sig = db
-                    .get_defined_trait(&contract_identifier, &trait_name, &StacksEpochId::latest())
+                    .get_defined_trait(&contract_identifier, &trait_name, &EPOCH_ID)
                     .expect("FATAL: could not load from DB")
                     .expect("FATAL: could not unwrap");
                 let type_size = _trait_type_size(&trait_sig).unwrap();
@@ -1338,7 +1325,7 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -1351,12 +1338,11 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
             contract_identifier.clone(),
             contract_ast.expressions.clone(),
             cost_tracker,
-            StacksEpochId::latest(),
+            EPOCH_ID,
             ClarityVersion::Clarity2,
         );
 
-        let mut typing_context =
-            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut typing_context = TypingContext::new(EPOCH_ID, ClarityVersion::Clarity2);
         type_checker._try_type_check_define(&contract_ast.expressions[0], &mut typing_context);
         type_checker
             .contract_context
@@ -1366,11 +1352,7 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
             db.insert_contract(&contract_identifier, &contract_analysis);
             let fn_name = ClarityName::try_from("dummy-fn".to_string()).unwrap();
             let type_size = match db
-                .get_read_only_function_type(
-                    &contract_identifier,
-                    "dummy-fn",
-                    &StacksEpochId::latest(),
-                )
+                .get_read_only_function_type(&contract_identifier, "dummy-fn", &EPOCH_ID)
                 .unwrap()
             {
                 Some(FunctionType::Fixed(function)) => {
@@ -1451,7 +1433,7 @@ fn bench_inner_type_check_cost(c: &mut Criterion) {
             0,
             clarity_db,
             LimitedCostTracker::new_free(),
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         );
         global_context.begin();
 
@@ -1470,7 +1452,7 @@ fn bench_inner_type_check_cost(c: &mut Criterion) {
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -1547,7 +1529,7 @@ fn bench_user_function_application(c: &mut Criterion) {
             0,
             clarity_db,
             LimitedCostTracker::new_free(),
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         );
         global_context.begin();
 
@@ -1566,7 +1548,7 @@ fn bench_user_function_application(c: &mut Criterion) {
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -1644,7 +1626,7 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
             0,
             clarity_db,
             LimitedCostTracker::new_free(),
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         );
         global_context.begin();
 
@@ -1663,7 +1645,7 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -1763,7 +1745,7 @@ fn bench_lookup_function(c: &mut Criterion) {
         0,
         clarity_db,
         LimitedCostTracker::new_free(),
-        StacksEpochId::Epoch21,
+        EPOCH_ID,
     );
     global_context.begin();
 
@@ -1782,7 +1764,7 @@ fn bench_lookup_function(c: &mut Criterion) {
         &contract,
         &mut (),
         ClarityVersion::Clarity2,
-        StacksEpochId::Epoch21,
+        EPOCH_ID,
     ) {
         Ok(res) => res,
         Err(error) => {
@@ -1870,7 +1852,7 @@ fn bench_lookup_variable_size(c: &mut Criterion) {
             0,
             clarity_db,
             LimitedCostTracker::new_free(),
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         );
         global_context.begin();
 
@@ -2316,8 +2298,7 @@ fn bench_analysis_iterable_func(c: &mut Criterion) {
             *input_size as usize
         ];
 
-        let mut local_context =
-            TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+        let mut local_context = TypingContext::new(EPOCH_ID, ClarityVersion::Clarity2);
 
         let mut cost_tracker = LimitedCostTracker::new_free();
         let mut null_store = NullBackingStore::new();
@@ -2367,7 +2348,7 @@ fn bench_analysis_storage(c: &mut Criterion) {
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         ) {
             Ok(res) => res,
             Err(error) => {
@@ -2406,7 +2387,7 @@ fn bench_analysis_storage(c: &mut Criterion) {
                 contract_id.clone(),
                 exp_list.to_vec(),
                 cost_tracker.clone(),
-                StacksEpochId::latest(),
+                EPOCH_ID,
                 ClarityVersion::Clarity2,
             );
 
@@ -2416,8 +2397,7 @@ fn bench_analysis_storage(c: &mut Criterion) {
                 &QualifiedContractIdentifier::transient(),
                 &ClarityVersion::Clarity2,
             );
-            let mut typing_context =
-                TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
+            let mut typing_context = TypingContext::new(EPOCH_ID, ClarityVersion::Clarity2);
             for exp in exp_list {
                 type_checker._try_type_check_define(exp, &mut typing_context);
             }
@@ -2567,7 +2547,7 @@ fn bench_ast_parse(c: &mut Criterion) {
                 &contract,
                 cost_tracker,
                 ClarityVersion::Clarity2,
-                StacksEpochId::Epoch21,
+                EPOCH_ID,
             );
         }
     }
@@ -2901,7 +2881,7 @@ fn bench_create_ft(c: &mut Criterion) {
         0,
         clarity_db,
         LimitedCostTracker::new_free(),
-        StacksEpochId::Epoch21,
+        EPOCH_ID,
     );
     global_context.begin();
 
@@ -2986,7 +2966,7 @@ fn bench_create_nft(c: &mut Criterion) {
             0,
             clarity_db,
             LimitedCostTracker::new_free(),
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         );
         global_context.begin();
 
@@ -3141,7 +3121,7 @@ fn bench_create_map(c: &mut Criterion) {
             0,
             clarity_db,
             LimitedCostTracker::new_free(),
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         );
         global_context.begin();
 
@@ -3221,7 +3201,7 @@ fn bench_create_var(c: &mut Criterion) {
             0,
             clarity_db,
             LimitedCostTracker::new_free(),
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         );
         global_context.begin();
 
@@ -3232,7 +3212,7 @@ fn bench_create_var(c: &mut Criterion) {
         let value_type = SIZED_TYPE_SIG.get(input_size).unwrap();
         let value_type_size = value_type.size();
         let value = helper_make_value_for_sized_type_sig(*input_size);
-        assert!(value_type.admits(&StacksEpochId::latest(), &value).unwrap());
+        assert!(value_type.admits(&EPOCH_ID, &value).unwrap());
         assert_eq!(value_type.size(), value.size());
 
         group.throughput(Throughput::Bytes(value_type_size as u64));
@@ -3303,7 +3283,7 @@ fn bench_wrapped_data_function(
             0,
             clarity_db,
             LimitedCostTracker::new_free(),
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         );
         global_context.begin();
 
@@ -3331,7 +3311,7 @@ fn bench_wrapped_data_function(
                     &pre_contract,
                     &mut (),
                     ClarityVersion::Clarity2,
-                    StacksEpochId::Epoch21,
+                    EPOCH_ID,
                 ) {
                     Ok(res) => res,
                     Err(error) => {
@@ -3599,7 +3579,7 @@ fn bench_load_contract(c: &mut Criterion) {
 
     let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-    let mut owned_env = OwnedEnvironment::new_free(true, 0, clarity_db, StacksEpochId::Epoch21);
+    let mut owned_env = OwnedEnvironment::new_free(true, 0, clarity_db, EPOCH_ID);
     owned_env.begin();
 
     let mut contract_context = ContractContext::new(
@@ -3653,7 +3633,7 @@ fn bench_type_parse_step(c: &mut Criterion) {
         cost_tracker: &mut T,
     ) {
         for exp in &contract_ast.expressions {
-            TypeSignature::parse_type_repr(StacksEpochId::latest(), exp, cost_tracker);
+            TypeSignature::parse_type_repr(EPOCH_ID, exp, cost_tracker);
         }
     }
 
@@ -3741,7 +3721,7 @@ fn bench_poison_microblock(c: &mut Criterion) {
 
     let clarity_db = ClarityDatabase::new(&mut writeable_marf_store, &headers_db, &sort_tx);
 
-    let mut owned_env = OwnedEnvironment::new_free(true, 0, clarity_db, StacksEpochId::Epoch21);
+    let mut owned_env = OwnedEnvironment::new_free(true, 0, clarity_db, EPOCH_ID);
     owned_env.begin();
     // TODO: verify correctness
     let mut contract_context = ContractContext::new(
@@ -4075,7 +4055,7 @@ fn bench_analysis_fetch_contract_entry(c: &mut Criterion) {
             &contract,
             &mut (),
             ClarityVersion::Clarity2,
-            StacksEpochId::Epoch21,
+            EPOCH_ID,
         )
         .unwrap();
         let mut ct = LimitedCostTracker::new_free();
@@ -4085,7 +4065,7 @@ fn bench_analysis_fetch_contract_entry(c: &mut Criterion) {
             &mut analysis_db,
             true,
             ct,
-            StacksEpochId::latest(),
+            EPOCH_ID,
             ClarityVersion::Clarity2,
         )
         .unwrap();
@@ -4100,7 +4080,7 @@ fn bench_analysis_fetch_contract_entry(c: &mut Criterion) {
             |b, &_| {
                 b.iter(|| {
                     analysis_db
-                        .load_contract(&contract_identifier, &StacksEpochId::latest())
+                        .load_contract(&contract_identifier, &EPOCH_ID)
                         .unwrap();
                 })
             },
