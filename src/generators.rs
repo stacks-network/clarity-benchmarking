@@ -137,7 +137,7 @@ pub fn make_clarity_type_for_sized_value(input_size: u64) -> String {
             let mut key_pairs = String::new();
             for i in 0..mult {
                 let name = TUPLE_NAMES[i as usize].clone();
-                key_pairs.push_str(&*format!("({} bool) ", name));
+                key_pairs.push_str(&format!("({} bool) ", name));
             }
             format!("(tuple {})", key_pairs)
         }
@@ -223,7 +223,7 @@ fn helper_make_clarity_type_for_sized_type_sig(input_size: u64) -> String {
                     "id"
                 };
                 let name = format!("{}{}", id_name, i);
-                key_pairs.push_str(&*format!("({} bool) ", name));
+                key_pairs.push_str(&format!("({} bool) ", name));
             }
             format!("(tuple {})", key_pairs)
         }
@@ -342,7 +342,7 @@ pub fn helper_make_sized_clarity_value(input_size: u64) -> String {
             let mult = n / 8;
             for _ in 0..mult {
                 let name = helper_generate_rand_char_string(5);
-                val.push_str(&*format!("({} {}) ", name, rng.gen::<u16>()));
+                val.push_str(&format!("({} {}) ", name, rng.gen::<u16>()));
             }
             format!("(tuple {}) ", val).to_string()
         }
@@ -380,7 +380,7 @@ fn gen_pow(scale: u16) -> GenOutput {
     for _ in 0..scale {
         let n1: u16 = rng.gen();
         let n2: u8 = rng.gen_range(0..8);
-        body.push_str(&*format!("(pow u{} u{}) ", n1, n2));
+        body.push_str(&format!("(pow u{} u{}) ", n1, n2));
     }
 
     GenOutput::new(None, body, 2)
@@ -434,7 +434,7 @@ fn gen_logic(function_name: &'static str, scale: u16, input_size: u64) -> GenOut
             .collect::<Vec<String>>()
             .join(" ");
 
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(None, body, input_size)
@@ -464,7 +464,7 @@ fn gen_xor(function_name: &'static str, scale: u16) -> GenOutput {
                 unreachable!("should only be generating numbers in the range 0..=1.")
             }
         };
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(None, body, 2)
@@ -494,7 +494,7 @@ fn gen_lshift(scale: u16) -> GenOutput {
                 unreachable!("should only be generating numbers in the range 0..=1.")
             }
         };
-        body.push_str(&*format!("(bit-shift-left {}) ", args));
+        body.push_str(&format!("(bit-shift-left {}) ", args));
     }
 
     GenOutput::new(None, body, 2)
@@ -524,7 +524,7 @@ fn gen_rshift(scale: u16) -> GenOutput {
                 unreachable!("should only be generating numbers in the range 0..=1.")
             }
         };
-        body.push_str(&*format!("(bit-shift-right {}) ", args));
+        body.push_str(&format!("(bit-shift-right {}) ", args));
     }
 
     GenOutput::new(None, body, 2)
@@ -598,7 +598,7 @@ fn gen_hash(function_name: &'static str, scale: u16, input_size: u64) -> GenOutp
     };
 
     for _ in 0..scale {
-        body.push_str(&*format!("({} {}) ", function_name, arg));
+        body.push_str(&format!("({} {}) ", function_name, arg));
     }
 
     GenOutput::new(None, body, serialized_size(arg))
@@ -635,7 +635,7 @@ fn gen_secp256k1(function_name: &'static str, scale: u16, verify: bool) -> GenOu
             format!("0x{} 0x{}", to_hex(&msg), to_hex(&sig_bytes_vec))
         };
 
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(None, body, 1)
@@ -711,7 +711,7 @@ fn gen_ft_mint(function_name: &'static str, scale: u16) -> GenOutput {
         let amount: u128 = rng.gen_range(1..1000);
         let principal_data = helper_create_principal();
         let args = format!("{} u{} {}", token_name, amount, principal_data);
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(Some(statement), body, 1)
@@ -721,10 +721,10 @@ fn helper_create_ft_boilerplate(mint_amount: u16) -> (String, String, String) {
     let mut body = String::new();
     let mut rng = rand::thread_rng();
     let token_name = helper_generate_rand_char_string(rng.gen_range(10..20));
-    body.push_str(&*format!("(define-fungible-token {}) ", token_name));
+    body.push_str(&format!("(define-fungible-token {}) ", token_name));
 
     let principal_data = helper_create_principal();
-    body.push_str(&*format!(
+    body.push_str(&format!(
         "(ft-mint? {} u{} {}) ",
         token_name, mint_amount, principal_data
     ));
@@ -747,7 +747,7 @@ fn gen_ft_transfer(function_name: &'static str, scale: u16) -> GenOutput {
             "{} u{} {} {}",
             token_name, transfer_amount, sender_principal, recipient_principal
         );
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(Some(template), body, 1)
@@ -760,7 +760,7 @@ fn gen_ft_balance(function_name: &'static str, scale: u16) -> GenOutput {
     let (token_name, principal_data, template) = helper_create_ft_boilerplate(100);
     let args = format!("{} {}", token_name, principal_data);
     for _ in 0..scale {
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(Some(template), body, 1)
@@ -773,7 +773,7 @@ fn gen_ft_supply(function_name: &'static str, scale: u16) -> GenOutput {
     let (token_name, _, template) = helper_create_ft_boilerplate(100);
     let args = format!("{}", token_name);
     for _ in 0..scale {
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(Some(template), body, 1)
@@ -789,7 +789,7 @@ fn gen_ft_burn(function_name: &'static str, scale: u16) -> GenOutput {
     for _ in 0..scale {
         let burn_amount = rng.gen_range(1..=max_burn);
         let args = format!("{} u{} {}", token_name, burn_amount, principal_data);
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(Some(template), body, 1)
@@ -995,7 +995,7 @@ fn gen_nft_transfer(function_name: &'static str, scale: u16, input_size: u64) ->
             "{} {} {} {}",
             token_name, nft_value, owner_principal, next_principal
         );
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
 
         owner_principal = next_principal;
     }
@@ -1027,7 +1027,7 @@ fn gen_nft_owner(function_name: &'static str, scale: u16, input_size: u64) -> Ge
             }
         };
         let args = format!("{} {}", token_name, curr_nft_value);
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(Some(setup), body, nft_type_size)
@@ -1042,7 +1042,7 @@ fn gen_nft_burn(function_name: &'static str, scale: u16, input_size: u64) -> Gen
         helper_create_nft_fn_boilerplate(input_size);
     for _ in 0..scale {
         let args = format!("{} {} {}", token_name, nft_value, owner_principal);
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(Some(setup), body, nft_type_size)
@@ -1071,7 +1071,7 @@ fn gen_tuple_get(scale: u16, input_size: u64) -> GenOutput {
     let tuple = helper_generate_tuple(input_size);
 
     for _ in 0..scale {
-        body.push_str(&*format!(
+        body.push_str(&format!(
             "(get id{} test-tuple) ",
             rng.gen_range(0..input_size)
         ));
@@ -1103,7 +1103,7 @@ fn gen_tuple_merge(scale: u16, input_size: u64) -> GenOutput {
     let tuple_b = format!("(tuple {})", tuple_b_vals);
 
     for _ in 0..scale {
-        body.push_str(&*format!("(merge tuple-a tuple-b) "));
+        body.push_str(&format!("(merge tuple-a tuple-b) "));
     }
 
     GenOutput::new(
@@ -1157,7 +1157,7 @@ fn gen_optional(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let args = helper_gen_random_optional_value(i, false);
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(None, body, 1)
@@ -1189,7 +1189,7 @@ fn gen_response(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let args = helper_gen_random_response_value(false, false);
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(None, body, 1)
@@ -1221,7 +1221,7 @@ fn gen_unwrap(function_name: &'static str, scale: u16, ret_value: bool) -> GenOu
             );
             args = format!("{} {}", args, clarity_val.0)
         }
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(None, body, 1)
@@ -1240,7 +1240,7 @@ fn gen_unwrap_err(function_name: &'static str, scale: u16, ret_value: bool) -> G
             let clarity_val = helper_gen_random_clarity_value();
             args = format!("{} {}", args, clarity_val.0)
         }
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(None, body, 1)
@@ -1278,7 +1278,7 @@ fn helper_create_map(size: u64) -> DefineMap {
     let value_type = helper_gen_clarity_list_type(size);
     let value_type_formatted = format!("{{ {}: {} }}", value_name, value_type.0);
 
-    body.push_str(&*format!(
+    body.push_str(&format!(
         "(define-map {} {} {}) ",
         map_name, key_type_formatted, value_type_formatted
     ));
@@ -1467,7 +1467,7 @@ fn gen_var_get(scale: u16, input_size: u64) -> GenOutput {
 
     for _ in 0..scale {
         let args = format!("{}", var_name);
-        body.push_str(&*format!("(var-get {}) ", args));
+        body.push_str(&format!("(var-get {}) ", args));
     }
 
     GenOutput::new(Some(setup), body, clarity_value.1)
@@ -1513,7 +1513,7 @@ fn gen_single_clar_value(
             Some(_) => l.clone(),
             None => helper_gen_random_clarity_value().0,
         };
-        body.push_str(&*format!("({} {}) ", function_name, arg));
+        body.push_str(&format!("({} {}) ", function_name, arg));
     }
 
     GenOutput::new(None, body, l_size)
@@ -1532,7 +1532,7 @@ fn gen_if(function_name: &'static str, scale: u16) -> GenOutput {
             helper_gen_clarity_value(&clarity_type, i, length.map_or(0, |len| len as u64), None);
         let curr_bool = rng.gen_bool(0.5);
 
-        body.push_str(&*format!(
+        body.push_str(&format!(
             "({} {} {} {}) ",
             function_name, curr_bool, if_case_value.0, else_case_value.0
         ));
@@ -1547,7 +1547,7 @@ fn gen_asserts(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
         let clarity_val = helper_gen_random_clarity_value();
-        body.push_str(&*format!("({} true {}) ", function_name, clarity_val.0));
+        body.push_str(&format!("({} true {}) ", function_name, clarity_val.0));
     }
 
     GenOutput::new(None, body, 1)
@@ -1597,7 +1597,7 @@ fn gen_concat(function_name: &'static str, scale: u16, input_size: u64) -> GenOu
     for _ in 0..scale {
         let first_val = helper_gen_clarity_list_with_len(input_size);
         let second_val = helper_gen_clarity_list_with_len(input_size);
-        body.push_str(&*format!(
+        body.push_str(&format!(
             "({} (list {}) (list {})) ",
             function_name, first_val, second_val
         ));
@@ -1621,7 +1621,7 @@ fn gen_as_max_len(function_name: &'static str, scale: u16) -> GenOutput {
         let (list_type, _) = helper_gen_clarity_type(true, false, true);
         let operand = helper_generate_sequences(&list_type, 1);
         let len = helper_gen_clarity_value("uint", rng.gen_range(2..50), 0, None);
-        body.push_str(&*format!("({} {} {}) ", function_name, operand[0], len.0));
+        body.push_str(&format!("({} {} {}) ", function_name, operand[0], len.0));
     }
 
     GenOutput::new(None, body, 1)
@@ -1635,7 +1635,7 @@ fn gen_define_constant(function_name: &'static str, scale: u16) -> GenOutput {
     for i in 0..scale {
         let name = helper_generate_rand_char_string(rng.gen_range(10..50));
         let value = helper_gen_random_clarity_value();
-        body.push_str(&*format!("({} {} {}) ", function_name, name, value.0));
+        body.push_str(&format!("({} {} {}) ", function_name, name, value.0));
     }
 
     GenOutput::new(None, body, 1)
@@ -1663,7 +1663,7 @@ fn gen_default_to(function_name: &'static str, scale: u16) -> GenOutput {
                 format!("(some {})", inner_val.0)
             }
         };
-        body.push_str(&*format!(
+        body.push_str(&format!(
             "({} {} {}) ",
             function_name, default_val.0, opt_string
         ));
@@ -1738,7 +1738,7 @@ fn gen_let(scale: u16, input_size: u64) -> GenOutput {
         for _ in 0..input_size {
             let var_name = helper_generate_rand_char_string(rng.gen_range(10..20));
             let var_value = helper_gen_random_clarity_value();
-            bindings.push_str(&*format!("({} {}) ", var_name, var_value.0));
+            bindings.push_str(&format!("({} {}) ", var_name, var_value.0));
         }
         let statement = format!("(let ({}) (no-op)) ", bindings);
         body.push_str(&statement);
@@ -1863,7 +1863,7 @@ fn gen_list_cons(scale: u16, input_size: u64) -> GenOutput {
         let item_val = "true";
         let mut args = String::new();
         for _ in 0..input_size {
-            args.push_str(&*format!("{} ", item_val));
+            args.push_str(&format!("{} ", item_val));
         }
         let statement = format!("(list {}) ", args);
         body.push_str(&statement);
@@ -1976,7 +1976,7 @@ fn gen_at_block(scale: u16) -> GenOutput {
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str(&*format!("(at-block 0x{} (no-op)) ", READ_TIP));
+        body.push_str(&format!("(at-block 0x{} (no-op)) ", READ_TIP));
     }
 
     GenOutput::new(None, body, 1)
@@ -2048,7 +2048,7 @@ fn gen_analysis_tuple_cons(scale: u16, input_size: u64) -> GenOutput {
         for _ in 0..input_size {
             let var_val = helper_gen_random_clarity_value();
             let var_name = helper_generate_rand_char_string(10);
-            body.push_str(&*format!("({} {}) ", var_name, var_val.0));
+            body.push_str(&format!("({} {}) ", var_name, var_val.0));
         }
         body.push_str(") ");
     }
@@ -2065,7 +2065,7 @@ fn gen_analysis_check_let(scale: u16, input_size: u64) -> GenOutput {
         let no_ops = (0..input_size).map(|_x| "(no-op) ").collect::<String>();
         let var_val = helper_gen_random_clarity_value();
         let var_name = helper_generate_rand_char_string(10);
-        body.push_str(&*format!("((({} {})) {}) ", var_name, var_val.0, no_ops));
+        body.push_str(&format!("((({} {})) {}) ", var_name, var_val.0, no_ops));
     }
 
     GenOutput::new(None, body, input_size)
@@ -2090,7 +2090,7 @@ fn gen_analysis_storage(scale: u16, input_size: u64) -> GenOutput {
             let (base_type, _) = helper_gen_clarity_type(true, false, true);
             let base_val = helper_gen_clarity_value(&base_type, j as u16, 0, None);
             let constant_name = helper_generate_rand_char_string(10);
-            defines.push_str(&*format!(
+            defines.push_str(&format!(
                 "(define-constant {} {}) ",
                 constant_name, base_val.0
             ));
@@ -2107,9 +2107,9 @@ fn gen_analysis_storage(scale: u16, input_size: u64) -> GenOutput {
 ///     `self.graph.edges_count()`
 fn gen_ast_cycle_detection(input_size: u64) -> GenOutput {
     let mut body = String::new();
-    body.push_str(&*format!("(define-read-only (fn-0) (no-op)) "));
+    body.push_str(&format!("(define-read-only (fn-0) (no-op)) "));
     for i in 1..(input_size + 1) {
-        body.push_str(&*format!("(define-read-only (fn-{}) (fn-{})) ", i, i - 1));
+        body.push_str(&format!("(define-read-only (fn-{}) (fn-{})) ", i, i - 1));
     }
 
     let mut cost_tracker = LimitedCostTracker::new_free();
@@ -2182,7 +2182,7 @@ fn gen_analysis_type_lookup(scale: u16, input_size: u64) -> GenOutput {
         let asset_name = helper_generate_rand_char_string(10);
         let owner = helper_create_principal();
         let tuple = helper_make_clarity_value_for_sized_type_sig(input_size);
-        body.push_str(&*format!("({} {} {}) ", asset_name, tuple, owner));
+        body.push_str(&format!("({} {} {}) ", asset_name, tuple, owner));
     }
 
     GenOutput::new(None, body, input_size)
@@ -2210,7 +2210,7 @@ fn gen_analysis_type_annotate(scale: u16, input_size: u64) -> GenOutput {
 fn gen_analysis_lookup_variable_const(scale: u16) -> GenOutput {
     let mut body = String::new();
     for i in 0..scale {
-        body.push_str(&*format!("var-{}", i));
+        body.push_str(&format!("var-{}", i));
         body.push_str(" ");
     }
 
@@ -2249,7 +2249,7 @@ fn gen_analysis_get_function_entry(input_size: u64) -> GenOutput {
     let args = (0..input_size)
         .map(|i| format!(" (f{} uint) ", i))
         .collect::<String>();
-    body.push_str(&*format!("(define-read-only (dummy-fn {}) (no-op)) ", args));
+    body.push_str(&format!("(define-read-only (dummy-fn {}) (no-op)) ", args));
 
     GenOutput::new(None, body, input_size)
 }
@@ -2275,7 +2275,7 @@ pub fn gen_analysis_fetch_contract_entry(input_size: u64) -> GenOutput {
 fn gen_inner_type_check_cost(input_size: u64) -> GenOutput {
     let mut body = String::new();
     let clar_type = make_clarity_type_for_sized_value(input_size);
-    body.push_str(&*format!(
+    body.push_str(&format!(
         "(define-read-only (dummy-fn (f0 {})) (no-op)) ",
         clar_type
     ));
@@ -2432,7 +2432,7 @@ fn gen_buff_to_numeric_type(function_name: &'static str, scale: u16) -> GenOutpu
     let mut body = String::new();
     for _ in 0..scale {
         let buff = helper_gen_clarity_value("buff", 0, 32, None);
-        body.push_str(&*format!("({} {}) ", function_name, buff.0));
+        body.push_str(&format!("({} {}) ", function_name, buff.0));
     }
 
     GenOutput::new(None, body, 1)
@@ -2444,7 +2444,7 @@ fn gen_is_standard(function_name: &'static str, scale: u16) -> GenOutput {
     let mut body = String::new();
     for _ in 0..scale {
         let principal = helper_create_principal();
-        body.push_str(&*format!("({} {}) ", function_name, principal));
+        body.push_str(&format!("({} {}) ", function_name, principal));
     }
 
     GenOutput::new(None, body, 1)
@@ -2466,7 +2466,7 @@ fn gen_principal_destruct(function_name: &'static str, scale: u16) -> GenOutput 
                 )
             }
         };
-        body.push_str(&*format!("({} {}) ", function_name, principal));
+        body.push_str(&format!("({} {}) ", function_name, principal));
     }
 
     GenOutput::new(None, body, 1)
@@ -2493,7 +2493,7 @@ fn gen_principal_construct(function_name: &'static str, scale: u16) -> GenOutput
                 )
             }
         };
-        body.push_str(&*format!("({} {}) ", function_name, args));
+        body.push_str(&format!("({} {}) ", function_name, args));
     }
 
     GenOutput::new(None, body, 1)
@@ -2517,7 +2517,7 @@ fn gen_string_to_number(function_name: &'static str, scale: u16) -> GenOutput {
                 format!("u\"{}\"", rand_str)
             }
         };
-        body.push_str(&*format!("({} {}) ", function_name, formatted_str));
+        body.push_str(&format!("({} {}) ", function_name, formatted_str));
     }
 
     GenOutput::new(None, body, 1)
@@ -2538,7 +2538,7 @@ fn gen_number_to_string(function_name: &'static str, scale: u16) -> GenOutput {
                 format!("u{}", num)
             }
         };
-        body.push_str(&*format!("({} {}) ", function_name, formatted_num));
+        body.push_str(&format!("({} {}) ", function_name, formatted_num));
     }
 
     GenOutput::new(None, body, 1)
@@ -2553,7 +2553,7 @@ pub fn gen_stx_transfer_memo(function_name: &'static str, scale: u16) -> GenOutp
     for _ in 0..scale {
         let len = rng.gen_range(1..15) * 2;
         let memo = helper_gen_clarity_value("buff", 0, len, None);
-        body.push_str(&*format!(
+        body.push_str(&format!(
             "({} u1 tx-sender 'S0G0000000000000000000000000000015XM0F7 {}) ",
             function_name, memo.0
         ));
@@ -2604,7 +2604,7 @@ pub fn gen_slice(function_name: &'static str, scale: u16) -> GenOutput {
             }
         };
 
-        body.push_str(&*format!(
+        body.push_str(&format!(
             "({} {} u{} u{}) ",
             function_name, seq, left, right
         ));
@@ -2656,11 +2656,10 @@ pub fn gen_from_consensus_buff(
         // let clar_value = helper_make_value_for_sized_type_sig(input_size).serialize_to_vec();
         let clar_value = make_sized_value(input_size).serialize_to_vec();
         let clar_type = make_clarity_type_for_sized_value(input_size);
-        let clar_buff_serialized = match Value::buff_from(clar_value) {
-            Ok(x) => x,
-            Err(_) => panic!(),
+        let Ok(clar_buff_serialized) = Value::buff_from(clar_value) else {
+            panic!();
         };
-        body.push_str(&*format!(
+        body.push_str(&format!(
             "({} {} {}) ",
             function_name, clar_type, clar_buff_serialized
         ));
@@ -2676,7 +2675,7 @@ pub fn gen_stx_get_account(function_name: &'static str, scale: u16) -> GenOutput
     let mut body = String::new();
 
     for _ in 0..scale {
-        body.push_str(&*format!(
+        body.push_str(&format!(
             "({} 'S1G2081040G2081040G2081040G208105NK8PE5) ",
             function_name
         ));
@@ -2694,7 +2693,7 @@ fn gen_get_burn_block_info(function_name: &'static str, scale: u16) -> GenOutput
     let props = ["header-hash", "pox-addrs"];
     for i in 0..scale {
         let height = i % 2 + 5;
-        body.push_str(&*format!(
+        body.push_str(&format!(
             "({} {} u{}) ",
             function_name,
             props.choose(&mut rng).unwrap(),
