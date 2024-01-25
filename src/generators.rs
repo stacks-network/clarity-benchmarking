@@ -2987,13 +2987,13 @@ pub fn gen(function: ClarityCostFunction, scale: u16, input_size: u64) -> GenOut
         ClarityCostFunction::BuffToUIntBe => gen_buff_to_numeric_type("buff-to-uint-be", scale),
         ClarityCostFunction::IsStandard => gen_is_standard("is-standard", scale),
         ClarityCostFunction::PrincipalDestruct => {
-            gen_principal_destruct("principal-destruct", scale)
+            gen_principal_destruct("principal-destruct?", scale)
         }
         ClarityCostFunction::PrincipalConstruct => {
-            gen_principal_construct("principal-construct", scale)
+            gen_principal_construct("principal-construct?", scale)
         }
-        ClarityCostFunction::StringToInt => gen_string_to_number("string-to-int", scale),
-        ClarityCostFunction::StringToUInt => gen_string_to_number("string-to-uint", scale),
+        ClarityCostFunction::StringToInt => gen_string_to_number("string-to-int?", scale),
+        ClarityCostFunction::StringToUInt => gen_string_to_number("string-to-uint?", scale),
         ClarityCostFunction::IntToAscii => gen_number_to_string("int-to-ascii", scale),
         ClarityCostFunction::IntToUtf8 => gen_number_to_string("int-to-utf8", scale),
         ClarityCostFunction::GetBurnBlockInfo => {
