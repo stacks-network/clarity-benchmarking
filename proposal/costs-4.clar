@@ -1,5 +1,5 @@
 
-;; the .costs-3 contract
+;; the .costs-4 contract
 
 ;; Helper Functions
 
