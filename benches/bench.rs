@@ -8,6 +8,7 @@ use std::io::Write;
 use std::num::ParseIntError;
 use std::time::Duration;
 
+use benchmarking_lib::clarity_wasm;
 use benchmarking_lib::generators::{
     define_dummy_trait, gen, gen_analysis_fetch_contract_entry, gen_analysis_pass,
     gen_read_only_func, helper_gen_clarity_list_type, helper_generate_rand_char_string,
@@ -96,6 +97,7 @@ use stackslib::types::chainstate::{
 use stackslib::util::hash::{hex_bytes, to_hex, Hash160, MerkleTree, Sha512Trunc256Sum};
 use stackslib::util::secp256k1::MessageSignature;
 use stackslib::util::vrf::VRFProof;
+use crate::clarity_wasm::WasmVM;
 
 // for when input size is the number of elements
 const INPUT_SIZES: [u64; 8] = [1, 2, 8, 16, 32, 64, 128, 256];
@@ -108,9 +110,11 @@ const INPUT_SIZES_DATA: [u64; 8] = [22, 1000, 40000, 160000, 360000, 640000, 100
 const INPUT_SIZES_DATA_SMALL: [u64; 8] = [17, 100, 500, 1000, 5000, 10000, 50000, 500000];
 
 // for comparators, which can compare any data of any size
-const CMP_INPUT_SIZES: [u64; 16] = [
-    1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768,
-];
+// const CMP_INPUT_SIZES: [u64; 16] = [
+//     1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768,
+// ];
+// FIXME: Large inputs cause WASM VM to crash
+const CMP_INPUT_SIZES: [u64; 10] = [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 ];
 
 // input sizes for arithmetic functions
 const INPUT_SIZES_ARITHMETIC: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -123,6 +127,18 @@ const SCALE: u16 = 75;
 const SORTITION_MARF_PATH: &str = "./db/epoch3/sortition/";
 const CLARITY_MARF_PATH: &str = "./db/epoch3/vm/clarity/";
 const CHAINSTATE_PATH: &str = "./db/epoch3/vm/index.sqlite";
+
+enum Runtime {
+    Interpreter,
+    Wasm,
+}
+
+const RUNTIME: Runtime = Runtime::Wasm;
+
+enum RuntimeData<'a, 'b> {
+    Interpreter(ContractAST, GlobalContext<'b>, ContractContext),
+    Wasm(WasmVM<'a, 'b>),
+}
 
 lazy_static! {
     pub static ref SIZED_VALUES: HashMap<u64, Value> = make_sized_values_map(INPUT_SIZES.to_vec());
@@ -137,14 +153,15 @@ lazy_static! {
         make_type_sig_list_of_size(INPUT_SIZES.to_vec());
 }
 
-fn eval(
-    contract_ast: &ContractAST,
-    global_context: &mut GlobalContext,
-    contract_context: &mut ContractContext,
-) {
-    global_context
-        .execute(|g| eval_all(&contract_ast.expressions, contract_context, g, None))
-        .unwrap();
+fn eval(runtime_data: &mut RuntimeData) {
+    match runtime_data {
+        RuntimeData::Interpreter(ast, global_context, contract_context) => {
+            global_context
+                .execute(|g| eval_all(&ast.expressions, contract_context, g, None))
+                .unwrap();
+        }
+        RuntimeData::Wasm(vm) => vm.run_top_level().unwrap(),
+    }
 }
 
 /// Run benchmarks for a list of input sizes
@@ -207,7 +224,7 @@ fn run_bench<'a, F>(
     maybe_make_store: &Option<Box<dyn Fn(&mut OwnedEnvironment) -> ()>>,
     code_to_bench: F,
 ) where
-    F: Fn(&ContractAST, &mut GlobalContext, &mut ContractContext),
+    F: Fn(&mut RuntimeData),
 {
     // Set up MarfedKV
     let miner_tip = StacksBlockHeader::make_index_block_hash(
@@ -286,36 +303,49 @@ fn run_bench<'a, F>(
         }
     };
 
-    match pre_contract_opt {
-        Some(pre_contract) => {
-            let pre_contract_identifier =
-                QualifiedContractIdentifier::local(&*format!("pre{}", computed_input_size))
-                    .unwrap();
-            let pre_contract_ast = match ast::build_ast(
-                &pre_contract_identifier,
-                &pre_contract,
-                &mut (),
-                ClarityVersion::Clarity2,
-                EPOCH_ID,
-            ) {
-                Ok(res) => res,
-                Err(error) => {
-                    panic!("Parsing error: {}", error.diagnostic.message);
-                }
-            };
-            global_context
-                .execute(|g| {
-                    eval_all(
-                        &pre_contract_ast.expressions,
-                        &mut contract_context,
-                        g,
-                        None,
-                    )
-                })
-                .unwrap();
-        }
-        _ => {}
+    if let Some(pre_contract) = pre_contract_opt {
+        let pre_contract_identifier =
+            QualifiedContractIdentifier::local(&*format!("pre{}", computed_input_size)).unwrap();
+        let pre_contract_ast = match ast::build_ast(
+            &pre_contract_identifier,
+            &pre_contract,
+            &mut (),
+            ClarityVersion::Clarity2,
+            EPOCH_ID,
+        ) {
+            Ok(res) => res,
+            Err(error) => {
+                panic!("Parsing error: {}", error.diagnostic.message);
+            }
+        };
+        global_context
+            .execute(|g| {
+                eval_all(
+                    &pre_contract_ast.expressions,
+                    &mut contract_context,
+                    g,
+                    None,
+                )
+            })
+            .unwrap();
     }
+
+    let mut call_stack = CallStack::new();
+    let mut marf = MemoryBackingStore::new();
+    let mut runtime_data = match RUNTIME {
+        Runtime::Interpreter => RuntimeData::Interpreter(contract_ast, global_context, contract_context),
+        Runtime::Wasm => {
+            clarity_wasm::compile(
+                &mut global_context,
+                &mut contract_context,
+                &mut marf.as_analysis_db(),
+                &contract,
+            )
+            .unwrap();
+            let vm = WasmVM::load_module(&mut global_context, &mut contract_context, &mut call_stack, None, None).unwrap();
+            RuntimeData::Wasm(vm)
+        }
+    };
 
     group.throughput(Throughput::Bytes(computed_input_size.clone() as u64));
     group.bench_with_input(
@@ -323,7 +353,7 @@ fn run_bench<'a, F>(
         &input_size,
         |b, &_| {
             b.iter(|| {
-                code_to_bench(&contract_ast, &mut global_context, &mut contract_context);
+                code_to_bench(&mut runtime_data);
             })
         },
     );
