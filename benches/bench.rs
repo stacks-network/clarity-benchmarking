@@ -69,6 +69,7 @@ use stackslib::clarity::vm::database::{
     ClarityBackingStore, ClarityDatabase, ClaritySerializable, HeadersDB, NULL_BURN_STATE_DB,
     NULL_HEADER_DB,
 };
+use stackslib::clarity::vm::errors::CheckErrors;
 use stackslib::clarity::vm::functions::crypto::special_principal_of;
 use stackslib::clarity::vm::representations::depth_traverse;
 use stackslib::clarity::vm::tests::BurnStateDB;
@@ -153,6 +154,22 @@ fn eval(
         .unwrap();
 }
 
+fn default_pox_constants() -> PoxConstants {
+    PoxConstants::new(
+        10,
+        5,
+        3,
+        25,
+        5,
+        u64::MAX,
+        u64::MAX,
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+        u32::max_value(),
+    )
+}
+
 /// Run benchmarks for a list of input sizes
 ///
 /// # Arguments
@@ -229,20 +246,8 @@ fn run_bench<'a, F>(
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(
-        10,
-        5,
-        3,
-        25,
-        5,
-        u64::MAX,
-        u64::MAX,
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-    );
+    let pox_constants = default_pox_constants();
+
     // If this line panics, see comment above function for how to make a database
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
@@ -474,7 +479,7 @@ where
 
         let mut analysis_db = AnalysisDatabase::new(&mut writeable_marf_store);
 
-        analysis_db.execute::<_, _, ()>(|db| {
+        analysis_db.execute::<_, _, CheckErrors>(|db| {
             group.throughput(Throughput::Bytes(contract_size as u64));
             group.bench_with_input(
                 BenchmarkId::from_parameter(contract_size),
@@ -632,7 +637,7 @@ fn bench_analysis_pass_trait_checker(c: &mut Criterion) {
             .contract_context
             .into_contract_analysis(&mut contract_analysis);
 
-        analysis_db.execute::<_, _, ()>(|db| {
+        analysis_db.execute::<_, _, CheckErrors>(|db| {
             db.insert_contract(&pre_contract_identifier, &pre_contract_analysis);
 
             group.throughput(Throughput::Bytes(contract_size as u64));
@@ -759,7 +764,7 @@ fn bench_analysis_pass_type_checker(c: &mut Criterion) {
             .contract_context
             .into_contract_analysis(&mut pre_contract_analysis);
 
-        analysis_db.execute::<_, _, ()>(|db| {
+        analysis_db.execute::<_, _, CheckErrors>(|db| {
             db.insert_contract(&pre_contract_identifier, &pre_contract_analysis);
 
             group.throughput(Throughput::Bytes(contract_size as u64));
@@ -866,20 +871,7 @@ fn helper_deepen_local_context(
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(
-            10,
-            5,
-            3,
-            25,
-            5,
-            u64::MAX,
-            u64::MAX,
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-        );
+        let pox_constants = default_pox_constants();
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -999,20 +991,7 @@ fn bench_contract_storage(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(
-            10,
-            5,
-            3,
-            25,
-            5,
-            u64::MAX,
-            u64::MAX,
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-        );
+        let pox_constants = default_pox_constants();
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1105,20 +1084,7 @@ fn bench_principal_of(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(
-        10,
-        5,
-        3,
-        25,
-        5,
-        u64::MAX,
-        u64::MAX,
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-    );
+    let pox_constants = default_pox_constants();
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -1253,7 +1219,7 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
 
         type_checker
             .db
-            .execute(|db| {
+            .execute::<_, _, CheckErrors>(|db| {
                 db.insert_contract(&contract_identifier, &contract_analysis)
                     .unwrap();
                 let trait_name = ClarityName::try_from("dummy-trait".to_string()).unwrap();
@@ -1283,10 +1249,6 @@ fn bench_analysis_use_trait_entry(c: &mut Criterion) {
                         })
                     },
                 );
-                // this snippet is here since the "execute" context needs to determine the return type
-                if false {
-                    return Err(());
-                }
 
                 Ok(())
             })
@@ -1353,13 +1315,16 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
 
         let mut typing_context =
             TypingContext::new(StacksEpochId::latest(), ClarityVersion::Clarity2);
-        type_checker._try_type_check_define(&contract_ast.expressions[0], &mut typing_context);
+        type_checker
+            ._try_type_check_define(&contract_ast.expressions[0], &mut typing_context)
+            .unwrap();
         type_checker
             .contract_context
             .into_contract_analysis(&mut contract_analysis);
 
-        type_checker.db.execute(|db| {
-            db.insert_contract(&contract_identifier, &contract_analysis);
+        let _ = type_checker.db.execute::<_, _, CheckErrors>(|db| {
+            db.insert_contract(&contract_identifier, &contract_analysis)
+                .expect("Failed to insert contract");
             let fn_name = ClarityName::try_from("dummy-fn".to_string()).unwrap();
             let type_size = match db
                 .get_read_only_function_type(
@@ -1392,10 +1357,6 @@ fn bench_analysis_get_function_entry(c: &mut Criterion) {
                     })
                 },
             );
-            // this snippet is here since the "execute" context needs to determine the return type
-            if false {
-                return Err(());
-            }
 
             Ok(())
         });
@@ -1421,20 +1382,7 @@ fn bench_inner_type_check_cost(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(
-            10,
-            5,
-            3,
-            25,
-            5,
-            u64::MAX,
-            u64::MAX,
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-        );
+        let pox_constants = default_pox_constants();
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1516,20 +1464,7 @@ fn bench_user_function_application(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(
-            10,
-            5,
-            3,
-            25,
-            5,
-            u64::MAX,
-            u64::MAX,
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-        );
+        let pox_constants = default_pox_constants();
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1614,20 +1549,7 @@ fn bench_analysis_lookup_function_types(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(
-            10,
-            5,
-            3,
-            25,
-            5,
-            u64::MAX,
-            u64::MAX,
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-        );
+        let pox_constants = default_pox_constants();
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -1732,20 +1654,7 @@ fn bench_lookup_function(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(
-        10,
-        5,
-        3,
-        25,
-        5,
-        u64::MAX,
-        u64::MAX,
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-    );
+    let pox_constants = default_pox_constants();
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -1839,20 +1748,7 @@ fn bench_lookup_variable_size(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(
-            10,
-            5,
-            3,
-            25,
-            5,
-            u64::MAX,
-            u64::MAX,
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-        );
+        let pox_constants = default_pox_constants();
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -2870,20 +2766,7 @@ fn bench_create_ft(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(
-        10,
-        5,
-        3,
-        25,
-        5,
-        u64::MAX,
-        u64::MAX,
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-    );
+    let pox_constants = default_pox_constants();
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -2955,20 +2838,7 @@ fn bench_create_nft(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(
-            10,
-            5,
-            3,
-            25,
-            5,
-            u64::MAX,
-            u64::MAX,
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-        );
+        let pox_constants = default_pox_constants();
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -2991,7 +2861,7 @@ fn bench_create_nft(c: &mut Criterion) {
             ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
         let asset_type = SIZED_TYPE_SIG.get(input_size).unwrap();
-        let asset_type_size = asset_type.size();
+        let asset_type_size = asset_type.size().unwrap();
         group.throughput(Throughput::Bytes(asset_type_size as u64));
         group.bench_with_input(
             BenchmarkId::from_parameter(asset_type_size),
@@ -3110,20 +2980,7 @@ fn bench_create_map(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(
-            10,
-            5,
-            3,
-            25,
-            5,
-            u64::MAX,
-            u64::MAX,
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-        );
+        let pox_constants = default_pox_constants();
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -3147,7 +3004,7 @@ fn bench_create_map(c: &mut Criterion) {
 
         let key_type = TypeSignature::BoolType;
         let value_type = SIZED_TYPE_SIG.get(input_size).unwrap();
-        let total_size = (key_type.size() + value_type.size()) as u64;
+        let total_size = (key_type.size().unwrap() + value_type.size().unwrap()) as u64;
 
         group.throughput(Throughput::Bytes(total_size));
         group.bench_with_input(
@@ -3190,20 +3047,7 @@ fn bench_create_var(c: &mut Criterion) {
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(
-            10,
-            5,
-            3,
-            25,
-            5,
-            u64::MAX,
-            u64::MAX,
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-        );
+        let pox_constants = default_pox_constants();
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -3226,10 +3070,10 @@ fn bench_create_var(c: &mut Criterion) {
             ContractContext::new(contract_identifier.clone(), ClarityVersion::Clarity2);
 
         let value_type = SIZED_TYPE_SIG.get(input_size).unwrap();
-        let value_type_size = value_type.size();
+        let value_type_size = value_type.size().unwrap();
         let value = helper_make_value_for_sized_type_sig(*input_size);
         assert!(value_type.admits(&StacksEpochId::latest(), &value).unwrap());
-        assert_eq!(value_type.size(), value.size());
+        assert_eq!(value_type_size, value.size().unwrap());
 
         group.throughput(Throughput::Bytes(value_type_size as u64));
         group.bench_with_input(
@@ -3272,20 +3116,7 @@ fn bench_wrapped_data_function(
         let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
         // Set up BurnStateDB
-        let pox_constants = PoxConstants::new(
-            10,
-            5,
-            3,
-            25,
-            5,
-            u64::MAX,
-            u64::MAX,
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-            u32::max_value(),
-        );
+        let pox_constants = default_pox_constants();
         let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
         let sort_tx = sort_db.index_conn();
 
@@ -3573,20 +3404,7 @@ fn bench_load_contract(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(
-        10,
-        5,
-        3,
-        25,
-        5,
-        u64::MAX,
-        u64::MAX,
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-    );
+    let pox_constants = default_pox_constants();
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -3715,20 +3533,7 @@ fn bench_poison_microblock(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(
-        10,
-        5,
-        3,
-        25,
-        5,
-        u64::MAX,
-        u64::MAX,
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-    );
+    let pox_constants = default_pox_constants();
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 
@@ -4030,20 +3835,7 @@ fn bench_analysis_fetch_contract_entry(c: &mut Criterion) {
     let mut writeable_marf_store = marfed_kv.begin(&read_tip, &new_tip);
 
     // Set up BurnStateDB
-    let pox_constants = PoxConstants::new(
-        10,
-        5,
-        3,
-        25,
-        5,
-        u64::MAX,
-        u64::MAX,
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-        u32::max_value(),
-    );
+    let pox_constants = default_pox_constants();
     let sort_db = SortitionDB::open(SORTITION_MARF_PATH, false, pox_constants).unwrap();
     let sort_tx = sort_db.index_conn();
 

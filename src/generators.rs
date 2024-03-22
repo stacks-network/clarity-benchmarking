@@ -52,7 +52,7 @@ fn size_of_value(s: String) -> u64 {
 
 fn serialized_size(s: String) -> u64 {
     let v = string_to_value(s);
-    v.serialized_size() as u64
+    v.serialized_size().unwrap() as u64
 }
 
 #[derive(Debug)]
@@ -938,13 +938,13 @@ fn gen_nft_mint(scale: u16, input_size: u64) -> GenOutput {
     let (statement, token_name) = helper_define_non_fungible_token_statement(input_size);
 
     let nft_type = make_sized_type_sig(input_size);
-    let nft_value_size = nft_type.size();
+    let nft_value_size = nft_type.size().unwrap();
     assert!(nft_value_size <= u16::MAX as u32);
 
     for i in 0..scale {
         let principal_data = helper_create_principal();
         let nft_value = helper_make_value_for_sized_type_sig(input_size);
-        assert_eq!(nft_value_size, nft_value.size());
+        assert_eq!(nft_value_size, nft_value.size().unwrap());
 
         let statement = format!(
             "(nft-mint? {} {} {}) ",
@@ -962,11 +962,11 @@ fn helper_create_nft_fn_boilerplate(input_size: u64) -> (String, String, String,
     body.push_str(&statement);
 
     let nft_type = make_sized_type_sig(input_size);
-    let nft_type_size = nft_type.size();
+    let nft_type_size = nft_type.size().unwrap();
     assert!(nft_type_size <= u16::MAX as u32);
 
     let nft_value = helper_make_value_for_sized_type_sig(input_size);
-    assert_eq!(nft_type_size, nft_value.size());
+    assert_eq!(nft_type_size, nft_value.size().unwrap());
     let owner_principal = helper_create_principal();
     let mint_statement = format!(
         "(nft-mint? {} {} {}) ",
@@ -1012,8 +1012,9 @@ fn gen_nft_owner(function_name: &'static str, scale: u16, input_size: u64) -> Ge
     let (setup, token_name, _, nft_value, nft_type_size) =
         helper_create_nft_fn_boilerplate(input_size);
     let invalid_nft_value = helper_make_value_for_sized_type_sig(input_size);
-    assert!(invalid_nft_value.size() <= u16::MAX as u32);
-    assert_eq!(nft_type_size, invalid_nft_value.size() as u64);
+    let invalid_nft_value_size = invalid_nft_value.size().unwrap();
+    assert!(invalid_nft_value_size <= u16::MAX as u32);
+    assert_eq!(nft_type_size, invalid_nft_value_size as u64);
     let invalid_nft_as_str = invalid_nft_value.to_string();
     for _ in 0..scale {
         let curr_nft_value = match rng.gen_bool(0.5) {
@@ -1483,7 +1484,7 @@ fn gen_print(scale: u16, input_size: u64) -> GenOutput {
     let (clarity_type, length) = helper_gen_clarity_list_type(input_size);
 
     let clarity_value = helper_gen_clarity_value("list", 0, length, Some("uint"));
-    let size = string_to_value(clarity_value.0).size();
+    let size = string_to_value(clarity_value.0).size().unwrap();
 
     let print = format!("(print input-value) ");
     setup.push_str(&helper_gen_execute_fn(scale, print, clarity_type));
@@ -1800,8 +1801,8 @@ fn gen_index_of(scale: u16, input_size: u64) -> GenOutput {
         body.push_str(&statement);
     }
 
-    let size =
-        string_to_value(seq.0).serialized_size() + string_to_value(item_val.0).serialized_size();
+    let size = string_to_value(seq.0).serialized_size().unwrap()
+        + string_to_value(item_val.0).serialized_size().unwrap();
 
     GenOutput::new(None, body, size as u64)
 }
@@ -1839,7 +1840,7 @@ fn gen_len(scale: u16) -> GenOutput {
 ///     `u64::from(cmp::max(entry_type.size(), element_type.size()))`
 fn gen_append(scale: u16, input_size: u64) -> GenOutput {
     let mut body = String::new();
-    let value_size = make_sized_type_sig(input_size).size();
+    let value_size = make_sized_type_sig(input_size).size().unwrap();
     assert!(value_size < u16::MAX as u32);
     for _ in 0..scale {
         let first_val = helper_make_clarity_value_for_sized_type_sig(input_size);
@@ -2649,12 +2650,12 @@ pub fn gen_from_consensus_buff(
 ) -> GenOutput {
     let mut body = String::new();
 
-    let clar_value = make_sized_value(input_size).serialize_to_vec();
+    let clar_value = make_sized_value(input_size).serialize_to_vec().unwrap();
     let len = clar_value.len();
 
     for _ in 0..scale {
         // let clar_value = helper_make_value_for_sized_type_sig(input_size).serialize_to_vec();
-        let clar_value = make_sized_value(input_size).serialize_to_vec();
+        let clar_value = make_sized_value(input_size).serialize_to_vec().unwrap();
         let clar_type = make_clarity_type_for_sized_value(input_size);
         let Ok(clar_buff_serialized) = Value::buff_from(clar_value) else {
             panic!();
