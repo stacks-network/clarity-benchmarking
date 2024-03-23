@@ -3,7 +3,6 @@ fmt-stacks = "fmt -- --config group_imports=StdExternalCrate,imports_granularity
 
 # This should match what is used for the `stacks-node` binaries that run in production
 [profile.release]
-features = ["jemalloc"]
 codegen-units = 1
 lto = "fat"
 

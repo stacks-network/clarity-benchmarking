@@ -60,15 +60,18 @@ impl HeadersDB for TestHeadersDB {
         Some(StacksAddress::new(0, Hash160([0u8; 20])))
     }
 
-    fn get_burnchain_tokens_spent_for_block(&self, id_bhh: &StacksBlockId) -> Option<u128> {
+    fn get_burnchain_tokens_spent_for_block(&self, _id_bhh: &StacksBlockId) -> Option<u128> {
         Some(0)
     }
 
-    fn get_burnchain_tokens_spent_for_winning_block(&self, id_bhh: &StacksBlockId) -> Option<u128> {
+    fn get_burnchain_tokens_spent_for_winning_block(
+        &self,
+        _id_bhh: &StacksBlockId,
+    ) -> Option<u128> {
         Some(0)
     }
 
-    fn get_tokens_earned_for_block(&self, id_bhh: &StacksBlockId) -> Option<u128> {
+    fn get_tokens_earned_for_block(&self, _id_bhh: &StacksBlockId) -> Option<u128> {
         Some(0)
     }
 }
@@ -134,7 +137,7 @@ impl HeadersDB for SimHeadersDB {
     fn get_vrf_seed_for_block(&self, id_bhh: &StacksBlockId) -> Option<VRFSeed> {
         get_stacks_header_info(&self.conn, id_bhh).map(|x| match x.anchored_header {
             StacksBlockHeaderTypes::Epoch2(h) => VRFSeed::from_proof(&h.proof),
-            StacksBlockHeaderTypes::Nakamoto(h) => todo!("Nakamoto blocks not supported yet"),
+            StacksBlockHeaderTypes::Nakamoto(_h) => todo!("Nakamoto blocks not supported yet"),
         })
     }
 
