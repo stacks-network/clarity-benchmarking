@@ -3908,6 +3908,7 @@ criterion_group!(
     name = benches;
     config = Criterion::default().measurement_time(Duration::from_secs(10));
     targets =
+/*
     bench_add,
     bench_sub,
     bench_mul,
@@ -3963,7 +3964,9 @@ criterion_group!(
     bench_create_map, // g
     bench_create_var, // g
     bench_set_var,    // g
+*/
     bench_fetch_var,  // g
+/*
     // bench_print,
     bench_if,
     bench_asserts,
@@ -4052,6 +4055,7 @@ criterion_group!(
     bench_replace_at,
     bench_analysis_fetch_contract_entry,
     bench_as_contract
+*/
 );
 
 criterion_main!(benches);
